@@ -10,10 +10,6 @@ Studies of bugs in distributed systems: https://ucare.cs.uchicago.edu/pdf/socc14
 
 Testing DSes by reducing state-space: [paper](FlyMC_state_space_reduction.pdf)
 
-Shadow: Running Tor in a box (could be useful for running ripple). https://www.robgjansen.com/publications/shadow-ndss2012.pdf
-
-Amazon's DS testing approach: http://lamport.azurewebsites.net/tla/formal-methods-amazon.pdf
-
 [Blockchain testing challenges](Blockchain_testing_challenges.pdf)
 
 Ripple paper about network parameters, contains interesting links to network simulator: [paper](Testing_ripple_fault_tolerance.pdf)
@@ -25,7 +21,7 @@ Ripple simulators: https://github.com/ripple/simulator/, https://github.com/ripp
 	Used to unit test ripple. Easy to define network configurations.
 	Extensions needed in terms of finegrained control over message delivery. Maybe create a custom node in the center that controls delivery to all other nodes.
 	Other solution is to position on a lower level as middleware.
-	A lot of freedom in terms of manipulating the protocol. Has possibilities for executing arbitrary code at arbitrary times.
+	A lot of freedom in terms of manipulating the protocol. Has possibilities for executing arbitrary code at arbitrary times. Follows discrete-event simulation https://en.wikipedia.org/wiki/Discrete-event_simulation
 	
 Fitness function for test data generation, mutation adequacy: [paper](Search_based_test_data_generation.pdf) (Mutate the system under test, the more tests fail the better)
 
