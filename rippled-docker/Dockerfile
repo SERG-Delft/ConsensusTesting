@@ -6,7 +6,11 @@ RUN export LANGUAGE=C.UTF-8; export LANG=C.UTF-8; export LC_ALL=C.UTF-8; export 
 
 RUN apt-get update && \
 	apt-get -y upgrade && \
-	apt-get -y install git pkg-config protobuf-compiler libprotobuf-dev libssl-dev wget build-essential
+	apt-get -y install git pkg-config protobuf-compiler libprotobuf-dev libssl-dev wget build-essential && \
+	apt-get update && \
+	apt-get -y install g++-8 gcc-8 && \
+	update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-7 700 --slave /usr/bin/g++ g++ /usr/bin/g++-7 && \
+	update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-8 800 --slave /usr/bin/g++ g++ /usr/bin/g++-8
 	
 RUN wget https://github.com/Kitware/CMake/releases/download/v3.13.3/cmake-3.13.3-Linux-x86_64.sh && \
 	sh cmake-3.13.3-Linux-x86_64.sh --prefix=/usr/local --exclude-subdir && \
@@ -16,3 +20,15 @@ RUN wget https://github.com/Kitware/CMake/releases/download/v3.13.3/cmake-3.13.3
 	./bootstrap.sh && \
 	./b2 -j 4 && \
 	export BOOST_ROOT=/boost_1_75_0
+
+RUN git clone https://github.com/mvanmeerten/rippled.git &&\
+	cd rippled &&\
+	git checkout consensus-testing
+
+RUN export BOOST_ROOT=/boost_1_75_0 && \
+	cd rippled && \
+	mkdir my_build && \
+	cd my_build && \
+	cmake .. && \
+	cmake --build . -- -j 4
+	
