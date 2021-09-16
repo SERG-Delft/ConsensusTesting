@@ -11,6 +11,7 @@ import org.xrpl.xrpl4j.wallet.WalletFactory;
 
 public class Main {
     public static void main(String[] args) throws JsonRpcClientErrorException {
+        
         HttpUrl rippledUrl = HttpUrl.get("http://localhost:5005/");
         XrplClient xrplClient = new XrplClient(rippledUrl);
         // Create a Wallet using a WalletFactory

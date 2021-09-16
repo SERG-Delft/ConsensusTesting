@@ -1,3 +1,6 @@
 [submodule "rippled"]
 	path = rippled
 	url = https://github.com/mvanmeerten/rippled.git
+[submodule "xrpl4j"]
+	path = xrpl4j
+	url = https://github.com/mvanmeerten/xrpl4j.git

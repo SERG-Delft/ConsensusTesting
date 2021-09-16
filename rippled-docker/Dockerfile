@@ -31,4 +31,11 @@ RUN export BOOST_ROOT=/boost_1_75_0 && \
 	cd my_build && \
 	cmake .. && \
 	cmake --build . -- -j 4
-	
+
+EXPOSE 51235
+
+COPY entrypoint /entrypoint.sh
+
+RUN chmod +x /entrypoint.sh
+
+ENTRYPOINT [ "/entrypoint.sh" ]
