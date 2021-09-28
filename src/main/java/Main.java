@@ -1,35 +1,29 @@
-import okhttp3.HttpUrl;
 import org.xrpl.xrpl4j.client.JsonRpcClientErrorException;
-import org.xrpl.xrpl4j.client.XrplClient;
-import org.xrpl.xrpl4j.client.faucet.FaucetClient;
-import org.xrpl.xrpl4j.client.faucet.FundAccountRequest;
-import org.xrpl.xrpl4j.model.client.accounts.AccountInfoRequestParams;
-import org.xrpl.xrpl4j.model.client.accounts.AccountInfoResult;
-import org.xrpl.xrpl4j.wallet.DefaultWalletFactory;
-import org.xrpl.xrpl4j.wallet.Wallet;
-import org.xrpl.xrpl4j.wallet.WalletFactory;
+import tls.TLSRunable;
 
-public class Main {
+public class Main extends Thread {
     public static void main(String[] args) throws JsonRpcClientErrorException {
-        
-        HttpUrl rippledUrl = HttpUrl.get("http://localhost:5005/");
-        XrplClient xrplClient = new XrplClient(rippledUrl);
-        // Create a Wallet using a WalletFactory
-        WalletFactory walletFactory = DefaultWalletFactory.getInstance();
-        Wallet testWallet = walletFactory.randomWallet(true).wallet();
+        int port = 51234;
+        String privateKey = "pnKcCFtzqdnxEujPmk2PPdMByLcRkQqJjvhQAsnWDJx4eDaFtvU";
+        String publicKey = "nHUD186B2TMCMxD29u4JycomELdzTuQAE44TFkEBjKmN4jX3XShr";
+        System.out.println( "Start server on port: " + port );
 
-        // Fund the account using the testnet Faucet
-        FaucetClient faucetClient = FaucetClient
-                .construct(rippledUrl);
-        faucetClient.fundAccount(FundAccountRequest.of(testWallet.classicAddress()));
+//        SimpleSocketServer server = new SimpleSocketServer(port);
+//        server.startServer();
+        TLSRunable runnable = new TLSRunable(publicKey);
+        Thread server = new Thread(runnable);
+        server.start();
 
-        // Look up your Account Info
-        AccountInfoRequestParams requestParams =
-                AccountInfoRequestParams.of(testWallet.classicAddress());
-        AccountInfoResult accountInfoResult =
-                xrplClient.accountInfo(requestParams);
+        // Automatically shutdown in 1 minute
+        try
+        {
+            Thread.sleep( 60000 );
+        }
+        catch( Exception e )
+        {
+            e.printStackTrace();
+        }
 
-        // Print the result
-        System.out.println(accountInfoResult);
+        server.stop();
     }
 }
