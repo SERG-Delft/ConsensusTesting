@@ -16,7 +16,7 @@ pub fn invoke_protocol_message(message_type: u16, payload: &[u8], ssl_stream: &m
             pong.set_field_type(TMPing_pingType::ptPONG);
             let message_size: usize = (ping.compute_size() + 6) as usize;
             let mut write_vec = vec![0; message_size];
-            let write_bytes: &mut [u8] = write_vec  .as_mut_slice();
+            let write_bytes: &mut [u8] = write_vec.as_mut_slice();
             BigEndian::write_u32(&mut write_bytes[0..4], (message_size - 6) as u32);
             BigEndian::write_u16(&mut write_bytes[4..6],message_type);
             write_bytes[6..message_size].clone_from_slice(&*pong.write_to_bytes().unwrap());
@@ -44,7 +44,7 @@ pub fn invoke_protocol_message(message_type: u16, payload: &[u8], ssl_stream: &m
         52 => Box::<TMGetPeerShardInfo>::new(parse_message::<TMGetPeerShardInfo>(&payload)),
         53 => Box::<TMPeerShardInfo>::new(parse_message::<TMPeerShardInfo>(&payload)),
         54 => Box::<TMValidatorList>::new(parse_message::<TMValidatorList>(&payload)),
-        _ => panic!("Unknown message {}", message_type)
+        _ => panic!("Unknown message")
     };
     return proto_message
 }
