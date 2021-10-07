@@ -1,15 +1,6 @@
-# Generated with version 0.0.14
-
-#[validator_list_sites]
-#https://vl.devnet.rippletest.net
-
-#[validator_list_keys]
-#EDDF2F53DFEC79358F7BE76BC884AC31048CFF6E2A00C628EAE06DB7750A247B12
-
-# Validators in order from 1 - 5
 [validators]
 nHDn1kbQyr5aB8nmqDXurCt8cjjhWeaBN1YGtoaS7caECRT6khgC
 nHUbBspYE6NrLD3XpEpJJpZW3d8YWh9M9TLZexybauHeCsXPhQ11
 nHUM5fP64H6SufRZfg82QLMPgCxr3pvj8uqB1koYGA2rLHjnxXTv
-nHDrYXwy5LjxC6SJ41jZQJSh1dnfaYtWTmPdeRPtUk1vDTF7415j
 nHB2qQysGKfzqHH65Lt5u5hC3PSYq2S6v3FtNTzMcvh2Wd6Uj3Es
+

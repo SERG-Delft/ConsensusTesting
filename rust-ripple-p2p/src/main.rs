@@ -16,7 +16,7 @@ fn main() {
         .build()
         .expect("error on building runtime");
 
-    let app = app::App::new(2);
+    let app = app::App::new(5);
 
     if let Err(error) = runtime.block_on(app.start()) {
         eprintln!("Error: {}", error);

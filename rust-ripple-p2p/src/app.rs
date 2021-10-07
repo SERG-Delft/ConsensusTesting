@@ -13,7 +13,7 @@ use std::time::Duration;
 use protobuf::Message;
 use std::thread;
 use multiqueue;
-use crate::message_handler::invoke_protocol_message;
+use crate::message_handler::{invoke_protocol_message, parse_message};
 use crate::client::Client;
 
 const NODE_PRIVATE_KEY: &str = "e55dc8f3741ac9668dbe858409e5d64f5ce88380f7228eccfe82b92b2c7848ba";
@@ -34,9 +34,10 @@ impl App {
         let mut senders = vec![];
         let mut receivers = vec![];
         for _ in addrs.iter() {
-            let (send, recv) = multiqueue::broadcast_queue(100);
+            let (send, recv) = multiqueue::broadcast_queue(4096);
             senders.push(send);
             receivers.push(recv.add_stream());
+            recv.unsubscribe();
         }
         for (i, &addr) in addrs.iter().enumerate() {
             let cloned_receivers: Vec<multiqueue::BroadcastReceiver<Vec<u8>>> = receivers.iter()
@@ -56,19 +57,19 @@ impl App {
             threads.push(thread);
         }
 
-        let mut client = Client::new("ws://127.0.0.1:6005");
-        client.ping("JAJAJAJAJ");
+        // let mut client = Client::new("ws://127.0.0.1:6005");
+        // client.ping("JAJAJAJAJ");
 
-        let sender_clone = client.sender_channel.clone();
+        // let sender_clone = client.sender_channel.clone();
 
-        let send_thread = thread::spawn(move || {
-            let mut counter = 0;
-            loop {
-                sleep(Duration::from_secs(1));
-                println!("{:?}", Client::ledger(&sender_clone, &*counter.to_string()));
-                counter += 1;
-            }
-        });
+        // let send_thread = thread::spawn(move || {
+        //     let mut counter = 0;
+        //     loop {
+        //         sleep(Duration::from_secs(1));
+        //         println!("{:?}", Client::ledger(&sender_clone, &*counter.to_string()));
+        //         counter += 1;
+        //     }
+        // });
         for thread in threads {
             thread.join().unwrap();
         }
@@ -222,17 +223,19 @@ impl Peer {
     fn receive_peer_msg(&self, ssl_stream: &mut SslStream<TcpStream>) -> EmptyResult {
         loop {
             for recv in &self.receivers {
-                match recv.try_recv() {
-                    Ok(message) => {
-                        let message_obj = invoke_protocol_message(
-                            BigEndian::read_u16(&message[4..6]),
-                            &message[6..],
-                            ssl_stream);
-                        println!("to {:?}, {:?}", self.addr, message_obj);
-                        ssl_stream.write_all(message.as_slice()).unwrap()
-                    },
-                    Err(_) => ()//println!("{}", e)
-                };
+                for _ in recv {
+                    match recv.try_recv() {
+                        Ok(message) => {
+                            let message_obj = invoke_protocol_message(
+                                BigEndian::read_u16(&message[4..6]),
+                                &message[6..],
+                                ssl_stream);
+                            println!("to {:?}, proto_type: {:?}, object: {:?}", self.addr, message_obj.descriptor().name(), message_obj);
+                            ssl_stream.write_all(message.as_slice()).unwrap()
+                        },
+                        Err(_) => ()//println!("{}", e)
+                    };
+                }
             }
 
             let mut buf = BytesMut::new();
@@ -247,22 +250,23 @@ impl Peer {
                 );
                 panic!("socket closed");
             }
-
             while buf.len() > 6 {
                 let bytes = buf.bytes();
+                if bytes[0] & 0x80 != 0 {
+                    println!("{:?}", bytes[0]);
+                    panic!("Received compressed message");
+                }
 
                 if bytes[0] & 0xFC != 0 {
-                    // panic!("Unknow version header");
+                    println!("Unknow version header");
                 }
-                if bytes[0] & 0x80 != 0 {
-                    panic!("Received compressed message")
-                }
+
 
                 let payload_size = BigEndian::read_u32(&bytes[0..4]) as usize;
                 let message_type = BigEndian::read_u16(&bytes[4..6]);
 
                 if payload_size > 64 * 1024 * 1024 {
-                    panic!("Too big message size");
+                    panic!("Message size too large");
                 }
 
                 if buf.len() < 6 + payload_size {
@@ -272,7 +276,7 @@ impl Peer {
                 let payload = &bytes[6..(6+payload_size)];
 
                 let proto_obj: Box<dyn Message> = invoke_protocol_message(message_type, payload, ssl_stream);
-                println!("from {:?}, {:?}", self.addr, proto_obj);
+                println!("from {:?}, proto_type: {:?}, object: {:?}", self.addr, proto_obj.descriptor().name(), proto_obj);
 
                 self.sender.try_send(vec.clone()).unwrap();
 
