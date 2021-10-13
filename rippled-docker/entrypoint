@@ -3,17 +3,19 @@
 rippledcnflc=`/bin/cat /.config/ripple/rippled.cfg 2>/dev/null | wc -l`
 ripplevalidatorkslc=`/bin/cat /.config/ripple/validator-keys.json 2>/dev/null | wc -l`
 validatorslc=`/bin/cat /.config/ripple/validators.txt 2>/dev/null | wc -l`
+ledgerlc=`/bin/cat /.config/ripple/ledger.json 2>/dev/null | wc -l`
 
 mkdir -p /etc/opt/ripple
 mkdir -p /root/.ripple
 
-if [[ "$rippledcnflc" -gt "0" && "$ripplevalidatorkslc" -gt "0" && "$validatorslc" -gt "0" ]]; then
+if [[ "$rippledcnflc" -gt "0" && "$ripplevalidatorkslc" -gt "0" && "$validatorslc" -gt "0" && "$ledgerlc" -gt "0" ]]; then
 
     echo "Existing rippled config at host /keystore/, using them."
 
     /bin/cat /.config/ripple/rippled.cfg > /etc/opt/ripple/rippled.cfg
     /bin/cat /.config/ripple/validators.txt > /etc/opt/ripple/validators.txt
     /bin/cat /.config/ripple/validator-keys.json > /root/.ripple/validator-keys.json
+    /bin/cat /.config/ripple/ledger.json > /etc/opt/ripple/ledger.json
 
 fi
 
@@ -39,4 +41,4 @@ if [[ "$ripplevalidatorkslc" -lt "1" ]]; then
 fi
 
 # Start rippled, Passthrough other arguments
-exec /rippled/my_build/rippled --conf /etc/opt/ripple/rippled.cfg $@
+exec /rippled/my_build/rippled --ledgerfile /etc/opt/ripple/ledger.json  --conf /etc/opt/ripple/rippled.cfg $@

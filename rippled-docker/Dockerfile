@@ -22,11 +22,9 @@ RUN wget https://github.com/Kitware/CMake/releases/download/v3.13.3/cmake-3.13.3
 	export BOOST_ROOT=/boost_1_75_0
 
 RUN git clone https://github.com/mvanmeerten/rippled.git &&\
+	export BOOST_ROOT=/boost_1_75_0 && \
 	cd rippled &&\
-	git checkout consensus-testing
-
-RUN export BOOST_ROOT=/boost_1_75_0 && \
-	cd rippled && \
+	git checkout consensus-testing && \
 	mkdir my_build && \
 	cd my_build && \
 	cmake .. && \

@@ -39,3 +39,8 @@ I will create this ledger by starting a rippled node in stand-alone mode. I will
 the same ledger.db (from the stand-alone server) in /var/lib/rippled/db and instruct the validators to continue from the genesis ledger hash.
 Furthermore I suspect there is a mismatch in validator public keys, node seeds/public keys, which is causing the validators to not 
 trust each other with the application as middle man.
+
+13-10-2021
+The genesis ledger is started from a common json file currently. No need for a rippled node in standalone mode.
+
+

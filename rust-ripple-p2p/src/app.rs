@@ -8,13 +8,15 @@ use sha2::{Digest, Sha512};
 use super::{EmptyResult};
 use openssl::ssl::{SslStream, Ssl, SslContext, SslMethod};
 use std::io::{Write};
+use std::sync::mpsc::{Receiver, Sender, TrySendError};
 use std::thread::sleep;
 use std::time::Duration;
 use protobuf::Message;
 use std::thread;
-use multiqueue;
 use crate::message_handler::{invoke_protocol_message, parse_message};
 use crate::client::Client;
+use std::sync::mpsc;
+
 
 const NODE_PRIVATE_KEY: &str = "e55dc8f3741ac9668dbe858409e5d64f5ce88380f7228eccfe82b92b2c7848ba";
 const NODE_PUBLIC_KEY_BASE58: &str = "n9KAa2zVWjPHgfzsE3iZ8HAbzJtPrnoh4H2M2HgE7dfqtvyEb1KJ";
@@ -34,21 +36,21 @@ impl App {
         let mut senders = vec![];
         let mut receivers = vec![];
         for _ in addrs.iter() {
-            let (send, recv) = multiqueue::broadcast_queue(4096);
-            senders.push(send);
-            receivers.push(recv.add_stream());
-            recv.unsubscribe();
+            let (tx, rx) = mpsc::channel();
+            senders.push(tx);
+            receivers.push(rx);
         }
         for (i, &addr) in addrs.iter().enumerate() {
-            let cloned_receivers: Vec<multiqueue::BroadcastReceiver<Vec<u8>>> = receivers.iter()
+            let cloned_senders = senders.iter()
                 .enumerate()
                 .filter(|&(j, _)| i != j)
-                .map(|(_, r)| r.clone())
+                .map(|(_, s)| s.clone())
                 .collect();
-            let sender = senders[i].clone();
+            let receiver = receivers.remove(0);
 
             let thread = thread::Builder::new().name(addr.port().to_string()).spawn(move || {
-                let peer = Peer::new(addr, sender, cloned_receivers);
+                // let peer = Peer::new(addr, sender, cloned_receivers);
+                let peer = Peer::new(addr, cloned_senders, receiver);
                 match peer.connect() {
                     Ok(_) => {}
                     Err(e) => { println!("{:?}, {}", addr, e); }
@@ -87,14 +89,14 @@ impl App {
 
 pub struct Peer {
     addr: SocketAddr,
-    sender: multiqueue::BroadcastSender<Vec<u8>>,
-    receivers: Vec<multiqueue::BroadcastReceiver<Vec<u8>>>
+    senders: Vec<Sender<Vec<u8>>>,
+    receiver: Receiver<Vec<u8>>
 }
 
 impl Peer {
-    pub fn new(address: SocketAddr, sender: multiqueue::BroadcastSender<Vec<u8>>, receivers: Vec<multiqueue::BroadcastReceiver<Vec<u8>>>) -> Self {
-        println!("{}",receivers.len());
-        Peer { addr: address, sender, receivers}
+    pub fn new(address: SocketAddr, senders: Vec<Sender<Vec<u8>>>, receiver: Receiver<Vec<u8>>) -> Self {
+        println!("{}",senders.len());
+        Peer { addr: address, senders, receiver}
     }
 
     pub fn connect(&self) -> EmptyResult {
@@ -222,19 +224,33 @@ impl Peer {
 
     fn receive_peer_msg(&self, ssl_stream: &mut SslStream<TcpStream>) -> EmptyResult {
         loop {
-            for recv in &self.receivers {
-                for _ in recv {
-                    match recv.try_recv() {
-                        Ok(message) => {
-                            let message_obj = invoke_protocol_message(
-                                BigEndian::read_u16(&message[4..6]),
-                                &message[6..],
-                                ssl_stream);
-                            println!("to {:?}, proto_type: {:?}, object: {:?}", self.addr, message_obj.descriptor().name(), message_obj);
-                            ssl_stream.write_all(message.as_slice()).unwrap()
-                        },
-                        Err(_) => ()//println!("{}", e)
-                    };
+            // for recv in &self.receivers {
+            //     for _ in recv {
+            //         match recv.try_recv() {
+            //             Ok(message) => {
+            //                 let message_obj = invoke_protocol_message(
+            //                     BigEndian::read_u16(&message[4..6]),
+            //                     &message[6..],
+            //                     ssl_stream);
+            //                 println!("to {:?}, proto_type: {:?}, object: {:?}", self.addr, message_obj.descriptor().name(), message_obj);
+            //                 ssl_stream.write_all(message.as_slice()).unwrap()
+            //             },
+            //             Err(e) => println!("{}", e)
+            //         };
+            //     }
+            // }
+
+            loop {
+                match self.receiver.try_recv() {
+                    Ok(message) => {
+                        let message_obj = invoke_protocol_message(
+                            BigEndian::read_u16(&message[4..6]),
+                            &message[6..],
+                            ssl_stream);
+                        println!("to {:?}, proto_type: {:?}, object: {:?}", self.addr, message_obj.descriptor().name(), message_obj);
+                        ssl_stream.write_all(message.as_slice()).unwrap()
+                    },
+                    Err(e) => { println!("{}", e); break; }
                 }
             }
 
@@ -278,7 +294,12 @@ impl Peer {
                 let proto_obj: Box<dyn Message> = invoke_protocol_message(message_type, payload, ssl_stream);
                 println!("from {:?}, proto_type: {:?}, object: {:?}", self.addr, proto_obj.descriptor().name(), proto_obj);
 
-                self.sender.try_send(vec.clone()).unwrap();
+                for sender in &self.senders {
+                    match sender.send(vec.clone()) {
+                        Ok(_) => {}
+                        Err(e) => {println!("{}", e)}
+                    };
+                }
 
                 buf.advance(payload_size + 6);
             }

@@ -39,4 +39,4 @@ if [[ "$ripplevalidatorkslc" -lt "1" ]]; then
 fi
 
 # Start rippled, Passthrough other arguments
-exec /opt/ripple/bin/rippled -a --conf /etc/opt/ripple/rippled.cfg $@
+exec /opt/ripple/bin/rippled -a --start --conf /etc/opt/ripple/rippled.cfg $@

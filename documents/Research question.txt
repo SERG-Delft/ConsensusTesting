@@ -1,0 +1,31 @@
+Thesis research question
+How effective is applying evolutionary algorithms and the communication closure 
+to the ordering of messages in blockchain-based consensus algorithms at uncovering concurrency and consistency bugs?
+
+Explain:
+- blockchain, what is it -> ripple
+- Consensus, explain ripple's
+- Communication closure, explain messages and ordering
+- Evolutionary algorithms, explain general evolutionary algorithm and application to messages
+
+Intoduction
+
+Blockchain -> General technology, implication and applications
+
+Ripple consensus -> How does it work and why is it interesting
+
+Communication Closure -> Reducing state-space
+
+Evolutionary algorithms -> Which ones am I gonna use and why, black-box or goal oriented
+
+Representation of test case -> Abstract away from exact message, encode order.
+
+Fitness function? -> Guide the EA
+
+How to determine a bug has been found? -> Invariant checking, what are concurrency and consistency bugs?
+
+Repoducability -> How to reproduce a found bug in the face of non-determinism
+
+Experiment -> setup and results
+
+Conclusion and discussion -> Is it effective? future research? 

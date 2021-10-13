@@ -1,3 +1,7 @@
+use std::process::Command;
+use powershell_script;
+use std::fs;
+
 mod app;
 mod protos;
 mod message_handler;
@@ -16,7 +20,9 @@ fn main() {
         .build()
         .expect("error on building runtime");
 
-    let app = app::App::new(5);
+    let n = 2;
+
+    let app = app::App::new(n);
 
     if let Err(error) = runtime.block_on(app.start()) {
         eprintln!("Error: {}", error);

@@ -1,6 +1,6 @@
 & $PSScriptRoot\Down.ps1
 
-& $PSScriptRoot\ConfigCreator.ps1 $args[0]
+& $PSScriptRoot\ConfigCreator.ps1 @args
 
 For ($i=1; $i -lt $args[0]+1; $i++) {
 	$peer_port = 51235 + $i -1

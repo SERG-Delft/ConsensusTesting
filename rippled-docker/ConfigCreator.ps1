@@ -1,6 +1,8 @@
 $total = 5
 $n = $args[0]
+$connected = $args[1]
 $path = "C:\Users\Martijn.vanMeerten\workspace\studie\Thesis\ConsensusTesting\config"
+$dbpath = "C:\Users\Martijn.vanMeerten\workspace\studie\Thesis\ConsensusTesting\db"
 
 $validator_path = -join($path, "\validators.txt")
 $validator_public_keys = Get-Content -path $validator_path -Tail $total
@@ -14,6 +16,8 @@ For ($i=1; $i -le $n; $i++) {
   $validator_token_path = -join($path, "\validator-keys_", $i, ".json")
   $validator_tokens += (Get-Content -path $validator_token_path | ConvertFrom-Json).token
   $cluster_seeds += $cluster_seed_file.nodes[$i-1].validation_seed
+  # empty db folder
+  Remove-Item (-join($dbpath, "\validator_", $i, "\*")) -Recurse
 }
 
 $rippled_cfg_base = Get-Content -path (-join($path, "\rippled.cfg"))
@@ -22,7 +26,18 @@ For ($i=0; $i -lt $n; $i++) {
   Write-Output (-join("Creating config files for ripple", ($i+1)))
 
   # rippled.cfg
-  $config_contents = (-join(($rippled_cfg_base[0..33] | out-string), $validator_tokens[$i], ($rippled_cfg_base[34..55] | out-string), $cluster_seeds[$i], ($rippled_cfg_base[56..$rippled_cfg_base.Length] | out-string)))
+  $own_ip = $rippled_cfg_base[(48 + $i)]
+  if ($connected -eq "1") {
+    $ips_fixed = (-join(($rippled_cfg_base[48..(48+$i)] -ne $own_ip | Out-String), ($rippled_cfg_base[(48+$i)..(48+$n-1)] -ne $own_ip | Out-String)))
+    $cluster = ""
+  } else {
+    $ips_fixed = $rippled_cfg_base[53]
+    $cluster = (-join(($rippled_cfg_base[54 ..55] | out-string), $cluster_seeds[$i], ($rippled_cfg_base[56..58] | Out-String)))
+  }
+  $config_contents = (-join(($rippled_cfg_base[0..33] | out-string), $validator_tokens[$i],
+        ($rippled_cfg_base[34..47] | Out-String), $ips_fixed,
+        $cluster,
+        ($rippled_cfg_base[59..$rippled_cfg_base.Length] | out-string)))
   $config_contents | Out-File -FilePath (-join($path, "\validator_" , ($i+1), "\rippled.cfg"))
 
   # validators.txt

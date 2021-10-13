@@ -1,6 +1,0 @@
-export BOOST_ROOT=/boost_1_75_0 && \
-cd .. && \
-mkdir my_build && \
-cd my_build && \
-cmake .. &&\
-cmake --build .
