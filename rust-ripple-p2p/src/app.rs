@@ -224,22 +224,6 @@ impl Peer {
 
     fn receive_peer_msg(&self, ssl_stream: &mut SslStream<TcpStream>) -> EmptyResult {
         loop {
-            // for recv in &self.receivers {
-            //     for _ in recv {
-            //         match recv.try_recv() {
-            //             Ok(message) => {
-            //                 let message_obj = invoke_protocol_message(
-            //                     BigEndian::read_u16(&message[4..6]),
-            //                     &message[6..],
-            //                     ssl_stream);
-            //                 println!("to {:?}, proto_type: {:?}, object: {:?}", self.addr, message_obj.descriptor().name(), message_obj);
-            //                 ssl_stream.write_all(message.as_slice()).unwrap()
-            //             },
-            //             Err(e) => println!("{}", e)
-            //         };
-            //     }
-            // }
-
             loop {
                 match self.receiver.try_recv() {
                     Ok(message) => {

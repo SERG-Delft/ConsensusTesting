@@ -25,3 +25,5 @@ protobuf = { version = "2" }
 websocket = "0.26.2"
 serde_json = "1.0"
 powershell_script = "0.2.1"
+bs58 = "0.4.0"
+ripemd160 = "0.9.1"
