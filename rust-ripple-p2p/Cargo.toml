@@ -1,8 +1,8 @@
 [package]
 name = "rust-ripple-p2p"
 version = "0.1.0"
-authors = ["Kirill Fomichev <fanatid@ya.ru>", "Martijn van Meerten <m.c.vanmeerten@student.tudelft.nl"]
-edition = "2018"
+authors = ["Martijn van Meerten <m.c.vanmeerten@student.tudelft.nl"]
+edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [build-dependencies]
