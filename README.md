@@ -1,7 +1,7 @@
 # Consensus Testing
 This repository contains the code for testing Ripple's consensus algorithm.
 
-## How to run the private Ripple network on Windows
+## How to run a private Ripple network on Windows
 ### Requirements
 [Docker](https://docs.docker.com/get-started/) \
 [Rust](https://www.rust-lang.org/learn/get-started) \
