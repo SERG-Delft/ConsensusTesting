@@ -1,6 +1,7 @@
 use std::process::Command;
 use powershell_script;
 use std::fs;
+use std::env;
 
 mod app;
 mod protos;
@@ -20,7 +21,8 @@ fn main() {
         .build()
         .expect("error on building runtime");
 
-    let n = 2;
+    let args: Vec<String> = env::args().collect();
+    let n: u16 = (&args[1]).parse().unwrap();
 
     let app = app::App::new(n);
 

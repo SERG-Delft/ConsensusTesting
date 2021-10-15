@@ -1,8 +1,8 @@
 $total = 5
 $n = $args[0]
 $connected = $args[1]
-$path = "C:\Users\Martijn.vanMeerten\workspace\studie\Thesis\ConsensusTesting\config"
-$dbpath = "C:\Users\Martijn.vanMeerten\workspace\studie\Thesis\ConsensusTesting\db"
+$path = "..\config"
+$dbpath = "..\db"
 
 $validator_path = -join($path, "\validators.txt")
 $validator_public_keys = Get-Content -path $validator_path -Tail $total
@@ -17,7 +17,7 @@ For ($i=1; $i -le $n; $i++) {
   $validator_tokens += (Get-Content -path $validator_token_path | ConvertFrom-Json).token
   $cluster_seeds += $cluster_seed_file.nodes[$i-1].validation_seed
   # empty db folder
-  Remove-Item (-join($dbpath, "\validator_", $i, "\*")) -Recurse
+  Remove-Item (-join($dbpath, "\validator_", $i, "\*")) -Exclude .gitkeep -Recurse
 }
 
 $rippled_cfg_base = Get-Content -path (-join($path, "\rippled.cfg"))
