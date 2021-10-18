@@ -1,12 +1,12 @@
-use std::process::Command;
-use powershell_script;
-use std::fs;
+extern crate futures;
+
 use std::env;
 
 mod app;
 mod protos;
 mod message_handler;
 mod client;
+mod crypto;
 
 type AnyError = Box<dyn std::error::Error + Send + Sync>;
 type AnyResult<T> = Result<T, AnyError>;

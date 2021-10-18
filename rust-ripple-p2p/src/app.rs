@@ -8,14 +8,14 @@ use sha2::{Digest, Sha512};
 use super::{EmptyResult};
 use openssl::ssl::{SslStream, Ssl, SslContext, SslMethod};
 use std::io::{Write};
-use std::sync::mpsc::{Receiver, Sender, TrySendError};
+use std::sync::mpsc::{Receiver, Sender};
 use std::thread::sleep;
 use std::time::Duration;
 use protobuf::Message;
 use std::thread;
 use crate::message_handler::{invoke_protocol_message, parse_message};
-use crate::client::Client;
 use std::sync::mpsc;
+use crate::client::{Client, Payment, Transaction, TransactionType};
 
 
 const NODE_PRIVATE_KEY: &str = "e55dc8f3741ac9668dbe858409e5d64f5ce88380f7228eccfe82b92b2c7848ba";
@@ -30,8 +30,13 @@ impl App {
         App { peers }
     }
 
+    /// Start proxy
+    /// Starts a separate thread per node
+    /// Every thread has one receiver and cloned senders for every other node
+    /// Every received message is relayed to all other nodes/threads
+    /// A separate thread is created which handles websocket client requests to ripple1
     pub async fn start(&self) -> EmptyResult {
-        let addrs = self.get_bootstrap_addrs(self.peers);
+        let addrs = self.get_addrs(self.peers);
         let mut threads = vec![];
         let mut senders = vec![];
         let mut receivers = vec![];
@@ -40,7 +45,7 @@ impl App {
             senders.push(tx);
             receivers.push(rx);
         }
-        for (i, &addr) in addrs.iter().enumerate() {
+        for (i, &address) in addrs.iter().enumerate() {
             let cloned_senders = senders.iter()
                 .enumerate()
                 .filter(|&(j, _)| i != j)
@@ -48,39 +53,59 @@ impl App {
                 .collect();
             let receiver = receivers.remove(0);
 
-            let thread = thread::Builder::new().name(addr.port().to_string()).spawn(move || {
+            let thread = thread::Builder::new().name(address.port().to_string()).spawn(move || {
                 // let peer = Peer::new(addr, sender, cloned_receivers);
-                let peer = Peer::new(addr, cloned_senders, receiver);
+                let name = format!("ripple{}", (i+1));
+                let peer = Peer::new(&name, address, cloned_senders, receiver);
                 match peer.connect() {
                     Ok(_) => {}
-                    Err(e) => { println!("{:?}, {}", addr, e); }
+                    Err(e) => { println!("{:?}, {}", name, e); }
                 }
             }).unwrap();
             threads.push(thread);
         }
 
-        // let mut client = Client::new("ws://127.0.0.1:6005");
-        // client.ping("JAJAJAJAJ");
+        // Connect websocket client to ripple1
+        let mut client = Client::new("ws://127.0.0.1:6005");
 
-        // let sender_clone = client.sender_channel.clone();
+        let sender_clone = client.sender_channel.clone();
 
-        // let send_thread = thread::spawn(move || {
-        //     let mut counter = 0;
-        //     loop {
-        //         sleep(Duration::from_secs(1));
-        //         println!("{:?}", Client::ledger(&sender_clone, &*counter.to_string()));
-        //         counter += 1;
-        //     }
-        // });
+        // Account and its keys to send transaction to
+        let account_id = "rE4DHSdcXafD7DkpJuFCAvc3CvsgXHjmEJ";
+        let master_key = "BUSY MARS SLED SNUG OBOE REID SUNK NEW GYM LAD LICE FEAT";
+        let master_seed = "saNSJMEBKisBr6phJtGXUcV85RBZ3";
+        let master_seed_hex = "FDDE6A91607445E59C6F7CF07AF7B661";
+        let public_key_hex = "03137FF01C82A1CF507CC243EBF629A99F2256FA43BCB7A458F638AF9A5488CD87";
+        let public_key = "aBQsqGF1HEduKrHrSVzNE5yeCTJTGgrsKgyjNLgabS2Rkq7CgZiq";
+
+        // Genesis account with initial supply of XRP
+        let genesis_seed = "snoPBrXtMeMyMHUVTgbuqAfg1SUTb";
+        let genesis_address = "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh";
+
+        let amount = 2u32.pow(31);
+        let transaction = Client::create_payment_transaction(amount, account_id, genesis_address);
+
+        let send_thread = thread::spawn(move || {
+            let mut counter = 0;
+            // Send payment transaction every 10 seconds
+            loop {
+                sleep(Duration::from_secs(10));
+                println!("{:?}", Client::sign_and_submit(&sender_clone,
+                                                         &*counter.to_string(),
+                                                         &transaction,
+                                                         genesis_seed));
+                counter += 1;
+            }
+        });
+        send_thread.join().unwrap();
+
         for thread in threads {
             thread.join().unwrap();
         }
-        // send_thread.join().unwrap();
-        // client.start();
         Ok(())
     }
 
-    fn get_bootstrap_addrs(&self, peers: u16) -> Vec<SocketAddr> {
+    fn get_addrs(&self, peers: u16) -> Vec<SocketAddr> {
         let nodes = (0..peers).map(|x| SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127,0,0,1)), 51235 + x)).collect();
         println!("{:?}", nodes);
         nodes
@@ -88,20 +113,22 @@ impl App {
 }
 
 pub struct Peer {
-    addr: SocketAddr,
+    name: String,
+    address: SocketAddr,
     senders: Vec<Sender<Vec<u8>>>,
     receiver: Receiver<Vec<u8>>
 }
 
 impl Peer {
-    pub fn new(address: SocketAddr, senders: Vec<Sender<Vec<u8>>>, receiver: Receiver<Vec<u8>>) -> Self {
+    pub fn new(name: &str, address: SocketAddr, senders: Vec<Sender<Vec<u8>>>, receiver: Receiver<Vec<u8>>) -> Self {
         println!("{}",senders.len());
-        Peer { addr: address, senders, receiver}
+        Peer { name: String::from(name), address, senders, receiver}
     }
 
+    /// Start p2p connection to validator node
     pub fn connect(&self) -> EmptyResult {
-        println!("Thread {:?} has started", self.addr);
-        let stream = match TcpStream::connect(self.addr) {
+        println!("Thread {:?} has started", self.name);
+        let stream = match TcpStream::connect(self.address) {
             Ok(tcp_stream) => tcp_stream,
             Err(e) => return Result::Err(Box::new(e))
         };
@@ -115,6 +142,7 @@ impl Peer {
         let mut buf = Vec::<u8>::with_capacity(4096);
         buf.resize(buf.capacity(), 0);
 
+        // The magic finished message that guarantees identity of both ends of the ssl channel
         let mut size = ss.finished(&mut buf[..]);
         println!("{}", size);
         if size > buf.len() {
@@ -156,7 +184,6 @@ impl Peer {
             \r\n",
             NODE_PUBLIC_KEY_BASE58, b64sig
         );
-        println!("{}", content.as_bytes().len());
         ssl_stream.write_all(content.as_bytes()).unwrap();
 
         let mut buf = BytesMut::new();
@@ -222,8 +249,10 @@ impl Peer {
         self.receive_peer_msg(&mut ssl_stream)
     }
 
+    /// Receive and send p2p messages to the node
     fn receive_peer_msg(&self, ssl_stream: &mut SslStream<TcpStream>) -> EmptyResult {
         loop {
+            /// First relay all messages received from the other nodes
             loop {
                 match self.receiver.try_recv() {
                     Ok(message) => {
@@ -231,10 +260,10 @@ impl Peer {
                             BigEndian::read_u16(&message[4..6]),
                             &message[6..],
                             ssl_stream);
-                        println!("to {:?}, proto_type: {:?}, object: {:?}", self.addr, message_obj.descriptor().name(), message_obj);
+                        println!("to {:?}, proto_type: {:?}, object: {:?}", self.address, message_obj.descriptor().name(), message_obj);
                         ssl_stream.write_all(message.as_slice()).unwrap()
                     },
-                    Err(e) => { println!("{}", e); break; }
+                    Err(e) => { break; } // Break when there are no more messages
                 }
             }
 
@@ -276,8 +305,9 @@ impl Peer {
                 let payload = &bytes[6..(6+payload_size)];
 
                 let proto_obj: Box<dyn Message> = invoke_protocol_message(message_type, payload, ssl_stream);
-                println!("from {:?}, proto_type: {:?}, object: {:?}", self.addr, proto_obj.descriptor().name(), proto_obj);
+                println!("from {:?}, proto_type: {:?}, object: {:?}", self.address, proto_obj.descriptor().name(), proto_obj);
 
+                /// Send received message to other threads/nodes
                 for sender in &self.senders {
                     match sender.send(vec.clone()) {
                         Ok(_) => {}

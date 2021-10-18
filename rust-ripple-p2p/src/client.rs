@@ -2,6 +2,7 @@ use websocket::{ClientBuilder, OwnedMessage, Message};
 use std::sync::mpsc::{channel, Sender};
 use std::thread;
 use serde_json::json;
+use serde::{Serialize, Deserialize};
 use std::thread::JoinHandle;
 
 pub struct Client<'a> {
@@ -78,6 +79,35 @@ impl Client<'static> {
         self.receive_loop.join().unwrap();
     }
 
+    pub fn create_payment_transaction(amount: u32,
+                                      destination_id: &str,
+                                      sender_address: &str) -> Transaction {
+        // Create payment object for payment to account
+        let payment = Payment {
+            amount,
+            destination: String::from(destination_id),
+            destination_tag: None,
+            invoice_id: None,
+            send_max: None,
+            deliver_min: None
+        };
+
+        // Create transaction object containing the payment
+        Transaction {
+            account: String::from(sender_address),
+            transaction_type: TransactionType::Payment,
+            fee: None,
+            sequence: None,
+            account_txn_id: None,
+            flags: None,
+            last_ledger_sequence: None,
+            source_tag: None,
+            signing_pub_key: None,
+            txn_signature: None,
+            data: Some(payment)
+        }
+    }
+
     pub fn ping(&mut self, id: &str) {
         let json = json!({
             "id": id,
@@ -99,4 +129,76 @@ impl Client<'static> {
         });
         tx.send(Message::text(json.to_string())).unwrap();
     }
+
+    pub fn sign_and_submit(tx: &Sender<Message>, id: &str, transaction: &Transaction, secret: &str) {
+        let json = json!({
+            "id": id,
+            "command": "submit",
+            "tx_json": transaction,
+            "secret": secret
+        });
+        tx.send(Message::text(json.to_string())).unwrap();
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct Transaction {
+    #[serde(rename = "Account")]
+    pub account: String,
+    #[serde(rename = "TransactionType")]
+    pub transaction_type: TransactionType,
+    #[serde(rename = "Fee", skip_serializing_if = "Option::is_none")]
+    pub fee: Option<u32>,
+    #[serde(rename = "Sequence", skip_serializing_if = "Option::is_none")]
+    pub sequence: Option<u32>,
+    #[serde(rename = "AccountTxnID", skip_serializing_if = "Option::is_none")]
+    pub account_txn_id: Option<String>,
+    #[serde(rename = "Flags", skip_serializing_if = "Option::is_none")]
+    pub flags: Option<u32>,
+    #[serde(rename = "LastLedgerSequence", skip_serializing_if = "Option::is_none")]
+    pub last_ledger_sequence: Option<u32>,
+    #[serde(rename = "SourceTag", skip_serializing_if = "Option::is_none")]
+    pub source_tag: Option<u32>,
+    #[serde(rename = "SigningPubKey", skip_serializing_if = "Option::is_none")]
+    pub signing_pub_key: Option<String>,
+    #[serde(rename = "TxnSignature", skip_serializing_if = "Option::is_none")]
+    pub txn_signature: Option<String>,
+    #[serde(rename = "Data", skip_serializing_if = "Option::is_none", flatten)]
+    pub data: Option<Payment>
+}
+
+#[derive(Serialize, Deserialize)]
+pub enum TransactionType {
+    Payment,
+    OfferCreate,
+    OfferCancel,
+    TrustSet,
+    AccountSet,
+    AccountDelete,
+    SetRegularKey,
+    SignerListSet,
+    EscrowCreate,
+    EscrowFinish,
+    EscrowCancel,
+    PaymentChannelCreate,
+    PaymentChannelFund,
+    PaymentChannelClaim,
+    DepositPreauth
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Payment  {
+    #[serde(rename = "Amount")]
+    pub amount: u32,
+    #[serde(rename = "Destination")]
+    pub destination: String,
+    #[serde(rename = "DestinationTag", skip_serializing_if = "Option::is_none")]
+    pub destination_tag: Option<u32>,
+    #[serde(rename = "InvoiceID", skip_serializing_if = "Option::is_none")]
+    pub invoice_id: Option<String>,
+    #[serde(rename = "SendMax", skip_serializing_if = "Option::is_none")]
+    pub send_max: Option<u32>,
+    #[serde(rename = "DeliverMin", skip_serializing_if = "Option::is_none")]
+    pub deliver_min: Option<u32>
 }
