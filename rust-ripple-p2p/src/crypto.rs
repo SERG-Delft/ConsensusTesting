@@ -1,8 +1,7 @@
 use std::convert::TryInto;
 use sha2::{Sha512, Digest};
-use bs58;
-use ripple_address_codec::{encode_seed, Secp256k1};
 
+#[allow(unused)]
 pub fn derive_seed(pass_phrase: &String) -> [u8; 16] {
     Sha512::digest(pass_phrase.as_bytes())[..16]
         .try_into()
@@ -12,6 +11,7 @@ pub fn derive_seed(pass_phrase: &String) -> [u8; 16] {
 #[cfg(test)]
 mod tests {
     use std::convert::TryInto;
+    use ripple_address_codec::Algorithm::Secp256k1;
     use ripple_address_codec::Entropy;
     use super::*;
 

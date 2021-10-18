@@ -996,7 +996,6 @@ dependencies = [
  "bs58",
  "byteorder",
  "bytes 0.5.6",
- "cc",
  "futures 0.3.17",
  "hex",
  "httparse",

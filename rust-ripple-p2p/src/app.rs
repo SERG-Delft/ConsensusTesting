@@ -13,9 +13,9 @@ use std::thread::sleep;
 use std::time::Duration;
 use protobuf::Message;
 use std::thread;
-use crate::message_handler::{invoke_protocol_message, parse_message};
+use crate::message_handler::{invoke_protocol_message};
 use std::sync::mpsc;
-use crate::client::{Client, Payment, Transaction, TransactionType};
+use crate::client::{Client};
 
 
 const NODE_PRIVATE_KEY: &str = "e55dc8f3741ac9668dbe858409e5d64f5ce88380f7228eccfe82b92b2c7848ba";
@@ -66,17 +66,17 @@ impl App {
         }
 
         // Connect websocket client to ripple1
-        let mut client = Client::new("ws://127.0.0.1:6005");
+        let client = Client::new("ws://127.0.0.1:6005");
 
         let sender_clone = client.sender_channel.clone();
 
         // Account and its keys to send transaction to
         let account_id = "rE4DHSdcXafD7DkpJuFCAvc3CvsgXHjmEJ";
-        let master_key = "BUSY MARS SLED SNUG OBOE REID SUNK NEW GYM LAD LICE FEAT";
-        let master_seed = "saNSJMEBKisBr6phJtGXUcV85RBZ3";
-        let master_seed_hex = "FDDE6A91607445E59C6F7CF07AF7B661";
-        let public_key_hex = "03137FF01C82A1CF507CC243EBF629A99F2256FA43BCB7A458F638AF9A5488CD87";
-        let public_key = "aBQsqGF1HEduKrHrSVzNE5yeCTJTGgrsKgyjNLgabS2Rkq7CgZiq";
+        let _master_key = "BUSY MARS SLED SNUG OBOE REID SUNK NEW GYM LAD LICE FEAT";
+        let _master_seed = "saNSJMEBKisBr6phJtGXUcV85RBZ3";
+        let _master_seed_hex = "FDDE6A91607445E59C6F7CF07AF7B661";
+        let _public_key_hex = "03137FF01C82A1CF507CC243EBF629A99F2256FA43BCB7A458F638AF9A5488CD87";
+        let _public_key = "aBQsqGF1HEduKrHrSVzNE5yeCTJTGgrsKgyjNLgabS2Rkq7CgZiq";
 
         // Genesis account with initial supply of XRP
         let genesis_seed = "snoPBrXtMeMyMHUVTgbuqAfg1SUTb";
@@ -252,7 +252,7 @@ impl Peer {
     /// Receive and send p2p messages to the node
     fn receive_peer_msg(&self, ssl_stream: &mut SslStream<TcpStream>) -> EmptyResult {
         loop {
-            /// First relay all messages received from the other nodes
+            // First relay all messages received from the other nodes
             loop {
                 match self.receiver.try_recv() {
                     Ok(message) => {
@@ -263,7 +263,7 @@ impl Peer {
                         println!("to {:?}, proto_type: {:?}, object: {:?}", self.address, message_obj.descriptor().name(), message_obj);
                         ssl_stream.write_all(message.as_slice()).unwrap()
                     },
-                    Err(e) => { break; } // Break when there are no more messages
+                    Err(_) => { break; } // Break when there are no more messages
                 }
             }
 
@@ -307,7 +307,7 @@ impl Peer {
                 let proto_obj: Box<dyn Message> = invoke_protocol_message(message_type, payload, ssl_stream);
                 println!("from {:?}, proto_type: {:?}, object: {:?}", self.address, proto_obj.descriptor().name(), proto_obj);
 
-                /// Send received message to other threads/nodes
+                // Send received message to other threads/nodes
                 for sender in &self.senders {
                     match sender.send(vec.clone()) {
                         Ok(_) => {}

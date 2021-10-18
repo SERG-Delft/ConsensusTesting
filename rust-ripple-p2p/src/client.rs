@@ -5,6 +5,7 @@ use serde_json::json;
 use serde::{Serialize, Deserialize};
 use std::thread::JoinHandle;
 
+#[allow(unused)]
 pub struct Client<'a> {
     pub sender_channel: Sender<Message<'a>>,
     send_loop: JoinHandle<()>,
@@ -74,6 +75,7 @@ impl Client<'static> {
         }
     }
 
+    #[allow(unused)]
     pub fn start(self) {
         self.send_loop.join().unwrap();
         self.receive_loop.join().unwrap();
@@ -108,6 +110,7 @@ impl Client<'static> {
         }
     }
 
+    #[allow(unused)]
     pub fn ping(&mut self, id: &str) {
         let json = json!({
             "id": id,
@@ -116,6 +119,7 @@ impl Client<'static> {
         self.sender_channel.send(Message::text(json.to_string())).unwrap();
     }
 
+    #[allow(unused)]
     pub fn ledger(tx: &Sender<Message>, id: &str) {
         let json = json!({
             "id": id,

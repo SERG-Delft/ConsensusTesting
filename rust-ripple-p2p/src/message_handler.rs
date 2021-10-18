@@ -9,10 +9,10 @@ use std::io::Write;
 pub fn invoke_protocol_message(message_type: u16, payload: &[u8], ssl_stream: &mut SslStream<TcpStream>) -> Box<dyn Message> {
     let proto_message: Box<dyn Message> = match message_type {
         2 => Box::<TMManifest>::new(parse_message::<TMManifest>(&payload)),
-        3 => { /// Ping requires a pong response, or the connection is aborted by the node
+        3 => { // Ping requires a pong response, or the connection is aborted by the node
             let ping = Box::<TMPing>::new(parse_message::<TMPing>(&payload));
             println!("Received ping: {:?}", ping);
-            let mut pong = ping.clone();
+            let pong = ping.clone();
             return_pong(pong, ssl_stream);
             // pong.set_field_type(TMPing_pingType::ptPONG);
             // let message_size: usize = (ping.compute_size() + 6) as usize;
