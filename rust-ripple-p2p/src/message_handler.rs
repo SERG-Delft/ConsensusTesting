@@ -14,18 +14,6 @@ pub fn invoke_protocol_message(message_type: u16, payload: &[u8], ssl_stream: &m
             println!("Received ping: {:?}", ping);
             let pong = ping.clone();
             return_pong(pong, ssl_stream);
-            // pong.set_field_type(TMPing_pingType::ptPONG);
-            // let message_size: usize = (ping.compute_size() + 6) as usize;
-            // let mut write_vec = vec![0; message_size];
-            // let write_bytes: &mut [u8] = write_vec  .as_mut_slice();
-            // BigEndian::write_u32(&mut write_bytes[0..4], (message_size - 6) as u32);
-            // BigEndian::write_u16(&mut write_bytes[4..6],message_type);
-            // write_bytes[6..message_size].clone_from_slice(&*pong.write_to_bytes().unwrap());
-            // let send_pong = Box::<TMPing>::new(protobuf::Message::parse_from_bytes(&write_bytes[6..message_size]).unwrap());
-            // match ssl_stream.write_all(write_bytes) {
-            //     Ok(_) => println!("Pong successful"),
-            //     Err(err) => println!("Pong error occurred: {:?}", err)
-            // };
             ping
         },
         5 => Box::<TMCluster>::new(parse_message::<TMCluster>(&payload)),

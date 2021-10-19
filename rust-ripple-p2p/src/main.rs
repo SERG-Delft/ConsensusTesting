@@ -7,6 +7,7 @@ mod protos;
 mod message_handler;
 mod client;
 mod crypto;
+mod collector;
 
 type AnyError = Box<dyn std::error::Error + Send + Sync>;
 type AnyResult<T> = Result<T, AnyError>;

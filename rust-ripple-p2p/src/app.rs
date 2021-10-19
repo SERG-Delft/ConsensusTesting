@@ -8,14 +8,15 @@ use sha2::{Digest, Sha512};
 use super::{EmptyResult};
 use openssl::ssl::{SslStream, Ssl, SslContext, SslMethod};
 use std::io::{Write};
-use std::sync::mpsc::{Receiver, Sender};
+use std::sync::mpsc::{Receiver, Sender, SendError};
 use std::thread::sleep;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use protobuf::Message;
 use std::thread;
 use crate::message_handler::{invoke_protocol_message};
 use std::sync::mpsc;
 use crate::client::{Client};
+use crate::collector::{Collector, RippleMessage};
 
 
 const NODE_PRIVATE_KEY: &str = "e55dc8f3741ac9668dbe858409e5d64f5ce88380f7228eccfe82b92b2c7848ba";
@@ -33,11 +34,18 @@ impl App {
     /// Start proxy
     /// Starts a separate thread per node
     /// Every thread has one receiver and cloned senders for every other node
-    /// Every received message is relayed to all other nodes/threads
+    /// Every received message from its node is relayed to all other nodes/threads
     /// A separate thread is created which handles websocket client requests to ripple1
     pub async fn start(&self) -> EmptyResult {
-        let addrs = self.get_addrs(self.peers);
         let mut threads = vec![];
+        let (collector_tx, collector_rx) = mpsc::channel();
+        let (control_tx, control_rx) = mpsc::channel();
+        let collector_thread = thread::spawn(move || {
+            Collector::new(collector_rx, control_rx).start();
+        });
+        threads.push(collector_thread);
+
+        let addrs = self.get_addrs(self.peers);
         let mut senders = vec![];
         let mut receivers = vec![];
         for _ in addrs.iter() {
@@ -51,12 +59,13 @@ impl App {
                 .filter(|&(j, _)| i != j)
                 .map(|(_, s)| s.clone())
                 .collect();
+            let collector_sender = collector_tx.clone();
             let receiver = receivers.remove(0);
 
             let thread = thread::Builder::new().name(address.port().to_string()).spawn(move || {
                 // let peer = Peer::new(addr, sender, cloned_receivers);
                 let name = format!("ripple{}", (i+1));
-                let peer = Peer::new(&name, address, cloned_senders, receiver);
+                let peer = Peer::new(&name, address, cloned_senders, receiver, collector_sender);
                 match peer.connect() {
                     Ok(_) => {}
                     Err(e) => { println!("{:?}, {}", name, e); }
@@ -90,14 +99,16 @@ impl App {
             // Send payment transaction every 10 seconds
             loop {
                 sleep(Duration::from_secs(10));
-                println!("{:?}", Client::sign_and_submit(&sender_clone,
-                                                         &*counter.to_string(),
-                                                         &transaction,
-                                                         genesis_seed));
+                println!("{:?}", Client::sign_and_submit(
+                    &sender_clone,
+                    &*counter.to_string(),
+                    &transaction,
+                    genesis_seed
+                ));
                 counter += 1;
             }
         });
-        send_thread.join().unwrap();
+        threads.push(send_thread);
 
         for thread in threads {
             thread.join().unwrap();
@@ -116,13 +127,20 @@ pub struct Peer {
     name: String,
     address: SocketAddr,
     senders: Vec<Sender<Vec<u8>>>,
-    receiver: Receiver<Vec<u8>>
+    receiver: Receiver<Vec<u8>>,
+    collector_sender: Sender<Box<RippleMessage>>
 }
 
 impl Peer {
-    pub fn new(name: &str, address: SocketAddr, senders: Vec<Sender<Vec<u8>>>, receiver: Receiver<Vec<u8>>) -> Self {
+    pub fn new(
+        name: &str,
+        address: SocketAddr,
+        senders: Vec<Sender<Vec<u8>>>,
+        receiver: Receiver<Vec<u8>>,
+        collector_sender: Sender<Box<RippleMessage>>
+    ) -> Self {
         println!("{}",senders.len());
-        Peer { name: String::from(name), address, senders, receiver}
+        Peer { name: String::from(name), address, senders, receiver, collector_sender}
     }
 
     /// Start p2p connection to validator node
@@ -260,7 +278,7 @@ impl Peer {
                             BigEndian::read_u16(&message[4..6]),
                             &message[6..],
                             ssl_stream);
-                        println!("to {:?}, proto_type: {:?}, object: {:?}", self.address, message_obj.descriptor().name(), message_obj);
+                        println!("to {:?}, proto_type: {:?}, object: {:?}", self.name, message_obj.descriptor().name(), message_obj);
                         ssl_stream.write_all(message.as_slice()).unwrap()
                     },
                     Err(_) => { break; } // Break when there are no more messages
@@ -305,14 +323,18 @@ impl Peer {
                 let payload = &bytes[6..(6+payload_size)];
 
                 let proto_obj: Box<dyn Message> = invoke_protocol_message(message_type, payload, ssl_stream);
-                println!("from {:?}, proto_type: {:?}, object: {:?}", self.address, proto_obj.descriptor().name(), proto_obj);
+                println!("from {:?}, proto_type: {:?}, object: {:?}", self.name, proto_obj.descriptor().name(), proto_obj);
 
                 // Send received message to other threads/nodes
                 for sender in &self.senders {
                     match sender.send(vec.clone()) {
                         Ok(_) => {}
-                        Err(e) => {println!("{}", e)}
+                        Err(e) => { println!("{}", e) }
                     };
+                }
+                match self.collector_sender.send(RippleMessage::new(String::from(&self.name), Instant::now(), proto_obj)) {
+                    Ok(_) => { println!("Sent to collector") }
+                    Err(_) => { println!("Error sending to collector") }
                 }
 
                 buf.advance(payload_size + 6);
