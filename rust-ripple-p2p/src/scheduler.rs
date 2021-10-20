@@ -32,8 +32,8 @@ impl Scheduler {
 
     fn execute_event(&self, event: Event) {
         match self.peers.get(&event.to).unwrap().sender.send(event.message) {
-            Ok(_) => { println!("Sent message from {} to {}", event.from, event.to)}
-            Err(err) => { println!("Failed to send message from {} to {}, because {}", event.from, event.to, err)}
+            Ok(_) => { }//println!("Sent message from {} to {}", event.from, event.to)}
+            Err(err) => { }//println!("Failed to send message from {} to {}, because {}", event.from, event.to, err)}
         }
     }
 

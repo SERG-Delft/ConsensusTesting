@@ -41,7 +41,7 @@ impl App {
     pub async fn start(&self) -> EmptyResult {
         let mut threads = vec![];
         let (collector_tx, collector_rx) = mpsc::channel();
-        let (control_tx, control_rx) = mpsc::channel();
+        let (_control_tx, control_rx) = mpsc::channel();
         let collector_thread = thread::spawn(move || {
             Collector::new(collector_rx, control_rx).start();
         });
@@ -287,7 +287,7 @@ impl Peer {
                             &message[6..],
                             ssl_stream);
                         println!("to {:?}, proto_type: {:?}, object: {:?}", self.name, message_obj.descriptor().name(), message_obj);
-                        ssl_stream.write_all(message.as_slice()).unwrap()
+                        ssl_stream.write_all(message.as_slice()).expect("Can't write to own peer")
                     },
                     Err(_) => { break; } // Break when there are no more messages
                 }
@@ -334,12 +334,12 @@ impl Peer {
                 println!("from {:?}, proto_type: {:?}, object: {:?}", self.name, proto_obj.descriptor().name(), proto_obj);
 
                 // Send received message to scheduler
-                self.sender.send(vec.clone());
+                self.sender.send(vec.clone()).unwrap();
 
                 // Sender received message to collector
                 match self.collector_sender.send(RippleMessage::new(String::from(&self.name), Instant::now(), proto_obj)) {
-                    Ok(_) => { println!("Sent to collector") }
-                    Err(_) => { println!("Error sending to collector") }
+                    Ok(_) => { }//println!("Sent to collector") }
+                    Err(_) => { }//println!("Error sending to collector") }
                 }
 
                 buf.advance(payload_size + 6);

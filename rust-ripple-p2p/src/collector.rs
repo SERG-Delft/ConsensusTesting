@@ -15,7 +15,7 @@ pub struct Collector {
 
 impl Collector {
     pub fn new(ripple_message_receiver: Receiver<Box<RippleMessage>>, control_receiver: Receiver<String>) -> Self {
-        let mut file = File::create(Path::new("execution.txt")).expect("Opening execution file failed");
+        let file = File::create(Path::new("execution.txt")).expect("Opening execution file failed");
         Collector {
             ripple_message_receiver,
             control_receiver,
@@ -45,7 +45,7 @@ impl Collector {
 
     fn write_to_file(&mut self, ripple_message: &mut RippleMessage) {
         ripple_message.set_start(self.start);
-        self.file.write_all(ripple_message.to_string().as_bytes());
+        self.file.write_all(ripple_message.to_string().as_bytes()).unwrap();
     }
 }
 
