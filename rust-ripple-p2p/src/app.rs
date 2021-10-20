@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::net::{SocketAddr, Ipv4Addr, IpAddr, TcpStream};
 
 use byteorder::{BigEndian, ByteOrder};
@@ -54,10 +55,10 @@ impl App {
             receivers.push(rx);
         }
         for (i, &address) in addrs.iter().enumerate() {
-            let cloned_senders = senders.iter()
+            let cloned_peer_senders: HashMap<_, _> = senders.iter()
                 .enumerate()
                 .filter(|&(j, _)| i != j)
-                .map(|(_, s)| s.clone())
+                .map(|(j, s)| (j, s.clone()))
                 .collect();
             let collector_sender = collector_tx.clone();
             let receiver = receivers.remove(0);
@@ -65,7 +66,7 @@ impl App {
             let thread = thread::Builder::new().name(address.port().to_string()).spawn(move || {
                 // let peer = Peer::new(addr, sender, cloned_receivers);
                 let name = format!("ripple{}", (i+1));
-                let peer = Peer::new(&name, address, cloned_senders, receiver, collector_sender);
+                let peer = Peer::new(&name, address, cloned_peer_senders, receiver, collector_sender);
                 match peer.connect() {
                     Ok(_) => {}
                     Err(e) => { println!("{:?}, {}", name, e); }
@@ -126,7 +127,7 @@ impl App {
 pub struct Peer {
     name: String,
     address: SocketAddr,
-    senders: Vec<Sender<Vec<u8>>>,
+    peer_senders: HashMap<usize, Sender<Vec<u8>>>,
     receiver: Receiver<Vec<u8>>,
     collector_sender: Sender<Box<RippleMessage>>
 }
@@ -135,12 +136,12 @@ impl Peer {
     pub fn new(
         name: &str,
         address: SocketAddr,
-        senders: Vec<Sender<Vec<u8>>>,
+        peer_senders: HashMap<usize, Sender<Vec<u8>>>,
         receiver: Receiver<Vec<u8>>,
         collector_sender: Sender<Box<RippleMessage>>
     ) -> Self {
-        println!("{}",senders.len());
-        Peer { name: String::from(name), address, senders, receiver, collector_sender}
+        println!("{}", peer_senders.len());
+        Peer { name: String::from(name), address, peer_senders, receiver, collector_sender}
     }
 
     /// Start p2p connection to validator node
@@ -326,12 +327,15 @@ impl Peer {
                 println!("from {:?}, proto_type: {:?}, object: {:?}", self.name, proto_obj.descriptor().name(), proto_obj);
 
                 // Send received message to other threads/nodes
-                for sender in &self.senders {
-                    match sender.send(vec.clone()) {
-                        Ok(_) => {}
-                        Err(e) => { println!("{}", e) }
-                    };
+                for (i, _) in self.peer_senders.iter() {
+                    self.send_to_peer(i.clone(), vec.clone(), Duration::from_secs(0));
                 }
+                // for (peer, sender) in &self.peer_senders {
+                //     match sender.send(vec.clone()) {
+                //         Ok(_) => {}
+                //         Err(e) => { println!("{}", e) }
+                //     };
+                // }
                 match self.collector_sender.send(RippleMessage::new(String::from(&self.name), Instant::now(), proto_obj)) {
                     Ok(_) => { println!("Sent to collector") }
                     Err(_) => { println!("Error sending to collector") }
@@ -340,5 +344,13 @@ impl Peer {
                 buf.advance(payload_size + 6);
             }
         }
+    }
+
+    fn send_to_peer(&self, peer: usize, message: Vec<u8>, delay: Duration) {
+        let cloned_sender = self.peer_senders.get(&peer).unwrap().clone();
+        thread::spawn(move || {
+            thread::sleep(delay);
+            cloned_sender.send(message.clone());
+        });
     }
 }
