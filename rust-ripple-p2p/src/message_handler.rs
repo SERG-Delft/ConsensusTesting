@@ -12,8 +12,10 @@ pub fn invoke_protocol_message(message_type: u16, payload: &[u8], ssl_stream: &m
         3 => { // Ping requires a pong response, or the connection is aborted by the node
             let ping = Box::<TMPing>::new(parse_message::<TMPing>(&payload));
             println!("Received ping: {:?}", ping);
-            let pong = ping.clone();
-            return_pong(pong, ssl_stream);
+            if ping.get_field_type() == TMPing_pingType::ptPING {
+                let pong = ping.clone();
+                return_pong(pong, ssl_stream);
+            }
             ping
         },
         5 => Box::<TMCluster>::new(parse_message::<TMCluster>(&payload)),
