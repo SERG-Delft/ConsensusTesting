@@ -9,7 +9,7 @@ use sha2::{Digest, Sha512};
 use super::{EmptyResult};
 use openssl::ssl::{SslStream, Ssl, SslContext, SslMethod};
 use std::io::{Write};
-use std::sync::mpsc::{Receiver, Sender, SendError};
+use std::sync::mpsc::{Receiver, Sender};
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 use protobuf::Message;
@@ -18,6 +18,7 @@ use crate::message_handler::{invoke_protocol_message};
 use std::sync::mpsc;
 use crate::client::{Client};
 use crate::collector::{Collector, RippleMessage};
+use crate::scheduler::{PeerChannel, Scheduler};
 
 
 const NODE_PRIVATE_KEY: &str = "e55dc8f3741ac9668dbe858409e5d64f5ce88380f7228eccfe82b92b2c7848ba";
@@ -47,26 +48,33 @@ impl App {
         threads.push(collector_thread);
 
         let addrs = self.get_addrs(self.peers);
-        let mut senders = vec![];
-        let mut receivers = vec![];
+        let mut peer_senders = vec![];
+        let mut peer_receivers = vec![];
+        let mut scheduler_peer_channels = vec![];
         for _ in addrs.iter() {
-            let (tx, rx) = mpsc::channel();
-            senders.push(tx);
-            receivers.push(rx);
+            let (tx_peer, rx_scheduler) = mpsc::channel();
+            let (tx_scheduler, rx_peer) = mpsc::channel();
+            peer_senders.push(tx_peer);
+            peer_receivers.push(rx_peer);
+            scheduler_peer_channels.push(PeerChannel::new(tx_scheduler, rx_scheduler));
         }
+
+        let scheduler_thread = thread::Builder::new().name(String::from("Scheduler")).spawn(move || {
+            let scheduler_peers: HashMap<usize, PeerChannel> = scheduler_peer_channels.into_iter().enumerate().collect();
+            let scheduler = Scheduler::new(scheduler_peers);
+            scheduler.start();
+        }).unwrap();
+        threads.push(scheduler_thread);
+
         for (i, &address) in addrs.iter().enumerate() {
-            let cloned_peer_senders: HashMap<_, _> = senders.iter()
-                .enumerate()
-                .filter(|&(j, _)| i != j)
-                .map(|(j, s)| (j, s.clone()))
-                .collect();
+            let peer_receiver = peer_receivers.remove(0);
+            let peer_sender = peer_senders.remove(0);
             let collector_sender = collector_tx.clone();
-            let receiver = receivers.remove(0);
 
             let thread = thread::Builder::new().name(address.port().to_string()).spawn(move || {
                 // let peer = Peer::new(addr, sender, cloned_receivers);
                 let name = format!("ripple{}", (i+1));
-                let peer = Peer::new(&name, address, cloned_peer_senders, receiver, collector_sender);
+                let peer = Peer::new(&name, address, peer_sender, peer_receiver, collector_sender);
                 match peer.connect() {
                     Ok(_) => {}
                     Err(e) => { println!("{:?}, {}", name, e); }
@@ -127,7 +135,7 @@ impl App {
 pub struct Peer {
     name: String,
     address: SocketAddr,
-    peer_senders: HashMap<usize, Sender<Vec<u8>>>,
+    sender: Sender<Vec<u8>>,
     receiver: Receiver<Vec<u8>>,
     collector_sender: Sender<Box<RippleMessage>>
 }
@@ -136,12 +144,11 @@ impl Peer {
     pub fn new(
         name: &str,
         address: SocketAddr,
-        peer_senders: HashMap<usize, Sender<Vec<u8>>>,
+        sender: Sender<Vec<u8>>,
         receiver: Receiver<Vec<u8>>,
         collector_sender: Sender<Box<RippleMessage>>
     ) -> Self {
-        println!("{}", peer_senders.len());
-        Peer { name: String::from(name), address, peer_senders, receiver, collector_sender}
+        Peer { name: String::from(name), address, sender, receiver, collector_sender}
     }
 
     /// Start p2p connection to validator node
@@ -271,7 +278,7 @@ impl Peer {
     /// Receive and send p2p messages to the node
     fn receive_peer_msg(&self, ssl_stream: &mut SslStream<TcpStream>) -> EmptyResult {
         loop {
-            // First relay all messages received from the other nodes
+            // First relay all messages received from the scheduler
             loop {
                 match self.receiver.try_recv() {
                     Ok(message) => {
@@ -326,16 +333,10 @@ impl Peer {
                 let proto_obj: Box<dyn Message> = invoke_protocol_message(message_type, payload, ssl_stream);
                 println!("from {:?}, proto_type: {:?}, object: {:?}", self.name, proto_obj.descriptor().name(), proto_obj);
 
-                // Send received message to other threads/nodes
-                for (i, _) in self.peer_senders.iter() {
-                    self.send_to_peer(i.clone(), vec.clone(), Duration::from_secs(0));
-                }
-                // for (peer, sender) in &self.peer_senders {
-                //     match sender.send(vec.clone()) {
-                //         Ok(_) => {}
-                //         Err(e) => { println!("{}", e) }
-                //     };
-                // }
+                // Send received message to scheduler
+                self.sender.send(vec.clone());
+
+                // Sender received message to collector
                 match self.collector_sender.send(RippleMessage::new(String::from(&self.name), Instant::now(), proto_obj)) {
                     Ok(_) => { println!("Sent to collector") }
                     Err(_) => { println!("Error sending to collector") }
@@ -346,11 +347,11 @@ impl Peer {
         }
     }
 
-    fn send_to_peer(&self, peer: usize, message: Vec<u8>, delay: Duration) {
-        let cloned_sender = self.peer_senders.get(&peer).unwrap().clone();
-        thread::spawn(move || {
-            thread::sleep(delay);
-            cloned_sender.send(message.clone());
-        });
-    }
+    // fn send_to_peer(&self, peer: usize, message: Vec<u8>, delay: Duration) {
+    //     let cloned_sender = self.peer_senders.get(&peer).unwrap().clone();
+    //     thread::spawn(move || {
+    //         thread::sleep(delay);
+    //         cloned_sender.send(message.clone());
+    //     });
+    // }
 }
