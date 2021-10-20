@@ -15,15 +15,17 @@ impl Scheduler {
         loop {
             let mut events = vec![];
             for (i, peer) in &self.peers {
-                match peer.receiver.try_recv() {
-                    Ok(message) => {
-                        events.extend(Scheduler::create_events(self.peers.len(), i.clone(), message));
-                    },
-                    Err(_) => {}
+                loop {
+                    match peer.receiver.try_recv() {
+                        Ok(message) => {
+                            events.extend(Scheduler::create_events(self.peers.len(), i.clone(), message));
+                        },
+                        Err(_) => { break; }
+                    }
                 }
             }
             self.events.extend(events);
-            if !self.events.is_empty() {
+            while !self.events.is_empty() {
                 let event = self.events.remove(0);
                 self.execute_event(event);
             }

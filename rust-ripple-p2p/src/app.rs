@@ -103,21 +103,21 @@ impl App {
         let amount = 2u32.pow(31);
         let transaction = Client::create_payment_transaction(amount, account_id, genesis_address);
 
-        let send_thread = thread::spawn(move || {
-            let mut counter = 0;
-            // Send payment transaction every 10 seconds
-            loop {
-                sleep(Duration::from_secs(10));
-                println!("{:?}", Client::sign_and_submit(
-                    &sender_clone,
-                    &*counter.to_string(),
-                    &transaction,
-                    genesis_seed
-                ));
-                counter += 1;
-            }
-        });
-        threads.push(send_thread);
+        // let send_thread = thread::spawn(move || {
+        //     let mut counter = 0;
+        //     // Send payment transaction every 10 seconds
+        //     loop {
+        //         sleep(Duration::from_secs(10));
+        //         println!("{:?}", Client::sign_and_submit(
+        //             &sender_clone,
+        //             &*counter.to_string(),
+        //             &transaction,
+        //             genesis_seed
+        //         ));
+        //         counter += 1;
+        //     }
+        // });
+        // threads.push(send_thread);
 
         for thread in threads {
             thread.join().unwrap();
