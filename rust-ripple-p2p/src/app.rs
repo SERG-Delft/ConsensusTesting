@@ -5,6 +5,7 @@ use byteorder::{BigEndian, ByteOrder};
 use bytes::{Buf, BytesMut};
 use secp256k1::{Message as CryptoMessage, Secp256k1, SecretKey};
 use sha2::{Digest, Sha512};
+use log::*;
 
 use super::{EmptyResult};
 use openssl::ssl::{SslStream, Ssl, SslContext, SslMethod};
@@ -15,9 +16,10 @@ use std::time::{Duration, Instant};
 use protobuf::Message;
 use std::thread;
 use crate::message_handler::{invoke_protocol_message};
-use std::sync::mpsc;
+use std::sync::{Arc, mpsc, Mutex};
 use crate::client::{Client};
 use crate::collector::{Collector, RippleMessage};
+use crate::protos::ripple::TMPing;
 use crate::scheduler::{PeerChannel, Scheduler};
 
 
@@ -51,18 +53,20 @@ impl App {
         let mut peer_senders = vec![];
         let mut peer_receivers = vec![];
         let mut scheduler_peer_channels = vec![];
+        let mut scheduler_receivers = vec![];
         for _ in addrs.iter() {
             let (tx_peer, rx_scheduler) = mpsc::channel();
             let (tx_scheduler, rx_peer) = mpsc::channel();
             peer_senders.push(tx_peer);
             peer_receivers.push(rx_peer);
-            scheduler_peer_channels.push(PeerChannel::new(tx_scheduler, rx_scheduler));
+            scheduler_peer_channels.push(PeerChannel::new(tx_scheduler));
+            scheduler_receivers.push(rx_scheduler);
         }
 
         let scheduler_thread = thread::Builder::new().name(String::from("Scheduler")).spawn(move || {
             let scheduler_peers: HashMap<usize, PeerChannel> = scheduler_peer_channels.into_iter().enumerate().collect();
             let scheduler = Scheduler::new(scheduler_peers);
-            scheduler.start();
+            scheduler.start(scheduler_receivers);
         }).unwrap();
         threads.push(scheduler_thread);
 
@@ -74,10 +78,10 @@ impl App {
             let thread = thread::Builder::new().name(address.port().to_string()).spawn(move || {
                 // let peer = Peer::new(addr, sender, cloned_receivers);
                 let name = format!("ripple{}", (i+1));
-                let peer = Peer::new(&name, address, peer_sender, peer_receiver, collector_sender);
-                match peer.connect() {
+                let peer = Peer::new(&name, address, peer_sender, collector_sender);
+                match peer.connect(peer_receiver) {
                     Ok(_) => {}
-                    Err(e) => { println!("{:?}, {}", name, e); }
+                    Err(e) => { warn!("{:?}, {}", name, e); }
                 }
             }).unwrap();
             threads.push(thread);
@@ -103,21 +107,21 @@ impl App {
         let amount = 2u32.pow(31);
         let transaction = Client::create_payment_transaction(amount, account_id, genesis_address);
 
-        let send_thread = thread::spawn(move || {
-            let mut counter = 0;
-            // Send payment transaction every 10 seconds
-            loop {
-                sleep(Duration::from_secs(10));
-                println!("{:?}", Client::sign_and_submit(
-                    &sender_clone,
-                    &*counter.to_string(),
-                    &transaction,
-                    genesis_seed
-                ));
-                counter += 1;
-            }
-        });
-        threads.push(send_thread);
+        // let send_thread = thread::spawn(move || {
+        //     let mut counter = 0;
+        //     // Send payment transaction every 10 seconds
+        //     loop {
+        //         sleep(Duration::from_secs(10));
+        //         info!("{:?}", Client::sign_and_submit(
+        //             &sender_clone,
+        //             &*counter.to_string(),
+        //             &transaction,
+        //             genesis_seed
+        //         ));
+        //         counter += 1;
+        //     }
+        // });
+        // threads.push(send_thread);
 
         for thread in threads {
             thread.join().unwrap();
@@ -127,7 +131,7 @@ impl App {
 
     fn get_addrs(&self, peers: u16) -> Vec<SocketAddr> {
         let nodes = (0..peers).map(|x| SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127,0,0,1)), 51235 + x)).collect();
-        println!("{:?}", nodes);
+        debug!("{:?}", nodes);
         nodes
     }
 }
@@ -136,7 +140,7 @@ pub struct Peer {
     name: String,
     address: SocketAddr,
     sender: Sender<Vec<u8>>,
-    receiver: Receiver<Vec<u8>>,
+    // receiver: Receiver<Vec<u8>>,
     collector_sender: Sender<Box<RippleMessage>>
 }
 
@@ -145,15 +149,15 @@ impl Peer {
         name: &str,
         address: SocketAddr,
         sender: Sender<Vec<u8>>,
-        receiver: Receiver<Vec<u8>>,
+        // receiver: Receiver<Vec<u8>>,
         collector_sender: Sender<Box<RippleMessage>>
     ) -> Self {
-        Peer { name: String::from(name), address, sender, receiver, collector_sender}
+        Peer { name: String::from(name), address, sender, collector_sender}
     }
 
     /// Start p2p connection to validator node
-    pub fn connect(&self) -> EmptyResult {
-        println!("Thread {:?} has started", self.name);
+    pub fn connect(&self, receiver: Receiver<Vec<u8>>) -> EmptyResult {
+        info!("Thread {:?} has started", self.name);
         let stream = match TcpStream::connect(self.address) {
             Ok(tcp_stream) => tcp_stream,
             Err(e) => return Result::Err(Box::new(e))
@@ -170,20 +174,16 @@ impl Peer {
 
         // The magic finished message that guarantees identity of both ends of the ssl channel
         let mut size = ss.finished(&mut buf[..]);
-        println!("{}", size);
         if size > buf.len() {
             buf.resize(size, 0);
             size = ss.finished(&mut buf[..]);
-            println!("{}", size)
         }
         let cookie1 = Sha512::digest(&buf[..size]);
 
         let mut size = ss.peer_finished(&mut buf[..]);
-        println!("{}", size);
         if size > buf.len() {
             buf.resize(size, 0);
             size = ss.peer_finished(&mut buf[..]);
-            println!("{}", size);
         }
         let cookie2 = Sha512::digest(&buf[..size]);
 
@@ -221,13 +221,11 @@ impl Peer {
             buf.extend_from_slice(&vec);
 
             if size == 0 {
-                println!(
+                error!(
                     "Current buffer: {}",
                     String::from_utf8_lossy(buf.bytes()).trim()
                 );
-                //panic!("socket closed");
-            } else {
-                println!("Does read something sometime")
+                panic!("socket closed");
             }
 
             if let Some(n) = buf.bytes().windows(4).position(|x| x == b"\r\n\r\n") {
@@ -239,14 +237,14 @@ impl Peer {
                 }
 
                 let response_code = resp.code.unwrap();
-                println!(
+                debug!(
                     "Response: version {}, code {}, reason {}",
                     resp.version.unwrap(),
                     resp.code.unwrap(),
                     resp.reason.unwrap()
                 );
                 for header in headers.iter().filter(|h| **h != httparse::EMPTY_HEADER) {
-                    println!("{}: {}", header.name, String::from_utf8_lossy(header.value));
+                    debug!("{}: {}", header.name, String::from_utf8_lossy(header.value));
                 }
 
                 buf.advance(n + 4);
@@ -254,104 +252,99 @@ impl Peer {
                 if response_code != 101 {
                     loop {
                         if ssl_stream.ssl_read(&mut buf).unwrap() == 0 {
-                            println!("Body: {}", String::from_utf8_lossy(buf.bytes()).trim());
+                            debug!("Body: {}", String::from_utf8_lossy(buf.bytes()).trim());
                             return Ok(());
                         }
                     }
                 }
 
                 if !buf.is_empty() {
-                    println!(
+                    debug!(
                         "Current buffer is not empty?: {}",
                         String::from_utf8_lossy(buf.bytes()).trim()
                     );
-                    // panic!("buffer should be empty");
+                    panic!("buffer should be empty");
                 }
 
                 break;
             }
         }
 
-        self.receive_peer_msg(&mut ssl_stream)
+        self.receive_peer_msg(ssl_stream, receiver)
     }
 
     /// Receive and send p2p messages to the node
-    fn receive_peer_msg(&self, ssl_stream: &mut SslStream<TcpStream>) -> EmptyResult {
-        loop {
-            // First relay all messages received from the scheduler
+    fn receive_peer_msg(&self, ssl_stream: SslStream<TcpStream>, receiver: Receiver<Vec<u8>>) -> EmptyResult {
+        let ssl = Arc::new(Mutex::new(ssl_stream));
+        let ssl_clone = ssl.clone();
+        // First relay all messages received from the scheduler
+        let receiver_thread = thread::spawn(move || {
             loop {
-                match self.receiver.try_recv() {
+                match receiver.try_recv() {
                     Ok(message) => {
-                        let message_obj = invoke_protocol_message(
-                            BigEndian::read_u16(&message[4..6]),
-                            &message[6..],
-                            ssl_stream);
-                        println!("to {:?}, proto_type: {:?}, object: {:?}", self.name, message_obj.descriptor().name(), message_obj);
-                        ssl_stream.write_all(message.as_slice()).expect("Can't write to own peer")
+                        // let message_obj = invoke_protocol_message(
+                        //     BigEndian::read_u16(&message[4..6]),
+                        //     &message[6..],
+                        //     ssl_stream);
+                        // debug!("to {:?}, proto_type: {:?}, object: {:?}", self.name, message_obj.descriptor().name(), message_obj);
+                        ssl_clone.lock().unwrap().write_all(message.as_slice()).expect("Can't write to own peer")
                     },
-                    Err(_) => { break; } // Break when there are no more messages
+                    Err(_) => { } // Break when there are no more messages
                 }
             }
-
-            let mut buf = BytesMut::new();
-            let mut vec = vec![0; 4096];
-            let size = ssl_stream.ssl_read(&mut vec).unwrap();
-            vec.resize(size, 0);
-            buf.extend_from_slice(&vec);
+        });
+        loop {
+            // Maximum ripple peer message is 64 MB
+            let mut buf = BytesMut::with_capacity(64 * 1024);
+            buf.resize(64 * 1024, 0);
+            let size = ssl.lock().unwrap().ssl_read(buf.as_mut()).expect("Unable to read from ssl stream");
+            buf.resize(size, 0);
             if size == 0 {
-                println!(
+                error!(
                     "Current buffer: {}",
                     String::from_utf8_lossy(buf.bytes()).trim()
                 );
                 panic!("socket closed");
             }
-            while buf.len() > 6 {
-                let bytes = buf.bytes();
-                if bytes[0] & 0x80 != 0 {
-                    println!("{:?}", bytes[0]);
-                    panic!("Received compressed message");
-                }
-
-                if bytes[0] & 0xFC != 0 {
-                    println!("Unknow version header");
-                }
-
-
-                let payload_size = BigEndian::read_u32(&bytes[0..4]) as usize;
-                let message_type = BigEndian::read_u16(&bytes[4..6]);
-
-                if payload_size > 64 * 1024 * 1024 {
-                    panic!("Message size too large");
-                }
-
-                if buf.len() < 6 + payload_size {
-                    break;
-                }
-
-                let payload = &bytes[6..(6+payload_size)];
-
-                let proto_obj: Box<dyn Message> = invoke_protocol_message(message_type, payload, ssl_stream);
-                println!("from {:?}, proto_type: {:?}, object: {:?}", self.name, proto_obj.descriptor().name(), proto_obj);
-
-                // Send received message to scheduler
-                self.sender.send(vec.clone()).unwrap();
-
-                // Sender received message to collector
-                match self.collector_sender.send(RippleMessage::new(String::from(&self.name), Instant::now(), proto_obj)) {
-                    Ok(_) => { }//println!("Sent to collector") }
-                    Err(_) => { }//println!("Error sending to collector") }
-                }
-
-                buf.advance(payload_size + 6);
+            let bytes = buf.bytes();
+            if bytes[0] & 0x80 != 0 {
+                error!("{:?}", bytes[0]);
+                panic!("Received compressed message");
             }
-        }
-    }
 
-    // fn send_to_peer(&self, peer: usize, message: Vec<u8>, delay: Duration) {
-    //     let cloned_sender = self.peer_senders.get(&peer).unwrap().clone();
-    //     thread::spawn(move || {
-    //         thread::sleep(delay);
-    //         cloned_sender.send(message.clone());
-    //     });
-    // }
+            if bytes[0] & 0xFC != 0 {
+                error!("Unknow version header");
+            }
+
+            let payload_size = BigEndian::read_u32(&bytes[0..4]) as usize;
+            let message_type = BigEndian::read_u16(&bytes[4..6]);
+
+            if payload_size > 64 * 1024 * 1024 {
+                panic!("Message size too large");
+            }
+
+            if buf.len() < 6 + payload_size {
+                break;
+            }
+
+            let payload = &bytes[6..(6+payload_size)];
+
+            let proto_obj: Box<dyn Message> = invoke_protocol_message(message_type, payload, &mut *ssl.lock().unwrap());
+            debug!("from {:?}, proto_type: {:?}, object: {:?}", self.name, proto_obj.descriptor().name(), proto_obj);
+
+            // Send received message to scheduler
+            // self.sender.send(vec.clone()).unwrap();
+            self.sender.send(bytes[0..(6+payload_size)].to_vec()).unwrap();
+
+            // Sender received message to collector
+            match self.collector_sender.send(RippleMessage::new(String::from(&self.name), Instant::now(), proto_obj)) {
+                Ok(_) => { }//println!("Sent to collector") }
+                Err(_) => { }//println!("Error sending to collector") }
+            }
+
+            buf.advance(payload_size + 6);
+        }
+        receiver_thread.join().unwrap();
+        Ok(())
+    }
 }

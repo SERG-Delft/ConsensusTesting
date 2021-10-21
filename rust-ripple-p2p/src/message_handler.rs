@@ -4,6 +4,7 @@ use openssl::ssl::SslStream;
 use std::net::TcpStream;
 use byteorder::{BigEndian, ByteOrder};
 use std::io::Write;
+use log::debug;
 
 /// Deserialize message
 pub fn invoke_protocol_message(message_type: u16, payload: &[u8], ssl_stream: &mut SslStream<TcpStream>) -> Box<dyn Message> {
@@ -11,7 +12,7 @@ pub fn invoke_protocol_message(message_type: u16, payload: &[u8], ssl_stream: &m
         2 => Box::<TMManifest>::new(parse_message::<TMManifest>(&payload)),
         3 => { // Ping requires a pong response, or the connection is aborted by the node
             let ping = Box::<TMPing>::new(parse_message::<TMPing>(&payload));
-            println!("Received ping: {:?}", ping);
+            debug!("Received ping: {:?}", ping);
             if ping.get_field_type() == TMPing_pingType::ptPING {
                 let pong = ping.clone();
                 return_pong(pong, ssl_stream);
@@ -51,7 +52,7 @@ fn return_pong(mut pong: Box<TMPing>, ssl_stream: &mut SslStream<TcpStream>) {
     BigEndian::write_u16(&mut write_bytes[4..6], 3);
     write_bytes[6..message_size].clone_from_slice(&*pong.write_to_bytes().unwrap());
     match ssl_stream.write_all(write_bytes) {
-        Ok(_) => println!("Pong successful"),
-        Err(err) => println!("Pong error occurred: {:?}", err)
+        Ok(_) => debug!("Pong successful"),
+        Err(err) => debug!("Pong error occurred: {:?}", err)
     };
 }

@@ -1,6 +1,8 @@
 extern crate futures;
 
 use std::env;
+use log::*;
+use env_logger;
 
 mod app;
 mod protos;
@@ -26,10 +28,12 @@ fn main() {
     let args: Vec<String> = env::args().collect();
     let n: u16 = (&args[1]).parse().unwrap();
 
+    env_logger::Builder::new().parse_default_env().init();
+
     let app = app::App::new(n);
 
     if let Err(error) = runtime.block_on(app.start()) {
-        eprintln!("Error: {}", error);
+        error!("Error: {}", error);
         std::process::exit(1);
     }
 

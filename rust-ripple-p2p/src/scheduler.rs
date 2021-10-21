@@ -1,32 +1,29 @@
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{Receiver, Sender};
+use std::thread;
+use log::*;
 
 pub struct Scheduler {
     peers: HashMap<usize, PeerChannel>,
-    events: Vec<Event>
+    events: Arc<Mutex<Vec<Event>>>
 }
 
 impl Scheduler {
     pub fn new(peers: HashMap<usize, PeerChannel>) -> Self {
-        Scheduler { peers, events: vec![] }
+        Scheduler { peers, events: Arc::new(Mutex::new(vec![])) }
     }
 
-    pub fn start(mut self) {
+    pub fn start(self, receivers: Vec<Receiver<Vec<u8>>>) {
+        let n = receivers.len();
+        for (i, receiver) in receivers.into_iter().enumerate() {
+            let events_clone = Arc::clone(&self.events);
+            PeerChannel::receive_messages(receiver, n, i.clone(), events_clone);
+        }
         loop {
-            let mut events = vec![];
-            for (i, peer) in &self.peers {
-                loop {
-                    match peer.receiver.try_recv() {
-                        Ok(message) => {
-                            events.extend(Scheduler::create_events(self.peers.len(), i.clone(), message));
-                        },
-                        Err(_) => { break; }
-                    }
-                }
-            }
-            self.events.extend(events);
-            while !self.events.is_empty() {
-                let event = self.events.remove(0);
+            let mut events = self.events.lock().unwrap();
+            while !events.is_empty() {
+                let event = events.remove(0);
                 self.execute_event(event);
             }
         }
@@ -34,8 +31,8 @@ impl Scheduler {
 
     fn execute_event(&self, event: Event) {
         match self.peers.get(&event.to).unwrap().sender.send(event.message) {
-            Ok(_) => { }//println!("Sent message from {} to {}", event.from, event.to)}
-            Err(err) => { }//println!("Failed to send message from {} to {}, because {}", event.from, event.to, err)}
+            Ok(_) => { debug!("Sent message from {} to {}", event.from+1, event.to+1) }
+            Err(_err) => { }//println!("Failed to send message from {} to {}, because {}", event.from, event.to, err)}
         }
     }
 
@@ -54,12 +51,24 @@ impl Scheduler {
 
 pub struct PeerChannel {
     sender: Sender<Vec<u8>>,
-    receiver: Receiver<Vec<u8>>
 }
 
 impl PeerChannel {
-    pub fn new(sender: Sender<Vec<u8>>, receiver: Receiver<Vec<u8>>) -> Self {
-        PeerChannel { sender, receiver }
+    pub fn new(sender: Sender<Vec<u8>>) -> Self {
+        PeerChannel { sender }
+    }
+
+    fn receive_messages(receiver: Receiver<Vec<u8>>, n: usize, i: usize, events: Arc<Mutex<Vec<Event>>>) {
+        thread::spawn(move || {
+            loop {
+                match receiver.try_recv() {
+                    Ok(message) => {
+                        events.lock().unwrap().extend(Scheduler::create_events(n, i, message));
+                    }
+                    Err(_) => {}
+                }
+            }
+        });
     }
 }
 

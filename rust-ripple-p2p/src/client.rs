@@ -4,6 +4,7 @@ use std::thread;
 use serde_json::json;
 use serde::{Serialize, Deserialize};
 use std::thread::JoinHandle;
+use log::*;
 
 #[allow(unused)]
 pub struct Client<'a> {
@@ -31,18 +32,18 @@ impl Client<'static> {
                 let message = match rx.recv() {
                     Ok(m) => m,
                     Err(e) => {
-                        println!("Send Loop: {:?}", e);
+                        debug!("Send Loop: {:?}", e);
                         return;
                     }
                 };
                 // Send the message
                 match sender.send_message(&message) {
                     Ok(()) => {
-                        println!("Send Loop sent message: {:?}", message);
+                        debug!("Send Loop sent message: {:?}", message);
                         ()
                     },
                     Err(e) => {
-                        println!("Send Loop: {:?}", e);
+                        debug!("Send Loop: {:?}", e);
                         let _ = sender.send_message(&Message::close());
                         return;
                     }
@@ -56,14 +57,14 @@ impl Client<'static> {
                 let message = match message {
                     Ok(m) => m,
                     Err(e) => {
-                        println!("Receive Loop: {:?}", e);
+                        debug!("Receive Loop: {:?}", e);
                         let _ = tx_1.send(Message::from(OwnedMessage::Close(None)));
                         return;
                     }
                 };
                 match message {
                     // Say what we received
-                    _ => println!("Receive Loop: {:?}", message),
+                    _ => debug!("Receive Loop: {:?}", message),
                 }
             }
         });

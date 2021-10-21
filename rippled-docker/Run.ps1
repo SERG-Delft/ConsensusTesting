@@ -11,5 +11,6 @@ For ($i=1; $i -lt $args[0]+1; $i++) {
 		-p ${peer_port}:51235 -p ${ws_port}:6005 `
 		--mount type=bind,source=${pwd}/../config/validator_${i},target="/.config/ripple" `
 		--mount type=bind,source=${pwd}/../db/validator_${i},target="/var/lib/rippled/db" `
+		--mount type=bind,source=${pwd}/../logs/validator_${i},target="/var/log/rippled" `
 		mvanmeerten/rippled-boost-cmake
 }

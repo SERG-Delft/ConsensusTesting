@@ -43,4 +43,7 @@ trust each other with the application as middle man.
 13-10-2021
 The genesis ledger is started from a common json file currently. No need for a rippled node in standalone mode.
 
+20-10-2021
+All Peers send the messages from their validator to a scheduler. This scheduler is responsible for relaying the messages.
+Difficulty with keeping the network validating, with or without transactions. Trying to figure out what causes this.
 
