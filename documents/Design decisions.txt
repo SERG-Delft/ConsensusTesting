@@ -47,3 +47,13 @@ The genesis ledger is started from a common json file currently. No need for a r
 All Peers send the messages from their validator to a scheduler. This scheduler is responsible for relaying the messages.
 Difficulty with keeping the network validating, with or without transactions. Trying to figure out what causes this.
 
+21-10-2021
+The validation issues might come from relaying message too slowly. Currently attempting to split a peer's underlying TCP stream into
+a read and write stream. This will allow two threads to asynchronously receive and send over the TCP stream. This is, however, made difficult
+due to the TLS wrapper. Might have to switch to tokio streams or something similar.
+
+25-10-2021
+I tried running a stock rippled node as the proxy. This works as intended. Problem is definitely in the rust code.
+
+26-10-2021
+I'm unable to detect a bug in the code. I will add log messages to the rippled stock proxy, to determine what messages are relayed when.
