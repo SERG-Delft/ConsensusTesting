@@ -13,6 +13,7 @@ To run the network, follow the steps below.
 1. Clone this repository
 `git clone https://github.com/SERG-Delft/ConsensusTesting`
 2. Change directory to rippled-docker `cd ConsensusTesting/rippled-docker`
+3. Create the docker network ripple-net `docker network create ripple-net`
 
 ##### Without proxy
 3. Run the powershell script `.\Run.ps1 [n (1-5)] [1 for connected network without proxy]` \
