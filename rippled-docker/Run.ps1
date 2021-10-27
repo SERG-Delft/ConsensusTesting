@@ -3,7 +3,7 @@
 & $PSScriptRoot\ConfigCreator.ps1 @args
 
 # Run in parallel
-if (args[1] -eq "p") {
+if ($args[1] -eq "p") {
 	(1..$args[0]) | ForEach-Object -Parallel {
 		$peer_port = 51235 + $_ -1
 		$ws_port = 6005 + $_ -1

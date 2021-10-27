@@ -1,6 +1,6 @@
 & $PSScriptRoot\Down.ps1
 
-# & $PSScriptRoot\ConfigCreator.ps1 @args
+& $PSScriptRoot\ConfigProxyCreator.ps1 @args
 
 For ($i=1; $i -lt $args[0]+1; $i++) {
 	$peer_port = 51235 + $i -1
@@ -24,4 +24,4 @@ docker run `
   --mount type=bind,source=${pwd}/../config/proxy,target="/.config/ripple" `
   --mount type=bind,source=${pwd}/../db/proxy,target="/var/lib/rippled/db" `
   --mount type=bind,source=${pwd}/../logs/proxy,target="/var/log/rippled" `
-  mvanmeerten/rippled-boost-cmake
+  mvanmeerten/rippled-proxy
