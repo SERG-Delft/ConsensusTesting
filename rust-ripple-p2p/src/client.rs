@@ -14,7 +14,7 @@ pub struct Client<'a> {
 }
 
 impl Client<'static> {
-    pub fn new(connection: &str) -> Self {
+    pub fn new(connection: &str, subscription_collector_sender: Sender<SubscriptionObject>) -> Self {
         let client = ClientBuilder::new(connection)
             .unwrap()
             .connect_insecure()
@@ -64,10 +64,23 @@ impl Client<'static> {
                 };
                 match message {
                     // Say what we received
-                    _ => debug!("Receive Loop: {:?}", message),
+                    OwnedMessage::Text(text) => {
+                        println!("Receive loop got: {:?}", text);
+                        match serde_json::from_str::<SubscriptionObject>(text.as_str()) {
+                            Ok(subscription_object) => {
+                                println!("Parsed into subscription object");
+                                subscription_collector_sender.send(subscription_object).unwrap()
+                            },
+                            Err(_) => { println!("Could not parse") }
+                        }
+                    },
+                    _ => debug!("Receive Loop: {:?}", message)
                 }
             }
         });
+
+        // Start subscription
+        Client::subscribe(&tx, "Ripple1 subscription", vec!["consensus", "ledger", "validations", "peer_status"]);
 
         Client {
             sender_channel: tx,
@@ -144,6 +157,15 @@ impl Client<'static> {
         });
         tx.send(Message::text(json.to_string())).unwrap();
     }
+
+    pub fn subscribe(tx: &Sender<Message>, id: &str, streams: Vec<&str>) {
+        let json = json!({
+            "id": id,
+            "command": "subscribe",
+            "streams": streams
+        });
+        tx.send(Message::text(json.to_string())).unwrap();
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -206,4 +228,90 @@ pub struct Payment  {
     pub send_max: Option<u32>,
     #[serde(rename = "DeliverMin", skip_serializing_if = "Option::is_none")]
     pub deliver_min: Option<u32>
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct ValidatedLedger {
+    #[serde(skip_serializing)]
+    pub fee_base: u32,
+    #[serde(skip_serializing)]
+    pub fee_ref: u32,
+    pub ledger_hash: String,
+    pub ledger_index: u32,
+    pub ledger_time: u32,
+    #[serde(skip_serializing)]
+    pub reserve_base: u32,
+    #[serde(skip_serializing)]
+    pub reserve_inc: u32,
+    pub txn_count: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub validated_ledgers: Option<String>
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct ReceivedValidation {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    amendments: Option<Vec<String>>,
+    #[serde(skip_serializing)]
+    base_fee: Option<u32>,
+    #[serde(skip_serializing)]
+    flags: u32,
+    full: bool,
+    ledger_hash: String,
+    ledger_index: String,
+    #[serde(skip_serializing)]
+    load_fee: Option<u32>,
+    master_key: Option<String>,
+    #[serde(skip_serializing)]
+    reserve_base: Option<u32>,
+    #[serde(skip_serializing)]
+    reserve_inc: Option<u32>,
+    #[serde(skip_serializing)]
+    signature: String,
+    signing_time: u32,
+    validation_public_key: String
+}
+
+#[derive(Serialize, Deserialize)]
+pub enum PeerStatusEvent {
+    #[serde(rename = "CLOSING_LEDGER")]
+    ClosingLedger,
+    #[serde(rename = "ACCEPTED_LEDGER")]
+    AcceptedLedger,
+    #[serde(rename = "SWITCHED_LEDGER")]
+    SwitchedLedger,
+    #[serde(rename = "LOST_SYNC")]
+    LostSync
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct PeerStatusChange {
+    action: PeerStatusEvent,
+    date: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    ledger_hash: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    ledger_index: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    ledger_index_max: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    ledger_index_min: Option<u32>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct ConsensusChange {
+    consensus: String
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum SubscriptionObject {
+    #[serde(rename = "ledgerClosed")]
+    ValidatedLedger(ValidatedLedger),
+    #[serde(rename = "validationReceived")]
+    ReceivedValidation(ReceivedValidation),
+    #[serde(rename = "peerStatusChange")]
+    PeerStatusChange(PeerStatusChange),
+    #[serde(rename = "consensusPhase")]
+    ConsensusChange(ConsensusChange)
 }

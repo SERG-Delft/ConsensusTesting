@@ -44,8 +44,9 @@ impl App {
         let mut threads = vec![];
         let (collector_tx, collector_rx) = mpsc::channel();
         let (_control_tx, control_rx) = mpsc::channel();
+        let (subscription_tx, subscription_rx) = mpsc::channel();
         let collector_thread = thread::spawn(move || {
-            Collector::new(collector_rx, control_rx).start();
+            Collector::new(collector_rx, subscription_rx, control_rx).start();
         });
         threads.push(collector_thread);
 
@@ -88,7 +89,7 @@ impl App {
         }
 
         // Connect websocket client to ripple1
-        let client = Client::new("ws://127.0.0.1:6005");
+        let client = Client::new("ws://127.0.0.1:6005", subscription_tx);
 
         let sender_clone = client.sender_channel.clone();
 
@@ -333,7 +334,6 @@ impl Peer {
             debug!("from {:?}, proto_type: {:?}, object: {:?}", self.name, proto_obj.descriptor().name(), proto_obj);
 
             // Send received message to scheduler
-            // self.sender.send(vec.clone()).unwrap();
             self.sender.send(bytes[0..(6+payload_size)].to_vec()).unwrap();
 
             // Sender received message to collector

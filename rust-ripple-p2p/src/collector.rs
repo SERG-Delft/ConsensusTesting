@@ -2,24 +2,35 @@ use std::fmt::{Display, Formatter};
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
-use std::sync::mpsc::{Receiver};
+use std::sync::mpsc::{Receiver, TryRecvError};
 use std::time::Instant;
 use protobuf::Message;
+use serde_json::json;
+use crate::client::{ConsensusChange, PeerStatusEvent, ReceivedValidation, SubscriptionObject, ValidatedLedger};
 
+/// Collects and writes data to files
+/// Execution file stores all messages sent from the proxy
+/// Subscription file stores all subscription messages received from the client
 pub struct Collector {
     ripple_message_receiver: Receiver<Box<RippleMessage>>,
+    subscription_receiver: Receiver<SubscriptionObject>,
     control_receiver: Receiver<String>,
-    file: File,
+    execution_file: File,
+    subscription_file: File,
     start: Instant
 }
 
 impl Collector {
-    pub fn new(ripple_message_receiver: Receiver<Box<RippleMessage>>, control_receiver: Receiver<String>) -> Self {
-        let file = File::create(Path::new("execution.txt")).expect("Opening execution file failed");
+    pub fn new(ripple_message_receiver: Receiver<Box<RippleMessage>>, subscription_receiver: Receiver<SubscriptionObject>, control_receiver: Receiver<String>) -> Self {
+        let execution_file = File::create(Path::new("execution.txt")).expect("Opening execution file failed");
+        let mut subscription_file = File::create(Path::new("subscription.json")).expect("Opening subscription file failed");
+        subscription_file.write_all(String::from("[\n").as_bytes()).unwrap();
         Collector {
             ripple_message_receiver,
+            subscription_receiver,
             control_receiver,
-            file,
+            execution_file,
+            subscription_file,
             start: Instant::now()
         }
     }
@@ -40,12 +51,29 @@ impl Collector {
                 }
                 _ => {}
             }
+            match self.subscription_receiver.try_recv() {
+                Ok(mut subscription_object) => match subscription_object {
+                    SubscriptionObject::ValidatedLedger(ledger) =>
+                        self.write_to_subscription_file(json!({"LedgerValidated": ledger}).to_string()),
+                    SubscriptionObject::ReceivedValidation(validation) =>
+                        self.write_to_subscription_file(json!({"ValidationReceived": validation}).to_string()),
+                    SubscriptionObject::PeerStatusChange(peer_status) =>
+                        self.write_to_subscription_file(json!({"PeerStatus": peer_status}).to_string()),
+                    SubscriptionObject::ConsensusChange(consensus_change) =>
+                        self.write_to_subscription_file(json!({"ConsensusChange": consensus_change}).to_string())
+                },
+                _ => {}
+            }
         }
     }
 
     fn write_to_file(&mut self, ripple_message: &mut RippleMessage) {
         ripple_message.set_start(self.start);
-        self.file.write_all(ripple_message.to_string().as_bytes()).unwrap();
+        self.execution_file.write_all(ripple_message.to_string().as_bytes()).unwrap();
+    }
+
+    fn write_to_subscription_file(&mut self, text: String) {
+        self.subscription_file.write_all((text + ",\n").as_bytes()).unwrap();
     }
 }
 
