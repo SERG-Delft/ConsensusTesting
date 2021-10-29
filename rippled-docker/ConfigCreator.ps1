@@ -38,10 +38,10 @@ For ($i=0; $i -lt $n; $i++) {
         ($rippled_cfg_base[34..47] | Out-String), $ips_fixed,
         $cluster,
         ($rippled_cfg_base[59..$rippled_cfg_base.Length] | out-string)))
-  $config_contents | Out-File -FilePath (-join($path, "\validator_" , ($i+1), "\rippled.cfg"))
+  $config_contents | Out-File -Encoding ascii -FilePath (-join($path, "\validator_" , ($i+1), "\rippled.cfg"))
 
   # validators.txt
   $own_pub_key = $validator_public_keys[$i]
   $validator_contents = (-join("[validators]`n", ($validator_public_keys[0..($i)] -ne $own_pub_key | Out-String), ($validator_public_keys[($i)..($n-1)] -ne $own_pub_key | Out-String)))
-  $validator_contents | Out-File -FilePath (-join($path, "\validator_" , ($i+1), "\validators.txt"))
+  $validator_contents | Out-File -Encoding ascii -FilePath (-join($path, "\validator_" , ($i+1), "\validators.txt"))
 }
