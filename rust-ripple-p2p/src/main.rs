@@ -27,10 +27,17 @@ fn main() {
 
     let args: Vec<String> = env::args().collect();
     let n: u16 = (&args[1]).parse().unwrap();
+    let only_subscribe = if &args.len() > &2 {
+        match (&args[2]).parse::<u16>() {
+            Ok(_) => true,
+            Err(_) => false
+        }
+    } else { false };
+
 
     env_logger::Builder::new().parse_default_env().init();
 
-    let app = app::App::new(n);
+    let app = app::App::new(n, only_subscribe);
 
     if let Err(error) = runtime.block_on(app.start()) {
         error!("Error: {}", error);

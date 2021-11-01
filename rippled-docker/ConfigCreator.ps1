@@ -3,6 +3,7 @@ $n = $args[0]
 $connected = $args[1]
 $path = "..\config"
 $dbpath = "..\db"
+$logpath = "..\logs"
 
 $validator_path = -join($path, "\validators.txt")
 $validator_public_keys = Get-Content -path $validator_path -Tail $total
@@ -18,6 +19,8 @@ For ($i=1; $i -le $n; $i++) {
   $cluster_seeds += $cluster_seed_file.nodes[$i-1].validation_seed
   # empty db folder
   Remove-Item (-join($dbpath, "\validator_", $i, "\*")) -Exclude .gitkeep -Recurse
+  # empty log folder
+  Remove-Item (-join($logpath, "\validator_", $i, "\*")) -Exclude .gitkeep -Recurse
 }
 
 $rippled_cfg_base = Get-Content -path (-join($path, "\rippled.cfg"))
@@ -43,5 +46,7 @@ For ($i=0; $i -lt $n; $i++) {
   # validators.txt
   $own_pub_key = $validator_public_keys[$i]
   $validator_contents = (-join("[validators]`n", ($validator_public_keys[0..($i)] -ne $own_pub_key | Out-String), ($validator_public_keys[($i)..($n-1)] -ne $own_pub_key | Out-String)))
+
+  # Write-Output (-join(($validator_contents | Out-String), "`n"))
   $validator_contents | Out-File -FilePath (-join($path, "\validator_" , ($i+1), "\validators.txt"))
 }

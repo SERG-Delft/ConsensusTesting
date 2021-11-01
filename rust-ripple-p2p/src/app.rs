@@ -27,12 +27,13 @@ const NODE_PRIVATE_KEY: &str = "e55dc8f3741ac9668dbe858409e5d64f5ce88380f7228ecc
 const NODE_PUBLIC_KEY_BASE58: &str = "n9KAa2zVWjPHgfzsE3iZ8HAbzJtPrnoh4H2M2HgE7dfqtvyEb1KJ";
 
 pub struct App {
-    peers: u16
+    peers: u16,
+    only_subscribe: bool
 }
 
 impl App {
-    pub fn new(peers: u16) -> Self {
-        App { peers }
+    pub fn new(peers: u16, only_subscribe: bool) -> Self {
+        App { peers, only_subscribe }
     }
 
     /// Start proxy
@@ -45,53 +46,57 @@ impl App {
         let (collector_tx, collector_rx) = mpsc::channel();
         let (_control_tx, control_rx) = mpsc::channel();
         let (subscription_tx, subscription_rx) = mpsc::channel();
+        let peer = self.peers.clone();
         let collector_thread = thread::spawn(move || {
-            Collector::new(collector_rx, subscription_rx, control_rx).start();
+            Collector::new(peer, collector_rx, subscription_rx, control_rx).start();
         });
         threads.push(collector_thread);
 
-        let addrs = self.get_addrs(self.peers);
-        let mut peer_senders = vec![];
-        let mut peer_receivers = vec![];
-        let mut scheduler_peer_channels = vec![];
-        let mut scheduler_receivers = vec![];
-        for _ in addrs.iter() {
-            let (tx_peer, rx_scheduler) = mpsc::channel();
-            let (tx_scheduler, rx_peer) = mpsc::channel();
-            peer_senders.push(tx_peer);
-            peer_receivers.push(rx_peer);
-            scheduler_peer_channels.push(PeerChannel::new(tx_scheduler));
-            scheduler_receivers.push(rx_scheduler);
-        }
+        if !self.only_subscribe {
+            let addrs = self.get_addrs(self.peers);
+            let mut peer_senders = vec![];
+            let mut peer_receivers = vec![];
+            let mut scheduler_peer_channels = vec![];
+            let mut scheduler_receivers = vec![];
+            for _ in addrs.iter() {
+                let (tx_peer, rx_scheduler) = mpsc::channel();
+                let (tx_scheduler, rx_peer) = mpsc::channel();
+                peer_senders.push(tx_peer);
+                peer_receivers.push(rx_peer);
+                scheduler_peer_channels.push(PeerChannel::new(tx_scheduler));
+                scheduler_receivers.push(rx_scheduler);
+            }
 
-        let scheduler_thread = thread::Builder::new().name(String::from("Scheduler")).spawn(move || {
-            let scheduler_peers: HashMap<usize, PeerChannel> = scheduler_peer_channels.into_iter().enumerate().collect();
-            let scheduler = Scheduler::new(scheduler_peers);
-            scheduler.start(scheduler_receivers);
-        }).unwrap();
-        threads.push(scheduler_thread);
-
-        for (i, &address) in addrs.iter().enumerate() {
-            let peer_receiver = peer_receivers.remove(0);
-            let peer_sender = peer_senders.remove(0);
-            let collector_sender = collector_tx.clone();
-
-            let thread = thread::Builder::new().name(address.port().to_string()).spawn(move || {
-                // let peer = Peer::new(addr, sender, cloned_receivers);
-                let name = format!("ripple{}", (i+1));
-                let peer = Peer::new(&name, address, peer_sender, collector_sender);
-                match peer.connect(peer_receiver) {
-                    Ok(_) => {}
-                    Err(e) => { warn!("{:?}, {}", name, e); }
-                }
+            let scheduler_thread = thread::Builder::new().name(String::from("Scheduler")).spawn(move || {
+                let scheduler_peers: HashMap<usize, PeerChannel> = scheduler_peer_channels.into_iter().enumerate().collect();
+                let scheduler = Scheduler::new(scheduler_peers);
+                scheduler.start(scheduler_receivers);
             }).unwrap();
-            threads.push(thread);
+            threads.push(scheduler_thread);
+
+            for (i, &address) in addrs.iter().enumerate() {
+                let peer_receiver = peer_receivers.remove(0);
+                let peer_sender = peer_senders.remove(0);
+                let collector_sender = collector_tx.clone();
+
+                let thread = thread::Builder::new().name(address.port().to_string()).spawn(move || {
+                    // let peer = Peer::new(addr, sender, cloned_receivers);
+                    let name = format!("ripple{}", (i+1));
+                    let peer = Peer::new(&name, address, peer_sender, collector_sender);
+                    match peer.connect(peer_receiver) {
+                        Ok(_) => {}
+                        Err(e) => { warn!("{:?}, {}", name, e); }
+                    }
+                }).unwrap();
+                threads.push(thread);
+            }
         }
 
         // Connect websocket client to ripple1
-        let client = Client::new("ws://127.0.0.1:6005", subscription_tx);
-
-        let sender_clone = client.sender_channel.clone();
+        for i in 0..self.peers {
+            let client = Client::new(i, format!("ws://127.0.0.1:600{}", 5+i).as_str(), subscription_tx.clone());
+            let sender_clone = client.sender_channel.clone();
+        }
 
         // Account and its keys to send transaction to
         let account_id = "rE4DHSdcXafD7DkpJuFCAvc3CvsgXHjmEJ";

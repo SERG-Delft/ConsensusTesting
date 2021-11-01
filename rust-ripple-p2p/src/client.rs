@@ -8,13 +8,14 @@ use log::*;
 
 #[allow(unused)]
 pub struct Client<'a> {
+    peer: u16,
     pub sender_channel: Sender<Message<'a>>,
     send_loop: JoinHandle<()>,
     receive_loop: JoinHandle<()>
 }
 
 impl Client<'static> {
-    pub fn new(connection: &str, subscription_collector_sender: Sender<SubscriptionObject>) -> Self {
+    pub fn new(peer: u16, connection: &str, subscription_collector_sender: Sender<PeerSubscriptionObject>) -> Self {
         let client = ClientBuilder::new(connection)
             .unwrap()
             .connect_insecure()
@@ -57,7 +58,7 @@ impl Client<'static> {
                 let message = match message {
                     Ok(m) => m,
                     Err(e) => {
-                        debug!("Receive Loop: {:?}", e);
+                        debug!("Receive Loop erred: {:?}", e);
                         let _ = tx_1.send(Message::from(OwnedMessage::Close(None)));
                         return;
                     }
@@ -69,7 +70,7 @@ impl Client<'static> {
                         match serde_json::from_str::<SubscriptionObject>(text.as_str()) {
                             Ok(subscription_object) => {
                                 println!("Parsed into subscription object");
-                                subscription_collector_sender.send(subscription_object).unwrap()
+                                subscription_collector_sender.send(PeerSubscriptionObject::new(peer, subscription_object)).unwrap()
                             },
                             Err(_) => { println!("Could not parse") }
                         }
@@ -80,9 +81,10 @@ impl Client<'static> {
         });
 
         // Start subscription
-        Client::subscribe(&tx, "Ripple1 subscription", vec!["consensus", "ledger", "validations", "peer_status"]);
+        Client::subscribe(&tx, format!("Ripple{} subscription", peer).as_str(), vec!["consensus", "ledger", "validations", "peer_status"]);
 
         Client {
+            peer,
             sender_channel: tx,
             send_loop,
             receive_loop
@@ -314,4 +316,15 @@ pub enum SubscriptionObject {
     PeerStatusChange(PeerStatusChange),
     #[serde(rename = "consensusPhase")]
     ConsensusChange(ConsensusChange)
+}
+
+pub struct PeerSubscriptionObject {
+    pub peer: u16,
+    pub subscription_object: SubscriptionObject
+}
+
+impl PeerSubscriptionObject {
+    fn new(peer: u16, subscription_object: SubscriptionObject) -> Self {
+        PeerSubscriptionObject { peer, subscription_object }
+    }
 }

@@ -6,31 +6,37 @@ use std::sync::mpsc::{Receiver, TryRecvError};
 use std::time::Instant;
 use protobuf::Message;
 use serde_json::json;
-use crate::client::{ConsensusChange, PeerStatusEvent, ReceivedValidation, SubscriptionObject, ValidatedLedger};
+use crate::client::{ConsensusChange, PeerStatusEvent, PeerSubscriptionObject, ReceivedValidation, SubscriptionObject, ValidatedLedger};
 
 /// Collects and writes data to files
 /// Execution file stores all messages sent from the proxy
 /// Subscription file stores all subscription messages received from the client
 pub struct Collector {
+    number_of_nodes: u16,
     ripple_message_receiver: Receiver<Box<RippleMessage>>,
-    subscription_receiver: Receiver<SubscriptionObject>,
+    subscription_receiver: Receiver<PeerSubscriptionObject>,
     control_receiver: Receiver<String>,
     execution_file: File,
-    subscription_file: File,
+    subscription_files: Vec<File>,
     start: Instant
 }
 
 impl Collector {
-    pub fn new(ripple_message_receiver: Receiver<Box<RippleMessage>>, subscription_receiver: Receiver<SubscriptionObject>, control_receiver: Receiver<String>) -> Self {
+    pub fn new(number_of_nodes: u16, ripple_message_receiver: Receiver<Box<RippleMessage>>, subscription_receiver: Receiver<PeerSubscriptionObject>, control_receiver: Receiver<String>) -> Self {
         let execution_file = File::create(Path::new("execution.txt")).expect("Opening execution file failed");
-        let mut subscription_file = File::create(Path::new("subscription.json")).expect("Opening subscription file failed");
-        subscription_file.write_all(String::from("[\n").as_bytes()).unwrap();
+        let mut subscription_files = vec![];
+        for peer in 0..number_of_nodes {
+            let mut subscription_file = File::create(Path::new(format!("subscription_{}.json", peer).as_str())).expect("Opening subscription file failed");
+            subscription_file.write_all(String::from("[\n").as_bytes()).unwrap();
+            subscription_files.push(subscription_file);
+        }
         Collector {
+            number_of_nodes,
             ripple_message_receiver,
             subscription_receiver,
             control_receiver,
             execution_file,
-            subscription_file,
+            subscription_files,
             start: Instant::now()
         }
     }
@@ -52,15 +58,15 @@ impl Collector {
                 _ => {}
             }
             match self.subscription_receiver.try_recv() {
-                Ok(mut subscription_object) => match subscription_object {
+                Ok(mut subscription_object) => match subscription_object.subscription_object {
                     SubscriptionObject::ValidatedLedger(ledger) =>
-                        self.write_to_subscription_file(json!({"LedgerValidated": ledger}).to_string()),
+                        self.write_to_subscription_file(subscription_object.peer, json!({"LedgerValidated": ledger}).to_string()),
                     SubscriptionObject::ReceivedValidation(validation) =>
-                        self.write_to_subscription_file(json!({"ValidationReceived": validation}).to_string()),
+                        self.write_to_subscription_file(subscription_object.peer, json!({"ValidationReceived": validation}).to_string()),
                     SubscriptionObject::PeerStatusChange(peer_status) =>
-                        self.write_to_subscription_file(json!({"PeerStatus": peer_status}).to_string()),
+                        self.write_to_subscription_file(subscription_object.peer, json!({"PeerStatus": peer_status}).to_string()),
                     SubscriptionObject::ConsensusChange(consensus_change) =>
-                        self.write_to_subscription_file(json!({"ConsensusChange": consensus_change}).to_string())
+                        self.write_to_subscription_file(subscription_object.peer, json!({"ConsensusChange": consensus_change}).to_string())
                 },
                 _ => {}
             }
@@ -72,8 +78,8 @@ impl Collector {
         self.execution_file.write_all(ripple_message.to_string().as_bytes()).unwrap();
     }
 
-    fn write_to_subscription_file(&mut self, text: String) {
-        self.subscription_file.write_all((text + ",\n").as_bytes()).unwrap();
+    fn write_to_subscription_file(&mut self, peer: u16, text: String) {
+        self.subscription_files[peer as usize].write_all((text + ",\n").as_bytes()).unwrap();
     }
 }
 
