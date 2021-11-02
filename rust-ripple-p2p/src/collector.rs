@@ -1,6 +1,6 @@
 use std::fmt::{Display, Formatter};
 use std::fs::File;
-use std::io::Write;
+use std::io::{BufWriter, Write};
 use std::path::Path;
 use std::sync::mpsc::{Receiver, TryRecvError};
 use std::time::Instant;
@@ -16,8 +16,8 @@ pub struct Collector {
     ripple_message_receiver: Receiver<Box<RippleMessage>>,
     subscription_receiver: Receiver<PeerSubscriptionObject>,
     control_receiver: Receiver<String>,
-    execution_file: File,
-    subscription_files: Vec<File>,
+    execution_file: BufWriter<File>,
+    subscription_files: Vec<BufWriter<File>>,
     start: Instant
 }
 
@@ -26,7 +26,7 @@ impl Collector {
         let execution_file = File::create(Path::new("execution.txt")).expect("Opening execution file failed");
         let mut subscription_files = vec![];
         for peer in 0..number_of_nodes {
-            let mut subscription_file = File::create(Path::new(format!("subscription_{}.json", peer).as_str())).expect("Opening subscription file failed");
+            let mut subscription_file = BufWriter::new(File::create(Path::new(format!("subscription_{}.json", peer).as_str())).expect("Opening subscription file failed"));
             subscription_file.write_all(String::from("[\n").as_bytes()).unwrap();
             subscription_files.push(subscription_file);
         }
@@ -35,7 +35,7 @@ impl Collector {
             ripple_message_receiver,
             subscription_receiver,
             control_receiver,
-            execution_file,
+            execution_file: BufWriter::new(execution_file),
             subscription_files,
             start: Instant::now()
         }

@@ -1,4 +1,4 @@
-& $PSScriptRoot\Down.ps1
+& $PSScriptRoot\Down.ps1 @args
 
 & $PSScriptRoot\ConfigCreator.ps1 @args
 

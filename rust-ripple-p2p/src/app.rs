@@ -6,6 +6,7 @@ use bytes::{Buf, BytesMut};
 use secp256k1::{Message as CryptoMessage, Secp256k1, SecretKey};
 use sha2::{Digest, Sha512};
 use log::*;
+use itertools::Itertools;
 
 use super::{EmptyResult};
 use openssl::ssl::{SslStream, Ssl, SslContext, SslMethod};
@@ -23,8 +24,34 @@ use crate::protos::ripple::TMPing;
 use crate::scheduler::{PeerChannel, Scheduler};
 
 
-const NODE_PRIVATE_KEY: &str = "e55dc8f3741ac9668dbe858409e5d64f5ce88380f7228eccfe82b92b2c7848ba";
-const NODE_PUBLIC_KEY_BASE58: &str = "n9KAa2zVWjPHgfzsE3iZ8HAbzJtPrnoh4H2M2HgE7dfqtvyEb1KJ";
+const _NODE_PRIVATE_KEY: &str = "e55dc8f3741ac9668dbe858409e5d64f5ce88380f7228eccfe82b92b2c7848ba";
+const _NODE_PUBLIC_KEY_BASE58: &str = "n9KAa2zVWjPHgfzsE3iZ8HAbzJtPrnoh4H2M2HgE7dfqtvyEb1KJ";
+// Account and its keys to send transaction to
+const _ACCOUNT_ID: &str = "rE4DHSdcXafD7DkpJuFCAvc3CvsgXHjmEJ";
+const _MASTER_KEY: &str = "BUSY MARS SLED SNUG OBOE REID SUNK NEW GYM LAD LICE FEAT";
+const _MASTER_SEED: &str = "saNSJMEBKisBr6phJtGXUcV85RBZ3";
+const _MASTER_SEED_HEX: &str = "FDDE6A91607445E59C6F7CF07AF7B661";
+const _PUBLIC_KEY_HEX: &str = "03137FF01C82A1CF507CC243EBF629A99F2256FA43BCB7A458F638AF9A5488CD87";
+const _PUBLIC_KEY: &str = "aBQsqGF1HEduKrHrSVzNE5yeCTJTGgrsKgyjNLgabS2Rkq7CgZiq";
+
+// Genesis account with initial supply of XRP
+const GENESIS_SEED: &str = "snoPBrXtMeMyMHUVTgbuqAfg1SUTb";
+const GENESIS_ADDRESS: &str = "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh";
+
+const AMOUNT: u32 = 2u32.pow(31);
+
+// Peer identities
+const PRIVATE_KEYS: [&'static str; 5] = ["ssiNcpPcuBEwAyranF3wLt9UgefZv",
+                                       "ssen1bRpA3ig9PPD7NwPVkxLcvgBW",
+                                       "shXDCbJnfKbKze177MWPduTXQ5wsv",
+                                       "snwB8RcbpEwzgJFUeAoSPDaXbtHDx",
+                                       "saakCgDucD2q31GYHYdEbZLWJxVir"];
+
+const PUBLIC_KEYS: [&'static str; 5] = ["n9MY9K6YBuPJm7mYFtQYYYSetRTAnR1SnGaQ3uTdcppQYkdQ6SnD",
+                                      "n9MUM9gZ5HLCJY35ebgMCVpSbPm1ftAxdbyiq5ZzZR2rUWMvoc9H",
+                                      "n9Ljh4A9A6PzhEFi7YLFG5du1tVx7E5wA2c9roZNZ6uMnJgezR7q",
+                                      "n9MVitj842zxST7LLnNBiVhLEbQ7pgmvLZqDwMv5enpgAHxYyD3M",
+                                      "n9J8Mp1mrT8ovunq3hoZzan2uacr9iM3o7Wsx3BctbPiTwNmwi9s"];
 
 pub struct App {
     peers: u16,
@@ -37,83 +64,98 @@ impl App {
     }
 
     /// Start proxy
-    /// Starts a separate thread per node
-    /// Every thread has one receiver and cloned senders for every other node
-    /// Every received message from its node is relayed to all other nodes/threads
-    /// A separate thread is created which handles websocket client requests to ripple1
+    /// Starts a separate thread per p2p connection, which in turn starts one thread per peer,
+    /// which in turn start an extra thread for sending to that peer
+    /// Every p2p connection has two senders and receivers for relaying messages to and from the scheduler
+    /// Every message gets relayed by the scheduler
+    /// A separate thread is created for each node which handles websocket client requests
     pub async fn start(&self) -> EmptyResult {
         let mut threads = vec![];
         let (collector_tx, collector_rx) = mpsc::channel();
         let (_control_tx, control_rx) = mpsc::channel();
         let (subscription_tx, subscription_rx) = mpsc::channel();
+        // Start the collector which writes output to files
         let peer = self.peers.clone();
         let collector_thread = thread::spawn(move || {
             Collector::new(peer, collector_rx, subscription_rx, control_rx).start();
         });
         threads.push(collector_thread);
 
+        // Start p2p connections
         if !self.only_subscribe {
             let addrs = self.get_addrs(self.peers);
-            let mut peer_senders = vec![];
-            let mut peer_receivers = vec![];
-            let mut scheduler_peer_channels = vec![];
-            let mut scheduler_receivers = vec![];
-            for _ in addrs.iter() {
-                let (tx_peer, rx_scheduler) = mpsc::channel();
-                let (tx_scheduler, rx_peer) = mpsc::channel();
-                peer_senders.push(tx_peer);
-                peer_receivers.push(rx_peer);
-                scheduler_peer_channels.push(PeerChannel::new(tx_scheduler));
-                scheduler_receivers.push(rx_scheduler);
+            let mut peer_senders = HashMap::new();
+            let mut peer_receivers = HashMap::new();
+            let mut scheduler_peer_channels = HashMap::new();
+            let mut scheduler_receivers = HashMap::new();
+
+            for pair in (0..peer).into_iter().combinations(2).into_iter() {
+                let i = pair[0] as usize;
+                let j = pair[1] as usize;
+                let (tx_peer_i, rx_scheduler_i) = mpsc::channel();
+                let (tx_scheduler_i, rx_peer_i) = mpsc::channel();
+                let (tx_peer_j, rx_scheduler_j) = mpsc::channel();
+                let (tx_scheduler_j, rx_peer_j) = mpsc::channel();
+                peer_senders.entry(i).or_insert(HashMap::new()).insert(j, tx_peer_i);
+                peer_senders.entry(j).or_insert(HashMap::new()).insert(i, tx_peer_j);
+                peer_receivers.entry(i).or_insert(HashMap::new()).insert(j, rx_peer_i);
+                peer_receivers.entry(j).or_insert(HashMap::new()).insert(i, rx_peer_j);
+                scheduler_peer_channels.entry(i).or_insert(HashMap::new()).insert(j, PeerChannel::new(tx_scheduler_i));
+                scheduler_peer_channels.entry(j).or_insert(HashMap::new()).insert(i, PeerChannel::new(tx_scheduler_j));
+                scheduler_receivers.entry(i).or_insert(HashMap::new()).insert(j, rx_scheduler_i);
+                scheduler_receivers.entry(j).or_insert(HashMap::new()).insert(i, rx_scheduler_j);
             }
 
             let scheduler_thread = thread::Builder::new().name(String::from("Scheduler")).spawn(move || {
-                let scheduler_peers: HashMap<usize, PeerChannel> = scheduler_peer_channels.into_iter().enumerate().collect();
-                let scheduler = Scheduler::new(scheduler_peers);
+                let scheduler = Scheduler::new(scheduler_peer_channels);
                 scheduler.start(scheduler_receivers);
             }).unwrap();
             threads.push(scheduler_thread);
 
-            for (i, &address) in addrs.iter().enumerate() {
-                let peer_receiver = peer_receivers.remove(0);
-                let peer_sender = peer_senders.remove(0);
+            for pair in (0..peer).into_iter().combinations(2).into_iter() {
+                let i = pair[0] as usize;
+                let j = pair[1] as usize;
+                let peer_receiver_i = peer_receivers.get_mut(&i).unwrap().remove(&j).unwrap();
+                let peer_sender_i = peer_senders.get_mut(&i).unwrap().remove(&j).unwrap();
+                let peer_receiver_j = peer_receivers.get_mut(&j).unwrap().remove(&i).unwrap();
+                let peer_sender_j = peer_senders.get_mut(&j).unwrap().remove(&i).unwrap();
                 let collector_sender = collector_tx.clone();
 
-                let thread = thread::Builder::new().name(address.port().to_string()).spawn(move || {
-                    // let peer = Peer::new(addr, sender, cloned_receivers);
-                    let name = format!("ripple{}", (i+1));
-                    let peer = Peer::new(&name, address, peer_sender, collector_sender);
-                    match peer.connect(peer_receiver) {
+                let name = format!("ripple{}, ripple{}", i+1, j+1);
+                let address_i = addrs[i].clone();
+                let address_j = addrs[j].clone();
+                let thread = thread::Builder::new().name(String::from(name.clone())).spawn(move || {
+                    let peer = PeerConnection::new(
+                        &name,
+                        address_i,
+                        address_j,
+                        String::from(PRIVATE_KEYS[i]),
+                        String::from(PRIVATE_KEYS[j]),
+                        String::from(PUBLIC_KEYS[i]),
+                        String::from(PUBLIC_KEYS[j]),
+                        collector_sender
+                    );
+                    match peer.connect(
+                        peer_sender_i,
+                        peer_sender_j,
+                        peer_receiver_i,
+                        peer_receiver_j
+                    ) {
                         Ok(_) => {}
-                        Err(e) => { warn!("{:?}, {}", name, e); }
+                        Err(e) => { error!("{:?}, {}", name, e); }
                     }
                 }).unwrap();
                 threads.push(thread);
             }
         }
 
-        // Connect websocket client to ripple1
+        // Connect websocket client to ripples
         for i in 0..self.peers {
             let client = Client::new(i, format!("ws://127.0.0.1:600{}", 5+i).as_str(), subscription_tx.clone());
-            let sender_clone = client.sender_channel.clone();
+            // let sender_clone = client.sender_channel.clone();
         }
 
-        // Account and its keys to send transaction to
-        let account_id = "rE4DHSdcXafD7DkpJuFCAvc3CvsgXHjmEJ";
-        let _master_key = "BUSY MARS SLED SNUG OBOE REID SUNK NEW GYM LAD LICE FEAT";
-        let _master_seed = "saNSJMEBKisBr6phJtGXUcV85RBZ3";
-        let _master_seed_hex = "FDDE6A91607445E59C6F7CF07AF7B661";
-        let _public_key_hex = "03137FF01C82A1CF507CC243EBF629A99F2256FA43BCB7A458F638AF9A5488CD87";
-        let _public_key = "aBQsqGF1HEduKrHrSVzNE5yeCTJTGgrsKgyjNLgabS2Rkq7CgZiq";
-
-        // Genesis account with initial supply of XRP
-        let genesis_seed = "snoPBrXtMeMyMHUVTgbuqAfg1SUTb";
-        let genesis_address = "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh";
-
-        let amount = 2u32.pow(31);
-        let transaction = Client::create_payment_transaction(amount, account_id, genesis_address);
-
-        // let send_thread = thread::spawn(move || {
+        // threads.push(thread::spawn(move || {
         //     let mut counter = 0;
         //     // Send payment transaction every 10 seconds
         //     loop {
@@ -121,13 +163,12 @@ impl App {
         //         info!("{:?}", Client::sign_and_submit(
         //             &sender_clone,
         //             &*counter.to_string(),
-        //             &transaction,
+        //             &Client::create_payment_transaction(AMOUNT, ACCOUNT_ID, GENESIS_ADDRESS);,
         //             genesis_seed
         //         ));
         //         counter += 1;
         //     }
-        // });
-        // threads.push(send_thread);
+        // }));
 
         for thread in threads {
             thread.join().unwrap();
@@ -142,31 +183,37 @@ impl App {
     }
 }
 
-pub struct Peer {
+pub struct PeerConnection {
     name: String,
-    address: SocketAddr,
-    sender: Sender<Vec<u8>>,
-    // receiver: Receiver<Vec<u8>>,
-    collector_sender: Sender<Box<RippleMessage>>
+    address1: SocketAddr,
+    address2: SocketAddr,
+    private_key1: String,
+    private_key2: String,
+    public_key1: String,
+    public_key2: String,
+    // collector_sender: Sender<Box<RippleMessage>>
 }
 
-impl Peer {
+impl PeerConnection {
     pub fn new(
         name: &str,
-        address: SocketAddr,
-        sender: Sender<Vec<u8>>,
-        // receiver: Receiver<Vec<u8>>,
+        address1: SocketAddr,
+        address2: SocketAddr,
+        private_key1: String,
+        private_key2: String,
+        public_key1: String,
+        public_key2: String,
         collector_sender: Sender<Box<RippleMessage>>
     ) -> Self {
-        Peer { name: String::from(name), address, sender, collector_sender}
+        PeerConnection { name: String::from(name), address1, address2, private_key1,
+            private_key2, public_key1, public_key2}
     }
 
-    /// Start p2p connection to validator node
-    pub fn connect(&self, receiver: Receiver<Vec<u8>>) -> EmptyResult {
-        info!("Thread {:?} has started", self.name);
-        let stream = match TcpStream::connect(self.address) {
+    /// Create SSLStream to the validator at address using the identity of the key pair
+    fn connect_to_peer(address: SocketAddr, private_key: &str, public_key: &str) -> SslStream<TcpStream> {
+        let stream = match TcpStream::connect(address) {
             Ok(tcp_stream) => tcp_stream,
-            Err(e) => return Result::Err(Box::new(e))
+            Err(e) => panic!("{}", e)
         };
         stream.set_nodelay(true).expect("Set nodelay failed");
         let ctx = SslContext::builder(SslMethod::tls()).unwrap().build();
@@ -198,10 +245,12 @@ impl Peer {
             .zip(cookie2.iter())
             .map(|(a, b)| a ^ b)
             .collect::<Vec<u8>>();
-        let msg = CryptoMessage::from_slice(&Sha512::digest(&mix[..])[0..32])?;
+        let msg = CryptoMessage::from_slice(&Sha512::digest(&mix[..])[0..32]).unwrap();
 
+
+        let key = &Sha512::digest(private_key.as_bytes())[0..32];
         let secp = Secp256k1::new();
-        let sk = SecretKey::from_slice(&hex::decode(NODE_PRIVATE_KEY)?)?;
+        let sk = SecretKey::from_slice(key).unwrap();
         let sig = secp.sign(&msg, &sk).serialize_der();
         let b64sig = base64::encode(&sig);
 
@@ -214,7 +263,7 @@ impl Peer {
             Public-Key: {}\r\n\
             Session-Signature: {}\r\n\
             \r\n",
-            NODE_PUBLIC_KEY_BASE58, b64sig
+            public_key, b64sig
         );
         ssl_stream.write_all(content.as_bytes()).unwrap();
 
@@ -259,7 +308,6 @@ impl Peer {
                     loop {
                         if ssl_stream.ssl_read(&mut buf).unwrap() == 0 {
                             debug!("Body: {}", String::from_utf8_lossy(buf.bytes()).trim());
-                            return Ok(());
                         }
                     }
                 }
@@ -275,15 +323,31 @@ impl Peer {
                 break;
             }
         }
+        ssl_stream
+    }
 
-        self.receive_peer_msg(ssl_stream, receiver)
+    /// Start p2p connection between validator nodes
+    pub fn connect(&self, sender1: Sender<Vec<u8>>, sender2: Sender<Vec<u8>>, receiver1: Receiver<Vec<u8>>, receiver2: Receiver<Vec<u8>>) -> EmptyResult {
+        info!("Thread {:?} has started", self.name);
+        // Connect to the two validators using each other's identity
+        let mut ssl_stream1 = Self::connect_to_peer(self.address1, self.private_key2.as_str(), self.public_key2.as_str());
+        let mut ssl_stream2 = Self::connect_to_peer(self.address2, self.private_key1.as_str(), self.public_key1.as_str());
+
+        let name = self.name.clone();
+        let thread1 = thread::spawn(move || Self::handle_peer_communication(ssl_stream1, sender1.clone(), receiver1, name));
+        let name = self.name.clone();
+        let thread2 = thread::spawn(move || Self::handle_peer_communication(ssl_stream2, sender2.clone(), receiver2, name));
+        thread1.join().unwrap();
+        thread2.join().unwrap();
+        Ok(())
     }
 
     /// Receive and send p2p messages to the node
-    fn receive_peer_msg(&self, ssl_stream: SslStream<TcpStream>, receiver: Receiver<Vec<u8>>) -> EmptyResult {
+    fn handle_peer_communication(ssl_stream: SslStream<TcpStream>, sender: Sender<Vec<u8>>, receiver: Receiver<Vec<u8>>, name: String) -> EmptyResult {
         let ssl = Arc::new(Mutex::new(ssl_stream));
         let ssl_clone = ssl.clone();
-        // First relay all messages received from the scheduler
+        // Split receiving and sending part of the ssl stream
+        // This thread receives messages from the scheduler to send to this peer
         let receiver_thread = thread::spawn(move || {
             loop {
                 match receiver.try_recv() {
@@ -336,16 +400,15 @@ impl Peer {
             let payload = &bytes[6..(6+payload_size)];
 
             let proto_obj: Box<dyn Message> = invoke_protocol_message(message_type, payload, &mut *ssl.lock().unwrap());
-            debug!("from {:?}, proto_type: {:?}, object: {:?}", self.name, proto_obj.descriptor().name(), proto_obj);
-
+            debug!("from {:?}, proto_type: {:?}, object: {:?}", name, proto_obj.descriptor().name(), proto_obj);
             // Send received message to scheduler
-            self.sender.send(bytes[0..(6+payload_size)].to_vec()).unwrap();
+            sender.send(bytes[0..(6+payload_size)].to_vec()).unwrap();
 
             // Sender received message to collector
-            match self.collector_sender.send(RippleMessage::new(String::from(&self.name), Instant::now(), proto_obj)) {
-                Ok(_) => { }//println!("Sent to collector") }
-                Err(_) => { }//println!("Error sending to collector") }
-            }
+            // match self.collector_sender.send(RippleMessage::new(String::from(&self.name), Instant::now(), proto_obj)) {
+            //     Ok(_) => { }//println!("Sent to collector") }
+            //     Err(_) => { }//println!("Error sending to collector") }
+            // }
 
             buf.advance(payload_size + 6);
         }

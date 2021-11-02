@@ -57,3 +57,19 @@ I tried running a stock rippled node as the proxy. This works as intended. Probl
 
 26-10-2021
 I'm unable to detect a bug in the code. I will add log messages to the rippled stock proxy, to determine what messages are relayed when.
+
+02-11-2021
+I have decided to create a new design. Trying to fix the validation errors requires implementing a large part of the peer protocol in the testing application.
+This is a bad idea for the following reasons. Firstly, having the proxy be the single connected peer of the validators is, one, a poor representation of the real-world
+scenario in which the ripple network operates. The validators in the actual ripple network are highly connected. And two, inflexible as it allows for only one network topology.
+Secondly, implementing parts of the protocol increases the complexity of the testing application and obfuscates the source of bugs (being either in the rippled code, or testing code).
+Finally, implementing the peer protocol is beyond the scope of the project and will likely take longer than creating the new design.
+
+The new design no longer has the testing application act as a peer. Instead the validators believe they are connecting to other validators, while in fact their messages
+pass through the testing application. This is done by, for each connection between two validators i and j, creating two SSL sessions between validator i and the tester
+and between validator j and the tester. These sessions are created by letting the tester connect to validator i using j's private key and vice versa. Every P2P connection
+will still send all its messages to the scheduler. The scheduler can then determine when to send a particular message to its intended end point. 
+The rippled code is altered to skip the check for authenticity of the endpoints.
+
+This design works and keeps validating
+

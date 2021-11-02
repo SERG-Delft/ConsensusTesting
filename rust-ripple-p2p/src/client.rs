@@ -66,10 +66,8 @@ impl Client<'static> {
                 match message {
                     // Say what we received
                     OwnedMessage::Text(text) => {
-                        println!("Receive loop got: {:?}", text);
                         match serde_json::from_str::<SubscriptionObject>(text.as_str()) {
                             Ok(subscription_object) => {
-                                println!("Parsed into subscription object");
                                 subscription_collector_sender.send(PeerSubscriptionObject::new(peer, subscription_object)).unwrap()
                             },
                             Err(_) => { println!("Could not parse") }
