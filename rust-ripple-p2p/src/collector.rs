@@ -7,6 +7,8 @@ use std::time::Instant;
 use protobuf::Message;
 use serde_json::json;
 use crate::client::{ConsensusChange, PeerStatusEvent, PeerSubscriptionObject, ReceivedValidation, SubscriptionObject, ValidatedLedger};
+use crate::message_handler::RippleMessageObject;
+use chrono::{DateTime, Utc};
 
 /// Collects and writes data to files
 /// Execution file stores all messages sent from the proxy
@@ -18,7 +20,6 @@ pub struct Collector {
     control_receiver: Receiver<String>,
     execution_file: BufWriter<File>,
     subscription_files: Vec<BufWriter<File>>,
-    start: Instant
 }
 
 impl Collector {
@@ -36,8 +37,7 @@ impl Collector {
             subscription_receiver,
             control_receiver,
             execution_file: BufWriter::new(execution_file),
-            subscription_files,
-            start: Instant::now()
+            subscription_files
         }
     }
 
@@ -74,7 +74,6 @@ impl Collector {
     }
 
     fn write_to_file(&mut self, ripple_message: &mut RippleMessage) {
-        ripple_message.set_start(self.start);
         self.execution_file.write_all(ripple_message.to_string().as_bytes()).unwrap();
     }
 
@@ -85,30 +84,24 @@ impl Collector {
 
 pub struct RippleMessage {
     from_node: String,
-    timestamp: Instant,
-    message: Box<dyn Message>,
-    start: Option<Instant>
+    to_node: String,
+    timestamp: DateTime<Utc>,
+    message: RippleMessageObject
 }
 
 impl RippleMessage {
-    pub fn new(from_node: String, timestamp: Instant, message: Box<dyn Message>) -> Box<Self> {
-        Box::from(RippleMessage { from_node, timestamp, message, start: None })
-    }
-
-    fn set_start(&mut self, start: Instant) {
-        self.start = Option::from(start);
+    pub fn new(from_node: String, to_node: String, timestamp: DateTime<Utc>, message: RippleMessageObject) -> Box<Self> {
+        Box::from(RippleMessage { from_node, to_node, timestamp, message })
     }
 }
 
 impl Display for RippleMessage {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let ripple_epoch = DateTime::parse_from_rfc3339("2000-01-01T00:00:00+00:00").unwrap();
         let from_node_buf = &self.from_node;
-        let time_since = if self.start.is_some() {
-            self.timestamp.duration_since(self.start.unwrap()).as_millis()
-        } else {
-            0
-        };
-        let message_buf = self.message.descriptor().name();
-        write!(f, "{} {} sent {}\n", time_since, from_node_buf, message_buf)
+        let to_node_buf = &self.to_node;
+        let time_since = self.timestamp.signed_duration_since(ripple_epoch).num_seconds();
+        let message_buf = self.message.to_string();
+        write!(f, "{} {} -> {} sent {}\n", time_since, from_node_buf, to_node_buf, message_buf)
     }
 }

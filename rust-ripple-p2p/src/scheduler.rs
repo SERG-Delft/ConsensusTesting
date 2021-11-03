@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use std::sync::mpsc::{Receiver, Sender};
+use std::sync::mpsc::{Receiver, Sender, TryRecvError};
 use std::thread;
 use log::*;
 use crate::protos::ripple::TMStatusChange;
@@ -18,16 +18,28 @@ impl Scheduler {
         Scheduler { p2p_connections, events: Arc::new(Mutex::new(vec![])) }
     }
 
-    pub fn start(mut self, mut receivers: HashMap<usize, HashMap<usize, Receiver<Vec<u8>>>>) {
-        for (i, mut connections) in receivers.drain() {
-            for (j, receiver) in connections.drain() {
-                let events_clone = Arc::clone(&self.events);
-                PeerChannel::receive_messages(receiver, i.clone(), j.clone(), events_clone);
+    pub fn start(mut self, receiver: Receiver<Event>) {
+        // for (i, mut connections) in receivers.drain() {
+        //     for (j, receiver) in connections.drain() {
+        //         let events_clone = Arc::clone(&self.events);
+        //         PeerChannel::receive_messages(receiver, i.clone(), j.clone(), events_clone);
+        //     }
+        // }
+        // let events_clone = Arc::clone(&self.events);
+        // thread::spawn(move || {
+        loop {
+            match receiver.try_recv() {
+                Ok(event) => self.execute_event(event), //events_clone.lock().unwrap().push(event),
+                Err(_) => {}
             }
         }
+        // });
         loop {
             let mut events = self.events.lock().unwrap();
             while !events.is_empty() {
+                if events.len() > 6 {
+                    println!("{}", events.len());
+                }
                 let event = events.remove(0);
                 self.execute_event(event);
             }
@@ -37,7 +49,7 @@ impl Scheduler {
     fn execute_event(&self, event: Event) {
         match self.p2p_connections.get(&event.to).unwrap().get(&event.from).unwrap().sender.send(event.message) {
             Ok(_) => { }//debug!("Sent message from {} to {}", event.from+1, event.to+1) }
-            Err(_err) => { }//println!("Failed to send message from {} to {}, because {}", event.from, event.to, err)}
+            Err(_err) => {println!("Failed to send message from {} to {}, because {}", event.from, event.to, _err)}
         }
     }
 
@@ -69,8 +81,8 @@ impl PeerChannel {
     }
 }
 
-struct Event {
-    from: usize,
-    to: usize,
-    message: Vec<u8>
+pub struct Event {
+    pub from: usize,
+    pub to: usize,
+    pub message: Vec<u8>
 }

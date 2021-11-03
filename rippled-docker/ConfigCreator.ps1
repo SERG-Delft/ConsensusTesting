@@ -35,7 +35,10 @@ For ($i=0; $i -lt $n; $i++) {
   $own_cluster_pub_key = $cluster_keys[$i]
   if ($connected -eq "1") {
     $ips_fixed = (-join(($rippled_cfg_base[48..(48+$i)] -ne $own_ip | Out-String), ($rippled_cfg_base[(48+$i)..(48+$n-1)] -ne $own_ip | Out-String)))
-    $cluster = ""
+    # $cluster = ""
+    $cluster_keys_filtered = (-join(($cluster_keys[0..$i] -ne $own_cluster_pub_key | Out-String),
+        ($cluster_keys[$i..($n-1)] -ne $own_cluster_pub_key | Out-String)))
+    $cluster = (-join(($rippled_cfg_base[54 ..55] | out-string), $cluster_seeds[$i], ($rippled_cfg_base[56..58] | Out-String), ($cluster_keys_filtered | Out-String)))
   } else {
     $ips_fixed = $rippled_cfg_base[53]
     $cluster_keys_filtered = (-join(($cluster_keys[0..$i] -ne $own_cluster_pub_key | Out-String),
