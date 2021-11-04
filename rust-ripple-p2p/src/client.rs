@@ -70,7 +70,7 @@ impl Client<'static> {
                             Ok(subscription_object) => {
                                 subscription_collector_sender.send(PeerSubscriptionObject::new(peer, subscription_object)).unwrap()
                             },
-                            Err(_) => { println!("Could not parse") }
+                            Err(_) => { warn!("Could not parse") }
                         }
                     },
                     _ => debug!("Receive Loop: {:?}", message)
@@ -95,6 +95,7 @@ impl Client<'static> {
         self.receive_loop.join().unwrap();
     }
 
+    #[allow(unused)]
     pub fn create_payment_transaction(amount: u32,
                                       destination_id: &str,
                                       sender_address: &str) -> Transaction {
@@ -148,6 +149,7 @@ impl Client<'static> {
         tx.send(Message::text(json.to_string())).unwrap();
     }
 
+    #[allow(unused)]
     pub fn sign_and_submit(tx: &Sender<Message>, id: &str, transaction: &Transaction, secret: &str) {
         let json = json!({
             "id": id,
@@ -248,6 +250,7 @@ pub struct ValidatedLedger {
     pub validated_ledgers: Option<String>
 }
 
+#[allow(unused)]
 #[derive(Serialize, Deserialize)]
 pub struct ReceivedValidation {
     #[serde(skip_serializing_if = "Option::is_none")]

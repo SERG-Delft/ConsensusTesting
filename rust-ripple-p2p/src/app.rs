@@ -13,14 +13,11 @@ use itertools::Itertools;
 
 use super::{EmptyResult};
 use tokio_openssl::{SslStream};
-use tokio::sync::mpsc::{Sender, channel};
-use crate::message_handler::{invoke_protocol_message, RippleMessageObject};
-use chrono::Utc;
 use openssl::ssl::{Ssl, SslContext, SslMethod};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::macros::support::Pin;
 use crate::client::{Client};
-use crate::collector::{Collector, RippleMessage};
+use crate::collector::{Collector};
 use crate::scheduler::{PeerChannel, Scheduler, Event};
 
 
@@ -148,24 +145,23 @@ impl App {
         for i in 0..self.peers {
             let _client = Client::new(i, format!("ws://127.0.0.1:600{}", 5+i).as_str(), subscription_tx.clone());
             // let sender_clone = client.sender_channel.clone();
+            // threads.push(thread::spawn(move || {
+            //     let mut counter = 0;
+            //     // Send payment transaction every 10 seconds
+            //     loop {
+            //         sleep(Duration::from_secs(10));
+            //         Client::sign_and_submit(
+            //             &sender_clone,
+            //             format!("Ripple{}: {}", i, &*counter.to_string()).as_str(),
+            //             &Client::create_payment_transaction(_AMOUNT, _ACCOUNT_ID, _GENESIS_ADDRESS),
+            //             _GENESIS_SEED
+            //         );
+            //         counter += 1;
+            //     }
+            // }));
         }
 
-        // threads.push(thread::spawn(move || {
-        //     let mut counter = 0;
-        //     // Send payment transaction every 10 seconds
-        //     loop {
-        //         sleep(Duration::from_secs(10));
-        //         info!("{:?}", Client::sign_and_submit(
-        //             &sender_clone,
-        //             &*counter.to_string(),
-        //             &Client::create_payment_transaction(AMOUNT, ACCOUNT_ID, GENESIS_ADDRESS);,
-        //             genesis_seed
-        //         ));
-        //         counter += 1;
-        //     }
-        // }));
-        for (i, tokio_task) in tokio_tasks.into_iter().enumerate() {
-            println!("{}", i);
+        for tokio_task in tokio_tasks {
             tokio_task.await.expect("task failed");
         }
         for thread in threads {
@@ -215,7 +211,7 @@ impl PeerConnection {
         let ctx = SslContext::builder(SslMethod::tls()).unwrap().build();
         let ssl = Ssl::new(&ctx).unwrap();
         let mut ssl_stream = SslStream::<TcpStream>::new(ssl, stream).unwrap();
-        SslStream::connect(Pin::new(&mut ssl_stream)).await;
+        SslStream::connect(Pin::new(&mut ssl_stream)).await.expect("Ssl connection failed");
         let ss = ssl_stream.ssl();
 
         let mut buf = Vec::<u8>::with_capacity(4096);
@@ -378,7 +374,6 @@ impl PeerConnection {
             }
         });
         loop {
-            println!("{}, {} now working", from, to);
             // Maximum ripple peer message is 64 MB
             let mut buf = BytesMut::with_capacity(64 * 1024);
             buf.resize(64 * 1024, 0);
@@ -415,7 +410,10 @@ impl PeerConnection {
             // Send received message to scheduler
             let message = bytes[0..(6+payload_size)].to_vec();
             let event = Event { from, to, message};
-            sender.send(event).await;
+            match sender.send(event).await {
+                Ok(_) => {}
+                Err(_) => error!("Sending message to scheduler from connection {}, {}, failed", from, to)
+            }
 
             buf.advance(payload_size + 6);
         }

@@ -2,11 +2,9 @@ use std::fmt::{Display, Formatter};
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::Path;
-use std::sync::mpsc::{Receiver, TryRecvError};
-use std::time::Instant;
-use protobuf::Message;
+use std::sync::mpsc::{Receiver};
 use serde_json::json;
-use crate::client::{ConsensusChange, PeerStatusEvent, PeerSubscriptionObject, ReceivedValidation, SubscriptionObject, ValidatedLedger};
+use crate::client::{PeerSubscriptionObject, SubscriptionObject};
 use crate::message_handler::RippleMessageObject;
 use chrono::{DateTime, Utc};
 
@@ -14,7 +12,6 @@ use chrono::{DateTime, Utc};
 /// Execution file stores all messages sent from the proxy
 /// Subscription file stores all subscription messages received from the client
 pub struct Collector {
-    number_of_nodes: u16,
     ripple_message_receiver: Receiver<Box<RippleMessage>>,
     subscription_receiver: Receiver<PeerSubscriptionObject>,
     control_receiver: Receiver<String>,
@@ -32,7 +29,6 @@ impl Collector {
             subscription_files.push(subscription_file);
         }
         Collector {
-            number_of_nodes,
             ripple_message_receiver,
             subscription_receiver,
             control_receiver,
@@ -58,7 +54,7 @@ impl Collector {
                 _ => {}
             }
             match self.subscription_receiver.try_recv() {
-                Ok(mut subscription_object) => match subscription_object.subscription_object {
+                Ok(subscription_object) => match subscription_object.subscription_object {
                     SubscriptionObject::ValidatedLedger(ledger) => {
                         println!("Ledger {} is validated", ledger.ledger_index);
                         self.write_to_subscription_file(subscription_object.peer, json!({"LedgerValidated": ledger}).to_string());
