@@ -1,70 +1,61 @@
 use std::collections::HashMap;
-use std::sync::mpsc::{Receiver, Sender};
+use std::thread;
+use chrono::Utc;
+use tokio::sync::mpsc::{Sender, Receiver};
+use byteorder::{BigEndian, ByteOrder};
+use crate::collector::RippleMessage;
+use crate::message_handler::{invoke_protocol_message, RippleMessageObject};
 
 pub struct Scheduler {
-    peers: HashMap<usize, PeerChannel>,
-    events: Vec<Event>
+    p2p_connections: HashMap<usize, HashMap<usize, PeerChannel>>,
+    collector_sender: std::sync::mpsc::Sender<Box<RippleMessage>>
 }
 
 impl Scheduler {
-    pub fn new(peers: HashMap<usize, PeerChannel>) -> Self {
-        Scheduler { peers, events: vec![] }
+    pub fn new(p2p_connections: HashMap<usize, HashMap<usize, PeerChannel>>, collector_sender: std::sync::mpsc::Sender<Box<RippleMessage>>) -> Self {
+        Scheduler { p2p_connections, collector_sender }
     }
 
-    pub fn start(mut self) {
+    pub fn start(self, mut receiver: Receiver<Event>) {
         loop {
-            let mut events = vec![];
-            for (i, peer) in &self.peers {
-                loop {
-                    match peer.receiver.try_recv() {
-                        Ok(message) => {
-                            events.extend(Scheduler::create_events(self.peers.len(), i.clone(), message));
-                        },
-                        Err(_) => { break; }
-                    }
-                }
+            match receiver.try_recv() {
+                Ok(event) => self.execute_event(event),
+                Err(_) => {}
             }
-            self.events.extend(events);
-            while !self.events.is_empty() {
-                let event = self.events.remove(0);
-                self.execute_event(event);
-            }
+            thread::yield_now();
         }
     }
 
     fn execute_event(&self, event: Event) {
-        match self.peers.get(&event.to).unwrap().sender.send(event.message) {
-            Ok(_) => { }//println!("Sent message from {} to {}", event.from, event.to)}
-            Err(err) => { }//println!("Failed to send message from {} to {}, because {}", event.from, event.to, err)}
+        let proto_obj: RippleMessageObject = invoke_protocol_message(BigEndian::read_u16(&event.message[4..6]), &event.message[6..]);
+        match self.collector_sender.send(RippleMessage::new(format!("Ripple{}", event.from+1), format!("Ripple{}", event.to+1), Utc::now(), proto_obj)) {
+            Ok(_) => { }//println!("Sent to collector") }
+            Err(_) => { }//println!("Error sending to collector") }
+        }
+        match self.p2p_connections.get(&event.to).unwrap().get(&event.from).unwrap().sender.blocking_send(event.message) {
+            Ok(_) => { }//debug!("Sent message from {} to {}", event.from+1, event.to+1) }
+            Err(_err) => {println!("Failed to send message from {} to {}, because {}", event.from, event.to, _err)}
         }
     }
 
-    fn create_events(n: usize, peer_sender: usize, message: Vec<u8>) -> Vec<Event> {
-        let mut events = vec![];
-        for i in 0..n {
-            // Broadcast message to all other peers for now
-            if peer_sender != i {
-                let event = Event { from: peer_sender, to: i, message: message.clone() };
-                events.push(event);
-            }
-        }
-        return events;
+    #[allow(unused)]
+    fn create_event(from: usize, to: usize, message: Vec<u8>) -> Event {
+        Event { from, to, message }
     }
 }
 
 pub struct PeerChannel {
     sender: Sender<Vec<u8>>,
-    receiver: Receiver<Vec<u8>>
 }
 
 impl PeerChannel {
-    pub fn new(sender: Sender<Vec<u8>>, receiver: Receiver<Vec<u8>>) -> Self {
-        PeerChannel { sender, receiver }
+    pub fn new(sender: Sender<Vec<u8>>) -> Self {
+        PeerChannel { sender }
     }
 }
 
-struct Event {
-    from: usize,
-    to: usize,
-    message: Vec<u8>
+pub struct Event {
+    pub from: usize,
+    pub to: usize,
+    pub message: Vec<u8>
 }

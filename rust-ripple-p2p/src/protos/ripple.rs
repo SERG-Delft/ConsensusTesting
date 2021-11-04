@@ -24,11 +24,14 @@
 // const _PROTOBUF_VERSION_CHECK: () = ::protobuf::VERSION_2_25_1;
 
 #[derive(PartialEq,Clone,Default)]
+#[cfg_attr(feature = "with-serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct TMManifest {
     // message fields
     stobject: ::protobuf::SingularField<::std::vec::Vec<u8>>,
     // special fields
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub unknown_fields: ::protobuf::UnknownFields,
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub cached_size: ::protobuf::CachedSize,
 }
 
@@ -196,12 +199,15 @@ impl ::protobuf::reflect::ProtobufValue for TMManifest {
 }
 
 #[derive(PartialEq,Clone,Default)]
+#[cfg_attr(feature = "with-serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct TMManifests {
     // message fields
     pub list: ::protobuf::RepeatedField<TMManifest>,
     history: ::std::option::Option<bool>,
     // special fields
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub unknown_fields: ::protobuf::UnknownFields,
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub cached_size: ::protobuf::CachedSize,
 }
 
@@ -401,6 +407,7 @@ impl ::protobuf::reflect::ProtobufValue for TMManifests {
 }
 
 #[derive(PartialEq,Clone,Default)]
+#[cfg_attr(feature = "with-serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct TMClusterNode {
     // message fields
     publicKey: ::protobuf::SingularField<::std::string::String>,
@@ -409,7 +416,9 @@ pub struct TMClusterNode {
     nodeName: ::protobuf::SingularField<::std::string::String>,
     address: ::protobuf::SingularField<::std::string::String>,
     // special fields
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub unknown_fields: ::protobuf::UnknownFields,
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub cached_size: ::protobuf::CachedSize,
 }
 
@@ -761,13 +770,16 @@ impl ::protobuf::reflect::ProtobufValue for TMClusterNode {
 }
 
 #[derive(PartialEq,Clone,Default)]
+#[cfg_attr(feature = "with-serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct TMLoadSource {
     // message fields
     name: ::protobuf::SingularField<::std::string::String>,
     cost: ::std::option::Option<u32>,
     count: ::std::option::Option<u32>,
     // special fields
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub unknown_fields: ::protobuf::UnknownFields,
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub cached_size: ::protobuf::CachedSize,
 }
 
@@ -1014,12 +1026,15 @@ impl ::protobuf::reflect::ProtobufValue for TMLoadSource {
 }
 
 #[derive(PartialEq,Clone,Default)]
+#[cfg_attr(feature = "with-serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct TMCluster {
     // message fields
     pub clusterNodes: ::protobuf::RepeatedField<TMClusterNode>,
     pub loadSources: ::protobuf::RepeatedField<TMLoadSource>,
     // special fields
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub unknown_fields: ::protobuf::UnknownFields,
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub cached_size: ::protobuf::CachedSize,
 }
 
@@ -1229,13 +1244,16 @@ impl ::protobuf::reflect::ProtobufValue for TMCluster {
 }
 
 #[derive(PartialEq,Clone,Default)]
+#[cfg_attr(feature = "with-serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct TMGetShardInfo {
     // message fields
     hops: ::std::option::Option<u32>,
     lastLink: ::std::option::Option<bool>,
     pub peerchain: ::std::vec::Vec<u32>,
     // special fields
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub unknown_fields: ::protobuf::UnknownFields,
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub cached_size: ::protobuf::CachedSize,
 }
 
@@ -1468,6 +1486,7 @@ impl ::protobuf::reflect::ProtobufValue for TMGetShardInfo {
 }
 
 #[derive(PartialEq,Clone,Default)]
+#[cfg_attr(feature = "with-serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct TMShardInfo {
     // message fields
     shardIndexes: ::protobuf::SingularField<::std::string::String>,
@@ -1476,7 +1495,9 @@ pub struct TMShardInfo {
     lastLink: ::std::option::Option<bool>,
     pub peerchain: ::std::vec::Vec<u32>,
     // special fields
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub unknown_fields: ::protobuf::UnknownFields,
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub cached_size: ::protobuf::CachedSize,
 }
 
@@ -1824,11 +1845,14 @@ impl ::protobuf::reflect::ProtobufValue for TMShardInfo {
 }
 
 #[derive(PartialEq,Clone,Default)]
+#[cfg_attr(feature = "with-serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct TMLink {
     // message fields
     nodePubKey: ::protobuf::SingularField<::std::vec::Vec<u8>>,
     // special fields
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub unknown_fields: ::protobuf::UnknownFields,
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub cached_size: ::protobuf::CachedSize,
 }
 
@@ -1996,13 +2020,16 @@ impl ::protobuf::reflect::ProtobufValue for TMLink {
 }
 
 #[derive(PartialEq,Clone,Default)]
+#[cfg_attr(feature = "with-serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct TMGetPeerShardInfo {
     // message fields
     hops: ::std::option::Option<u32>,
     lastLink: ::std::option::Option<bool>,
     pub peerChain: ::protobuf::RepeatedField<TMLink>,
     // special fields
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub unknown_fields: ::protobuf::UnknownFields,
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub cached_size: ::protobuf::CachedSize,
 }
 
@@ -2243,6 +2270,7 @@ impl ::protobuf::reflect::ProtobufValue for TMGetPeerShardInfo {
 }
 
 #[derive(PartialEq,Clone,Default)]
+#[cfg_attr(feature = "with-serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct TMPeerShardInfo {
     // message fields
     shardIndexes: ::protobuf::SingularField<::std::string::String>,
@@ -2251,7 +2279,9 @@ pub struct TMPeerShardInfo {
     lastLink: ::std::option::Option<bool>,
     pub peerChain: ::protobuf::RepeatedField<TMLink>,
     // special fields
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub unknown_fields: ::protobuf::UnknownFields,
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub cached_size: ::protobuf::CachedSize,
 }
 
@@ -2607,6 +2637,7 @@ impl ::protobuf::reflect::ProtobufValue for TMPeerShardInfo {
 }
 
 #[derive(PartialEq,Clone,Default)]
+#[cfg_attr(feature = "with-serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct TMTransaction {
     // message fields
     rawTransaction: ::protobuf::SingularField<::std::vec::Vec<u8>>,
@@ -2614,7 +2645,9 @@ pub struct TMTransaction {
     receiveTimestamp: ::std::option::Option<u64>,
     deferred: ::std::option::Option<bool>,
     // special fields
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub unknown_fields: ::protobuf::UnknownFields,
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub cached_size: ::protobuf::CachedSize,
 }
 
@@ -2895,6 +2928,7 @@ impl ::protobuf::reflect::ProtobufValue for TMTransaction {
 }
 
 #[derive(PartialEq,Clone,Default)]
+#[cfg_attr(feature = "with-serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct TMStatusChange {
     // message fields
     newStatus: ::std::option::Option<NodeStatus>,
@@ -2906,7 +2940,9 @@ pub struct TMStatusChange {
     firstSeq: ::std::option::Option<u32>,
     lastSeq: ::std::option::Option<u32>,
     // special fields
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub unknown_fields: ::protobuf::UnknownFields,
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub cached_size: ::protobuf::CachedSize,
 }
 
@@ -3342,6 +3378,7 @@ impl ::protobuf::reflect::ProtobufValue for TMStatusChange {
 }
 
 #[derive(PartialEq,Clone,Default)]
+#[cfg_attr(feature = "with-serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct TMProposeSet {
     // message fields
     proposeSeq: ::std::option::Option<u32>,
@@ -3355,7 +3392,9 @@ pub struct TMProposeSet {
     checkedSignature: ::std::option::Option<bool>,
     hops: ::std::option::Option<u32>,
     // special fields
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub unknown_fields: ::protobuf::UnknownFields,
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub cached_size: ::protobuf::CachedSize,
 }
 
@@ -3923,12 +3962,15 @@ impl ::protobuf::reflect::ProtobufValue for TMProposeSet {
 }
 
 #[derive(PartialEq,Clone,Default)]
+#[cfg_attr(feature = "with-serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct TMHaveTransactionSet {
     // message fields
     status: ::std::option::Option<TxSetStatus>,
     hash: ::protobuf::SingularField<::std::vec::Vec<u8>>,
     // special fields
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub unknown_fields: ::protobuf::UnknownFields,
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub cached_size: ::protobuf::CachedSize,
 }
 
@@ -4133,6 +4175,7 @@ impl ::protobuf::reflect::ProtobufValue for TMHaveTransactionSet {
 }
 
 #[derive(PartialEq,Clone,Default)]
+#[cfg_attr(feature = "with-serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct TMValidatorList {
     // message fields
     manifest: ::protobuf::SingularField<::std::vec::Vec<u8>>,
@@ -4140,7 +4183,9 @@ pub struct TMValidatorList {
     signature: ::protobuf::SingularField<::std::vec::Vec<u8>>,
     version: ::std::option::Option<u32>,
     // special fields
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub unknown_fields: ::protobuf::UnknownFields,
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub cached_size: ::protobuf::CachedSize,
 }
 
@@ -4457,13 +4502,16 @@ impl ::protobuf::reflect::ProtobufValue for TMValidatorList {
 }
 
 #[derive(PartialEq,Clone,Default)]
+#[cfg_attr(feature = "with-serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct ValidatorBlobInfo {
     // message fields
     manifest: ::protobuf::SingularField<::std::vec::Vec<u8>>,
     blob: ::protobuf::SingularField<::std::vec::Vec<u8>>,
     signature: ::protobuf::SingularField<::std::vec::Vec<u8>>,
     // special fields
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub unknown_fields: ::protobuf::UnknownFields,
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub cached_size: ::protobuf::CachedSize,
 }
 
@@ -4736,13 +4784,16 @@ impl ::protobuf::reflect::ProtobufValue for ValidatorBlobInfo {
 }
 
 #[derive(PartialEq,Clone,Default)]
+#[cfg_attr(feature = "with-serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct TMValidatorListCollection {
     // message fields
     version: ::std::option::Option<u32>,
     manifest: ::protobuf::SingularField<::std::vec::Vec<u8>>,
     pub blobs: ::protobuf::RepeatedField<ValidatorBlobInfo>,
     // special fields
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub unknown_fields: ::protobuf::UnknownFields,
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub cached_size: ::protobuf::CachedSize,
 }
 
@@ -4999,13 +5050,16 @@ impl ::protobuf::reflect::ProtobufValue for TMValidatorListCollection {
 }
 
 #[derive(PartialEq,Clone,Default)]
+#[cfg_attr(feature = "with-serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct TMValidation {
     // message fields
     validation: ::protobuf::SingularField<::std::vec::Vec<u8>>,
     checkedSignature: ::std::option::Option<bool>,
     hops: ::std::option::Option<u32>,
     // special fields
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub unknown_fields: ::protobuf::UnknownFields,
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub cached_size: ::protobuf::CachedSize,
 }
 
@@ -5249,12 +5303,15 @@ impl ::protobuf::reflect::ProtobufValue for TMValidation {
 }
 
 #[derive(PartialEq,Clone,Default)]
+#[cfg_attr(feature = "with-serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct TMEndpoints {
     // message fields
     version: ::std::option::Option<u32>,
     pub endpoints_v2: ::protobuf::RepeatedField<TMEndpoints_TMEndpointv2>,
     // special fields
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub unknown_fields: ::protobuf::UnknownFields,
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub cached_size: ::protobuf::CachedSize,
 }
 
@@ -5457,12 +5514,15 @@ impl ::protobuf::reflect::ProtobufValue for TMEndpoints {
 }
 
 #[derive(PartialEq,Clone,Default)]
+#[cfg_attr(feature = "with-serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct TMEndpoints_TMEndpointv2 {
     // message fields
     endpoint: ::protobuf::SingularField<::std::string::String>,
     hops: ::std::option::Option<u32>,
     // special fields
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub unknown_fields: ::protobuf::UnknownFields,
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub cached_size: ::protobuf::CachedSize,
 }
 
@@ -5671,6 +5731,7 @@ impl ::protobuf::reflect::ProtobufValue for TMEndpoints_TMEndpointv2 {
 }
 
 #[derive(PartialEq,Clone,Default)]
+#[cfg_attr(feature = "with-serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct TMIndexedObject {
     // message fields
     hash: ::protobuf::SingularField<::std::vec::Vec<u8>>,
@@ -5679,7 +5740,9 @@ pub struct TMIndexedObject {
     data: ::protobuf::SingularField<::std::vec::Vec<u8>>,
     ledgerSeq: ::std::option::Option<u32>,
     // special fields
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub unknown_fields: ::protobuf::UnknownFields,
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub cached_size: ::protobuf::CachedSize,
 }
 
@@ -6035,6 +6098,7 @@ impl ::protobuf::reflect::ProtobufValue for TMIndexedObject {
 }
 
 #[derive(PartialEq,Clone,Default)]
+#[cfg_attr(feature = "with-serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct TMGetObjectByHash {
     // message fields
     field_type: ::std::option::Option<TMGetObjectByHash_ObjectType>,
@@ -6044,7 +6108,9 @@ pub struct TMGetObjectByHash {
     fat: ::std::option::Option<bool>,
     pub objects: ::protobuf::RepeatedField<TMIndexedObject>,
     // special fields
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub unknown_fields: ::protobuf::UnknownFields,
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub cached_size: ::protobuf::CachedSize,
 }
 
@@ -6411,6 +6477,7 @@ impl ::protobuf::reflect::ProtobufValue for TMGetObjectByHash {
 }
 
 #[derive(Clone,PartialEq,Eq,Debug,Hash)]
+#[cfg_attr(feature = "with-serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub enum TMGetObjectByHash_ObjectType {
     otUNKNOWN = 0,
     otLEDGER = 1,
@@ -6476,12 +6543,15 @@ impl ::protobuf::reflect::ProtobufValue for TMGetObjectByHash_ObjectType {
 }
 
 #[derive(PartialEq,Clone,Default)]
+#[cfg_attr(feature = "with-serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct TMLedgerNode {
     // message fields
     nodedata: ::protobuf::SingularField<::std::vec::Vec<u8>>,
     nodeid: ::protobuf::SingularField<::std::vec::Vec<u8>>,
     // special fields
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub unknown_fields: ::protobuf::UnknownFields,
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub cached_size: ::protobuf::CachedSize,
 }
 
@@ -6700,6 +6770,7 @@ impl ::protobuf::reflect::ProtobufValue for TMLedgerNode {
 }
 
 #[derive(PartialEq,Clone,Default)]
+#[cfg_attr(feature = "with-serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct TMGetLedger {
     // message fields
     itype: ::std::option::Option<TMLedgerInfoType>,
@@ -6711,7 +6782,9 @@ pub struct TMGetLedger {
     queryType: ::std::option::Option<TMQueryType>,
     queryDepth: ::std::option::Option<u32>,
     // special fields
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub unknown_fields: ::protobuf::UnknownFields,
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub cached_size: ::protobuf::CachedSize,
 }
 
@@ -7135,6 +7208,7 @@ impl ::protobuf::reflect::ProtobufValue for TMGetLedger {
 }
 
 #[derive(PartialEq,Clone,Default)]
+#[cfg_attr(feature = "with-serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct TMLedgerData {
     // message fields
     ledgerHash: ::protobuf::SingularField<::std::vec::Vec<u8>>,
@@ -7144,7 +7218,9 @@ pub struct TMLedgerData {
     requestCookie: ::std::option::Option<u32>,
     error: ::std::option::Option<TMReplyError>,
     // special fields
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub unknown_fields: ::protobuf::UnknownFields,
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub cached_size: ::protobuf::CachedSize,
 }
 
@@ -7510,6 +7586,7 @@ impl ::protobuf::reflect::ProtobufValue for TMLedgerData {
 }
 
 #[derive(PartialEq,Clone,Default)]
+#[cfg_attr(feature = "with-serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct TMPing {
     // message fields
     field_type: ::std::option::Option<TMPing_pingType>,
@@ -7517,7 +7594,9 @@ pub struct TMPing {
     pingTime: ::std::option::Option<u64>,
     netTime: ::std::option::Option<u64>,
     // special fields
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub unknown_fields: ::protobuf::UnknownFields,
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub cached_size: ::protobuf::CachedSize,
 }
 
@@ -7782,6 +7861,7 @@ impl ::protobuf::reflect::ProtobufValue for TMPing {
 }
 
 #[derive(Clone,PartialEq,Eq,Debug,Hash)]
+#[cfg_attr(feature = "with-serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub enum TMPing_pingType {
     ptPING = 0,
     ptPONG = 1,
@@ -7832,13 +7912,16 @@ impl ::protobuf::reflect::ProtobufValue for TMPing_pingType {
 }
 
 #[derive(PartialEq,Clone,Default)]
+#[cfg_attr(feature = "with-serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct TMSquelch {
     // message fields
     squelch: ::std::option::Option<bool>,
     validatorPubKey: ::protobuf::SingularField<::std::vec::Vec<u8>>,
     squelchDuration: ::std::option::Option<u32>,
     // special fields
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub unknown_fields: ::protobuf::UnknownFields,
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub cached_size: ::protobuf::CachedSize,
 }
 
@@ -8085,13 +8168,16 @@ impl ::protobuf::reflect::ProtobufValue for TMSquelch {
 }
 
 #[derive(PartialEq,Clone,Default)]
+#[cfg_attr(feature = "with-serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct TMProofPathRequest {
     // message fields
     key: ::protobuf::SingularField<::std::vec::Vec<u8>>,
     ledgerHash: ::protobuf::SingularField<::std::vec::Vec<u8>>,
     field_type: ::std::option::Option<TMLedgerMapType>,
     // special fields
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub unknown_fields: ::protobuf::UnknownFields,
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub cached_size: ::protobuf::CachedSize,
 }
 
@@ -8350,6 +8436,7 @@ impl ::protobuf::reflect::ProtobufValue for TMProofPathRequest {
 }
 
 #[derive(PartialEq,Clone,Default)]
+#[cfg_attr(feature = "with-serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct TMProofPathResponse {
     // message fields
     key: ::protobuf::SingularField<::std::vec::Vec<u8>>,
@@ -8359,7 +8446,9 @@ pub struct TMProofPathResponse {
     pub path: ::protobuf::RepeatedField<::std::vec::Vec<u8>>,
     error: ::std::option::Option<TMReplyError>,
     // special fields
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub unknown_fields: ::protobuf::UnknownFields,
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub cached_size: ::protobuf::CachedSize,
 }
 
@@ -8743,11 +8832,14 @@ impl ::protobuf::reflect::ProtobufValue for TMProofPathResponse {
 }
 
 #[derive(PartialEq,Clone,Default)]
+#[cfg_attr(feature = "with-serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct TMReplayDeltaRequest {
     // message fields
     ledgerHash: ::protobuf::SingularField<::std::vec::Vec<u8>>,
     // special fields
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub unknown_fields: ::protobuf::UnknownFields,
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub cached_size: ::protobuf::CachedSize,
 }
 
@@ -8915,6 +9007,7 @@ impl ::protobuf::reflect::ProtobufValue for TMReplayDeltaRequest {
 }
 
 #[derive(PartialEq,Clone,Default)]
+#[cfg_attr(feature = "with-serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct TMReplayDeltaResponse {
     // message fields
     ledgerHash: ::protobuf::SingularField<::std::vec::Vec<u8>>,
@@ -8922,7 +9015,9 @@ pub struct TMReplayDeltaResponse {
     pub transaction: ::protobuf::RepeatedField<::std::vec::Vec<u8>>,
     error: ::std::option::Option<TMReplyError>,
     // special fields
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub unknown_fields: ::protobuf::UnknownFields,
+    #[cfg_attr(feature = "with-serde", serde(skip))]
     pub cached_size: ::protobuf::CachedSize,
 }
 
@@ -9215,6 +9310,7 @@ impl ::protobuf::reflect::ProtobufValue for TMReplayDeltaResponse {
 }
 
 #[derive(Clone,PartialEq,Eq,Debug,Hash)]
+#[cfg_attr(feature = "with-serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub enum MessageType {
     mtMANIFESTS = 2,
     mtPING = 3,
@@ -9329,6 +9425,7 @@ impl ::protobuf::reflect::ProtobufValue for MessageType {
 }
 
 #[derive(Clone,PartialEq,Eq,Debug,Hash)]
+#[cfg_attr(feature = "with-serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub enum TransactionStatus {
     tsNEW = 1,
     tsCURRENT = 2,
@@ -9398,6 +9495,7 @@ impl ::protobuf::reflect::ProtobufValue for TransactionStatus {
 }
 
 #[derive(Clone,PartialEq,Eq,Debug,Hash)]
+#[cfg_attr(feature = "with-serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub enum NodeStatus {
     nsCONNECTING = 1,
     nsCONNECTED = 2,
@@ -9458,6 +9556,7 @@ impl ::protobuf::reflect::ProtobufValue for NodeStatus {
 }
 
 #[derive(Clone,PartialEq,Eq,Debug,Hash)]
+#[cfg_attr(feature = "with-serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub enum NodeEvent {
     neCLOSING_LEDGER = 1,
     neACCEPTED_LEDGER = 2,
@@ -9515,6 +9614,7 @@ impl ::protobuf::reflect::ProtobufValue for NodeEvent {
 }
 
 #[derive(Clone,PartialEq,Eq,Debug,Hash)]
+#[cfg_attr(feature = "with-serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub enum TxSetStatus {
     tsHAVE = 1,
     tsCAN_GET = 2,
@@ -9569,6 +9669,7 @@ impl ::protobuf::reflect::ProtobufValue for TxSetStatus {
 }
 
 #[derive(Clone,PartialEq,Eq,Debug,Hash)]
+#[cfg_attr(feature = "with-serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub enum TMLedgerInfoType {
     liBASE = 0,
     liTX_NODE = 1,
@@ -9625,6 +9726,7 @@ impl ::protobuf::reflect::ProtobufValue for TMLedgerInfoType {
 }
 
 #[derive(Clone,PartialEq,Eq,Debug,Hash)]
+#[cfg_attr(feature = "with-serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub enum TMLedgerType {
     ltACCEPTED = 0,
     ltCURRENT = 1,
@@ -9678,6 +9780,7 @@ impl ::protobuf::reflect::ProtobufValue for TMLedgerType {
 }
 
 #[derive(Clone,PartialEq,Eq,Debug,Hash)]
+#[cfg_attr(feature = "with-serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub enum TMQueryType {
     qtINDIRECT = 0,
 }
@@ -9725,6 +9828,7 @@ impl ::protobuf::reflect::ProtobufValue for TMQueryType {
 }
 
 #[derive(Clone,PartialEq,Eq,Debug,Hash)]
+#[cfg_attr(feature = "with-serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub enum TMReplyError {
     reNO_LEDGER = 1,
     reNO_NODE = 2,
@@ -9779,6 +9883,7 @@ impl ::protobuf::reflect::ProtobufValue for TMReplyError {
 }
 
 #[derive(Clone,PartialEq,Eq,Debug,Hash)]
+#[cfg_attr(feature = "with-serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub enum TMLedgerMapType {
     lmTRANASCTION = 1,
     lmACCOUNT_STATE = 2,

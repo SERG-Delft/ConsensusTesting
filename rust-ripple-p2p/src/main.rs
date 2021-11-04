@@ -1,6 +1,8 @@
 extern crate futures;
 
 use std::env;
+use log::*;
+use env_logger;
 
 mod app;
 mod protos;
@@ -15,21 +17,24 @@ type AnyResult<T> = Result<T, AnyError>;
 type EmptyResult = AnyResult<()>;
 
 fn main() {
-    let mut runtime = tokio::runtime::Builder::new()
-        .core_threads(num_cpus::get())
-        .enable_io()
-        .enable_time()
-        .threaded_scheduler()
-        .build()
-        .expect("error on building runtime");
+    let runtime = tokio::runtime::Runtime::new().unwrap();
 
     let args: Vec<String> = env::args().collect();
     let n: u16 = (&args[1]).parse().unwrap();
+    let only_subscribe = if &args.len() > &2 {
+        match (&args[2]).parse::<u16>() {
+            Ok(_) => true,
+            Err(_) => false
+        }
+    } else { false };
 
-    let app = app::App::new(n);
+
+    env_logger::Builder::new().parse_default_env().init();
+
+    let app = app::App::new(n, only_subscribe);
 
     if let Err(error) = runtime.block_on(app.start()) {
-        eprintln!("Error: {}", error);
+        error!("Error: {}", error);
         std::process::exit(1);
     }
 
