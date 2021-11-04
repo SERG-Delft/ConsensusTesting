@@ -59,8 +59,10 @@ impl Collector {
             }
             match self.subscription_receiver.try_recv() {
                 Ok(mut subscription_object) => match subscription_object.subscription_object {
-                    SubscriptionObject::ValidatedLedger(ledger) =>
-                        self.write_to_subscription_file(subscription_object.peer, json!({"LedgerValidated": ledger}).to_string()),
+                    SubscriptionObject::ValidatedLedger(ledger) => {
+                        println!("Ledger {} is validated", ledger.ledger_index);
+                        self.write_to_subscription_file(subscription_object.peer, json!({"LedgerValidated": ledger}).to_string());
+                    }
                     SubscriptionObject::ReceivedValidation(validation) =>
                         self.write_to_subscription_file(subscription_object.peer, json!({"ValidationReceived": validation}).to_string()),
                     SubscriptionObject::PeerStatusChange(peer_status) =>

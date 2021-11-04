@@ -1,5 +1,8 @@
 use std::collections::HashMap;
-use std::net::{SocketAddr, Ipv4Addr, IpAddr, TcpStream};
+use std::net::{SocketAddr, Ipv4Addr, IpAddr};
+use std::thread;
+use tokio::net::{TcpStream};
+use tokio::task::{JoinHandle};
 
 use byteorder::{BigEndian, ByteOrder};
 use bytes::{Buf, BytesMut};
@@ -9,19 +12,15 @@ use log::*;
 use itertools::Itertools;
 
 use super::{EmptyResult};
-use openssl::ssl::{SslStream, Ssl, SslContext, SslMethod};
-use std::io::{Write};
-use std::sync::mpsc::{Receiver, Sender};
-use std::thread::{JoinHandle, sleep};
-use std::time::{Duration, Instant};
-use protobuf::Message;
-use std::thread;
+use tokio_openssl::{SslStream};
+use tokio::sync::mpsc::{Sender, channel};
 use crate::message_handler::{invoke_protocol_message, RippleMessageObject};
-use std::sync::{Arc, mpsc, Mutex};
 use chrono::Utc;
+use openssl::ssl::{Ssl, SslContext, SslMethod};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::macros::support::Pin;
 use crate::client::{Client};
 use crate::collector::{Collector, RippleMessage};
-use crate::protos::ripple::TMPing;
 use crate::scheduler::{PeerChannel, Scheduler, Event};
 
 
@@ -36,10 +35,10 @@ const _PUBLIC_KEY_HEX: &str = "03137FF01C82A1CF507CC243EBF629A99F2256FA43BCB7A45
 const _PUBLIC_KEY: &str = "aBQsqGF1HEduKrHrSVzNE5yeCTJTGgrsKgyjNLgabS2Rkq7CgZiq";
 
 // Genesis account with initial supply of XRP
-const GENESIS_SEED: &str = "snoPBrXtMeMyMHUVTgbuqAfg1SUTb";
-const GENESIS_ADDRESS: &str = "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh";
+const _GENESIS_SEED: &str = "snoPBrXtMeMyMHUVTgbuqAfg1SUTb";
+const _GENESIS_ADDRESS: &str = "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh";
 
-const AMOUNT: u32 = 2u32.pow(31);
+const _AMOUNT: u32 = 2u32.pow(31);
 
 // Peer identities
 const PRIVATE_KEYS: [&'static str; 5] = ["ssiNcpPcuBEwAyranF3wLt9UgefZv",
@@ -71,16 +70,17 @@ impl App {
     /// Every message gets relayed by the scheduler
     /// A separate thread is created for each node which handles websocket client requests
     pub async fn start(&self) -> EmptyResult {
+        let mut tokio_tasks = vec![];
         let mut threads = vec![];
-        let (collector_tx, collector_rx) = mpsc::channel();
-        let (_control_tx, control_rx) = mpsc::channel();
-        let (subscription_tx, subscription_rx) = mpsc::channel();
-        // Start the collector which writes output to files
+        let (collector_tx, collector_rx) = std::sync::mpsc::channel();
+        let (_control_tx, control_rx) = std::sync::mpsc::channel();
+        let (subscription_tx, subscription_rx) = std::sync::mpsc::channel();
         let peer = self.peers.clone();
-        let collector_thread = thread::spawn(move || {
+        // Start the collector which writes output to files
+        let collector_task = thread::spawn(move || {
             Collector::new(peer, collector_rx, subscription_rx, control_rx).start();
         });
-        threads.push(collector_thread);
+        threads.push(collector_task);
 
         // Start p2p connections
         if !self.only_subscribe {
@@ -88,31 +88,27 @@ impl App {
             let mut peer_senders = HashMap::new();
             let mut peer_receivers = HashMap::new();
             let mut scheduler_peer_channels = HashMap::new();
-            let (scheduler_sender, scheduler_receiver) = mpsc::channel();
+            let (scheduler_sender, scheduler_receiver) = tokio::sync::mpsc::channel(32);
 
             for pair in (0..peer).into_iter().combinations(2).into_iter() {
                 let i = pair[0] as usize;
                 let j = pair[1] as usize;
-                // let (tx_peer_i, rx_scheduler_i) = mpsc::channel();
                 let tx_peer_i = scheduler_sender.clone();
-                let (tx_scheduler_i, rx_peer_i) = mpsc::channel();
-                // let (tx_peer_j, rx_scheduler_j) = mpsc::channel();
                 let tx_peer_j = scheduler_sender.clone();
-                let (tx_scheduler_j, rx_peer_j) = mpsc::channel();
+                let (tx_scheduler_i, rx_peer_i) = tokio::sync::mpsc::channel(32);
+                let (tx_scheduler_j, rx_peer_j) = tokio::sync::mpsc::channel(32);
                 peer_senders.entry(i).or_insert(HashMap::new()).insert(j, tx_peer_i);
                 peer_senders.entry(j).or_insert(HashMap::new()).insert(i, tx_peer_j);
                 peer_receivers.entry(i).or_insert(HashMap::new()).insert(j, rx_peer_i);
                 peer_receivers.entry(j).or_insert(HashMap::new()).insert(i, rx_peer_j);
                 scheduler_peer_channels.entry(i).or_insert(HashMap::new()).insert(j, PeerChannel::new(tx_scheduler_i));
                 scheduler_peer_channels.entry(j).or_insert(HashMap::new()).insert(i, PeerChannel::new(tx_scheduler_j));
-                // scheduler_receivers.entry(i).or_insert(HashMap::new()).insert(j, rx_scheduler_i);
-                // scheduler_receivers.entry(j).or_insert(HashMap::new()).insert(i, rx_scheduler_j);
             }
 
-            let scheduler_thread = thread::Builder::new().name(String::from("Scheduler")).spawn(move || {
-                let scheduler = Scheduler::new(scheduler_peer_channels);
+            let scheduler = Scheduler::new(scheduler_peer_channels, collector_tx);
+            let scheduler_thread = thread::spawn(move || {
                 scheduler.start(scheduler_receiver);
-            }).unwrap();
+            });
             threads.push(scheduler_thread);
 
             for pair in (0..peer).into_iter().combinations(2).into_iter() {
@@ -122,7 +118,6 @@ impl App {
                 let peer_sender_i = peer_senders.get_mut(&i).unwrap().remove(&j).unwrap();
                 let peer_receiver_j = peer_receivers.get_mut(&j).unwrap().remove(&i).unwrap();
                 let peer_sender_j = peer_senders.get_mut(&j).unwrap().remove(&i).unwrap();
-                let collector_sender = collector_tx.clone();
 
                 let name = format!("ripple{}, ripple{}", i+1, j+1);
                 let address_i = addrs[i].clone();
@@ -135,8 +130,7 @@ impl App {
                     String::from(PRIVATE_KEYS[i]),
                     String::from(PRIVATE_KEYS[j]),
                     String::from(PUBLIC_KEYS[i]),
-                    String::from(PUBLIC_KEYS[j]),
-                    collector_sender
+                    String::from(PUBLIC_KEYS[j])
                 );
                 let (thread1, thread2) = peer.connect(
                     i,
@@ -145,15 +139,14 @@ impl App {
                     peer_sender_j,
                     peer_receiver_i,
                     peer_receiver_j
-                );
-                threads.push(thread1);
-                threads.push(thread2)
+                ).await;
+                tokio_tasks.push(thread1);
+                tokio_tasks.push(thread2);
             }
         }
-
         // Connect websocket client to ripples
         for i in 0..self.peers {
-            let client = Client::new(i, format!("ws://127.0.0.1:600{}", 5+i).as_str(), subscription_tx.clone());
+            let _client = Client::new(i, format!("ws://127.0.0.1:600{}", 5+i).as_str(), subscription_tx.clone());
             // let sender_clone = client.sender_channel.clone();
         }
 
@@ -171,7 +164,10 @@ impl App {
         //         counter += 1;
         //     }
         // }));
-
+        for (i, tokio_task) in tokio_tasks.into_iter().enumerate() {
+            println!("{}", i);
+            tokio_task.await.expect("task failed");
+        }
         for thread in threads {
             thread.join().unwrap();
         }
@@ -193,7 +189,6 @@ pub struct PeerConnection {
     private_key2: String,
     public_key1: String,
     public_key2: String,
-    collector_sender: Sender<Box<RippleMessage>>
 }
 
 impl PeerConnection {
@@ -205,23 +200,22 @@ impl PeerConnection {
         private_key2: String,
         public_key1: String,
         public_key2: String,
-        collector_sender: Sender<Box<RippleMessage>>
     ) -> Self {
         PeerConnection { name: String::from(name), address1, address2, private_key1,
-            private_key2, public_key1, public_key2, collector_sender }
+            private_key2, public_key1, public_key2 }
     }
 
     /// Create SSLStream to the validator at address using the identity of the key pair
-    fn connect_to_peer(address: SocketAddr, private_key: &str, public_key: &str) -> SslStream<TcpStream> {
-        let stream = match TcpStream::connect(address) {
+    async fn connect_to_peer(address: SocketAddr, private_key: &str, public_key: &str) -> SslStream<TcpStream> {
+        let stream = match TcpStream::connect(address).await {
             Ok(tcp_stream) => tcp_stream,
             Err(e) => panic!("{}", e)
         };
         stream.set_nodelay(true).expect("Set nodelay failed");
         let ctx = SslContext::builder(SslMethod::tls()).unwrap().build();
         let ssl = Ssl::new(&ctx).unwrap();
-        let mut ssl_stream = SslStream::new(ssl, stream).unwrap();
-        SslStream::connect(&mut ssl_stream).expect("Connect failed");
+        let mut ssl_stream = SslStream::<TcpStream>::new(ssl, stream).unwrap();
+        SslStream::connect(Pin::new(&mut ssl_stream)).await;
         let ss = ssl_stream.ssl();
 
         let mut buf = Vec::<u8>::with_capacity(4096);
@@ -267,13 +261,12 @@ impl PeerConnection {
             \r\n",
             public_key, b64sig
         );
-        ssl_stream.write_all(content.as_bytes()).unwrap();
+        ssl_stream.write_all(content.as_bytes()).await.expect("Unable to write during handshake");
 
         let mut buf = BytesMut::new();
         loop {
-            sleep(Duration::from_secs(1));
             let mut vec = vec![0; 4096];
-            let size = ssl_stream.ssl_read(&mut vec).unwrap();
+            let size = ssl_stream.read(&mut vec).await.expect("Unable to read during handshake");
             vec.resize(size, 0);
             buf.extend_from_slice(&vec);
 
@@ -308,7 +301,7 @@ impl PeerConnection {
 
                 if response_code != 101 {
                     loop {
-                        if ssl_stream.ssl_read(&mut buf).unwrap() == 0 {
+                        if ssl_stream.read_to_end(&mut buf.to_vec()).await.unwrap() == 0 {
                             debug!("Body: {}", String::from_utf8_lossy(buf.bytes()).trim());
                         }
                     }
@@ -329,64 +322,67 @@ impl PeerConnection {
     }
 
     /// Start p2p connection between validator nodes
-    pub fn connect(&self,
+    pub async fn connect(&self,
                    peer1: usize,
                    peer2: usize,
-                   sender1: Sender<Event>,
-                   sender2: Sender<Event>,
-                   receiver1: Receiver<Vec<u8>>,
-                   receiver2: Receiver<Vec<u8>>
+                   sender1: tokio::sync::mpsc::Sender<Event>,
+                   sender2: tokio::sync::mpsc::Sender<Event>,
+                   receiver1: tokio::sync::mpsc::Receiver<Vec<u8>>,
+                   receiver2: tokio::sync::mpsc::Receiver<Vec<u8>>
     ) -> (JoinHandle<()>, JoinHandle<()>) {
         info!("Thread {:?} has started", self.name);
         // Connect to the two validators using each other's identity
-        let mut ssl_stream1 = Self::connect_to_peer(self.address1, self.private_key2.as_str(), self.public_key2.as_str());
-        let mut ssl_stream2 = Self::connect_to_peer(self.address2, self.private_key1.as_str(), self.public_key1.as_str());
+        let ssl_stream1 = Self::connect_to_peer(self.address1, self.private_key2.as_str(), self.public_key2.as_str()).await;
+        let ssl_stream2 = Self::connect_to_peer(self.address2, self.private_key1.as_str(), self.public_key1.as_str()).await;
 
         let peer1_clone = peer1.clone();
         let peer2_clone = peer2.clone();
-        let collector_sender_clone = self.collector_sender.clone();
-        let thread1 = thread::spawn(move || Self::handle_peer_communication(
-            &mut ssl_stream1,
-            peer1_clone,
-            peer2_clone,
-            sender1,
-            receiver1,
-            collector_sender_clone
-        ));
+        let thread1 = tokio::spawn(async move {
+            Self::handle_peer_communication(
+                ssl_stream1,
+                peer1_clone,
+                peer2_clone,
+                sender1,
+                receiver1,
+            ).await
+        });
         let peer1_clone = peer1.clone();
         let peer2_clone = peer2.clone();
-        let collector_sender_clone = self.collector_sender.clone();
-        let thread2 = thread::spawn(move || Self::handle_peer_communication(
-            &mut ssl_stream2,
-            peer2_clone,
-            peer1_clone,
-            sender2,
-            receiver2,
-            collector_sender_clone,
-        ));
+        let thread2 = tokio::spawn(async move {
+            Self::handle_peer_communication(
+                ssl_stream2,
+                peer2_clone,
+                peer1_clone,
+                sender2,
+                receiver2,
+            ).await
+        });
         (thread1, thread2)
     }
 
     /// Receive and send p2p messages to the node
-    fn handle_peer_communication(
-        ssl_stream: &mut SslStream<TcpStream>,
+    async fn handle_peer_communication(
+        ssl_stream: SslStream<TcpStream>,
         from: usize,
         to: usize,
-        sender: Sender<Event>,
-        receiver: Receiver<Vec<u8>>,
-        collector_sender: Sender<Box<RippleMessage>>
+        sender: tokio::sync::mpsc::Sender<Event>,
+        mut receiver: tokio::sync::mpsc::Receiver<Vec<u8>>,
     ) {
-        loop {
+        let (mut ssl_reader, mut ssl_writer) = tokio::io::split(ssl_stream);
+        tokio::spawn(async move {
             loop {
                 match receiver.try_recv() {
-                    Ok(message) => ssl_stream.write_all(message.as_slice()).expect("Can't write to own peer"),
-                    Err(_) => break // Break when there are no more messages
+                    Ok(message) => ssl_writer.write_all(message.as_slice()).await.expect("Unable to write to ssl stream"),
+                    Err(_) => {} // Break when there are no more messages
                 }
             }
+        });
+        loop {
+            println!("{}, {} now working", from, to);
             // Maximum ripple peer message is 64 MB
             let mut buf = BytesMut::with_capacity(64 * 1024);
             buf.resize(64 * 1024, 0);
-            let size = ssl_stream.ssl_read(buf.as_mut()).expect("Unable to read from ssl stream");
+            let size = ssl_reader.read(buf.as_mut()).await.expect("Unable to read from ssl stream");
             buf.resize(size, 0);
             if size == 0 {
                 error!(
@@ -406,7 +402,6 @@ impl PeerConnection {
             }
 
             let payload_size = BigEndian::read_u32(&bytes[0..4]) as usize;
-            let message_type = BigEndian::read_u16(&bytes[4..6]);
 
             if payload_size > 64 * 1024 * 1024 {
                 panic!("Message size too large");
@@ -416,20 +411,11 @@ impl PeerConnection {
                 break;
             }
 
-            let payload = &bytes[6..(6+payload_size)];
-
-            let proto_obj: RippleMessageObject = invoke_protocol_message(message_type, payload);
             // debug!("from {:?}, proto_type: {:?}, object: {:?}", name, proto_obj.descriptor().name(), proto_obj);
             // Send received message to scheduler
             let message = bytes[0..(6+payload_size)].to_vec();
             let event = Event { from, to, message};
-            sender.send(event).unwrap();
-
-            // Sender received message to collector
-            match collector_sender.send(RippleMessage::new(format!("Ripple{}", from+1), format!("Ripple{}", to+1), Utc::now(), proto_obj)) {
-                Ok(_) => { }//println!("Sent to collector") }
-                Err(_) => { }//println!("Error sending to collector") }
-            }
+            sender.send(event).await;
 
             buf.advance(payload_size + 6);
         }

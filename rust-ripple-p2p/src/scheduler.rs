@@ -1,58 +1,44 @@
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-use std::sync::mpsc::{Receiver, Sender, TryRecvError};
 use std::thread;
-use log::*;
-use crate::protos::ripple::TMStatusChange;
-use crate::message_handler::{parse_message};
+use chrono::Utc;
+use tokio::sync::mpsc::{Sender, Receiver};
 use byteorder::{BigEndian, ByteOrder};
-use protobuf::ProtobufEnum;
+use crate::collector::RippleMessage;
+use crate::message_handler::{invoke_protocol_message, RippleMessageObject};
 
 pub struct Scheduler {
     p2p_connections: HashMap<usize, HashMap<usize, PeerChannel>>,
-    events: Arc<Mutex<Vec<Event>>>,
+    collector_sender: std::sync::mpsc::Sender<Box<RippleMessage>>
 }
 
 impl Scheduler {
-    pub fn new(p2p_connections: HashMap<usize, HashMap<usize, PeerChannel>>) -> Self {
-        Scheduler { p2p_connections, events: Arc::new(Mutex::new(vec![])) }
+    pub fn new(p2p_connections: HashMap<usize, HashMap<usize, PeerChannel>>, collector_sender: std::sync::mpsc::Sender<Box<RippleMessage>>) -> Self {
+        Scheduler { p2p_connections, collector_sender }
     }
 
-    pub fn start(mut self, receiver: Receiver<Event>) {
-        // for (i, mut connections) in receivers.drain() {
-        //     for (j, receiver) in connections.drain() {
-        //         let events_clone = Arc::clone(&self.events);
-        //         PeerChannel::receive_messages(receiver, i.clone(), j.clone(), events_clone);
-        //     }
-        // }
-        // let events_clone = Arc::clone(&self.events);
-        // thread::spawn(move || {
+    pub fn start(self, mut receiver: Receiver<Event>) {
         loop {
             match receiver.try_recv() {
-                Ok(event) => self.execute_event(event), //events_clone.lock().unwrap().push(event),
+                Ok(event) => self.execute_event(event),
                 Err(_) => {}
             }
-        }
-        // });
-        loop {
-            let mut events = self.events.lock().unwrap();
-            while !events.is_empty() {
-                if events.len() > 6 {
-                    println!("{}", events.len());
-                }
-                let event = events.remove(0);
-                self.execute_event(event);
-            }
+            thread::yield_now();
         }
     }
 
     fn execute_event(&self, event: Event) {
-        match self.p2p_connections.get(&event.to).unwrap().get(&event.from).unwrap().sender.send(event.message) {
+        let proto_obj: RippleMessageObject = invoke_protocol_message(BigEndian::read_u16(&event.message[4..6]), &event.message[6..]);
+        match self.collector_sender.send(RippleMessage::new(format!("Ripple{}", event.from+1), format!("Ripple{}", event.to+1), Utc::now(), proto_obj)) {
+            Ok(_) => { }//println!("Sent to collector") }
+            Err(_) => { }//println!("Error sending to collector") }
+        }
+        match self.p2p_connections.get(&event.to).unwrap().get(&event.from).unwrap().sender.blocking_send(event.message) {
             Ok(_) => { }//debug!("Sent message from {} to {}", event.from+1, event.to+1) }
             Err(_err) => {println!("Failed to send message from {} to {}, because {}", event.from, event.to, _err)}
         }
     }
 
+    #[allow(unused)]
     fn create_event(from: usize, to: usize, message: Vec<u8>) -> Event {
         Event { from, to, message }
     }
@@ -65,19 +51,6 @@ pub struct PeerChannel {
 impl PeerChannel {
     pub fn new(sender: Sender<Vec<u8>>) -> Self {
         PeerChannel { sender }
-    }
-
-    fn receive_messages(receiver: Receiver<Vec<u8>>, from: usize, to: usize, events: Arc<Mutex<Vec<Event>>>) {
-        thread::spawn(move || {
-            loop {
-                match receiver.try_recv() {
-                    Ok(message) => {
-                        events.lock().unwrap().push(Scheduler::create_event(from, to, message));
-                    }
-                    Err(_) => {}
-                }
-            }
-        });
     }
 }
 

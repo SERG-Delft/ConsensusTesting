@@ -17,13 +17,7 @@ type AnyResult<T> = Result<T, AnyError>;
 type EmptyResult = AnyResult<()>;
 
 fn main() {
-    let mut runtime = tokio::runtime::Builder::new()
-        .core_threads(num_cpus::get())
-        .enable_io()
-        .enable_time()
-        .threaded_scheduler()
-        .build()
-        .expect("error on building runtime");
+    let runtime = tokio::runtime::Runtime::new().unwrap();
 
     let args: Vec<String> = env::args().collect();
     let n: u16 = (&args[1]).parse().unwrap();

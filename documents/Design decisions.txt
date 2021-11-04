@@ -71,5 +71,13 @@ and between validator j and the tester. These sessions are created by letting th
 will still send all its messages to the scheduler. The scheduler can then determine when to send a particular message to its intended end point. 
 The rippled code is altered to skip the check for authenticity of the endpoints.
 
-This design works and keeps validating
+This design works and keeps validating with 2 nodes, but is too slow. Reducing thread usage solved the speed issue.
 
+03-11-2021
+The way the operating system schedules threads is very unreliable. It gives some threads more time than others causing one node to send multiple messages 
+before any other nodes gets the chance to send its messages. I will investigate tokio async/await model for concurrency first. If that doesn't work
+I will investigate Actix actor model.
+
+04-11-2021
+Fixed the issue. The scheduler thread was hoarding cpu resources, causing certain messages to not be delivered or sent in time.
+A call to thread::yield_now() in every scheduler loop solves the issue finally.
