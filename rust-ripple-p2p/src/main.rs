@@ -11,6 +11,7 @@ mod client;
 mod crypto;
 mod collector;
 mod scheduler;
+mod peer_connection;
 
 type AnyError = Box<dyn std::error::Error + Send + Sync>;
 type AnyResult<T> = Result<T, AnyError>;

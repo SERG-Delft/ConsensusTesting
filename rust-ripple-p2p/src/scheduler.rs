@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::thread;
 use chrono::Utc;
 use tokio::sync::mpsc::{Sender, Receiver};
 use byteorder::{BigEndian, ByteOrder};
@@ -18,11 +17,10 @@ impl Scheduler {
 
     pub fn start(self, mut receiver: Receiver<Event>) {
         loop {
-            match receiver.try_recv() {
-                Ok(event) => self.execute_event(event),
-                Err(_) => {}
+            match receiver.blocking_recv() {
+                Some(event) => self.execute_event(event),
+                None => panic!("Peer failed")
             }
-            thread::yield_now();
         }
     }
 
