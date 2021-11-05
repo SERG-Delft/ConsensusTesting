@@ -232,7 +232,7 @@ pub struct Payment  {
     pub deliver_min: Option<u32>
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct ValidatedLedger {
     #[serde(skip_serializing)]
     pub fee_base: u32,
@@ -251,7 +251,7 @@ pub struct ValidatedLedger {
 }
 
 #[allow(unused)]
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct ReceivedValidation {
     #[serde(skip_serializing_if = "Option::is_none")]
     amendments: Option<Vec<String>>,
@@ -275,7 +275,7 @@ pub struct ReceivedValidation {
     validation_public_key: String
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub enum PeerStatusEvent {
     #[serde(rename = "CLOSING_LEDGER")]
     ClosingLedger,
@@ -287,7 +287,7 @@ pub enum PeerStatusEvent {
     LostSync
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct PeerStatusChange {
     action: PeerStatusEvent,
     date: u32,
@@ -301,12 +301,12 @@ pub struct PeerStatusChange {
     ledger_index_min: Option<u32>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct ConsensusChange {
     consensus: String
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 #[serde(tag = "type")]
 pub enum SubscriptionObject {
     #[serde(rename = "ledgerClosed")]

@@ -241,7 +241,6 @@ impl PeerConnection {
                 break;
             }
 
-            // debug!("from {:?}, proto_type: {:?}, object: {:?}", name, proto_obj.descriptor().name(), proto_obj);
             // Send received message to scheduler
             let message = bytes[0..(6+payload_size)].to_vec();
             let event = Event { from, to, message};

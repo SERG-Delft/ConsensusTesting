@@ -20,7 +20,7 @@ To run the network, follow the steps below.
 `.\Run.ps1 5 1` will run a private network with 5 nodes connected and without proxy
 
 ##### With proxy
-3. `.\Run.ps1 5` will run a private network with 5 nodes connected by the proxy
+3. `.\Run.ps1 5 [p to start/stop the containers in parallel]` will run a private network with 5 nodes connected by the proxy
 4. Change directory to rust-ripple-p2p `cd ../rust-ripple-p2p`
 5. Run the proxy
     - PowerShell: `$Env:RUST_LOG="trace";$Env:OPENSSL_DIR="[path/to/openssl/dir]"; cargo run [n (1-5)]`

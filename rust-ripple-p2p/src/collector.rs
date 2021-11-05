@@ -2,7 +2,7 @@ use std::fmt::{Display, Formatter};
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::Path;
-use std::sync::mpsc::{Receiver};
+use std::sync::mpsc::{Receiver, Sender};
 use serde_json::json;
 use crate::client::{PeerSubscriptionObject, SubscriptionObject};
 use crate::message_handler::RippleMessageObject;
@@ -15,12 +15,19 @@ pub struct Collector {
     ripple_message_receiver: Receiver<Box<RippleMessage>>,
     subscription_receiver: Receiver<PeerSubscriptionObject>,
     control_receiver: Receiver<String>,
+    scheduler_sender: Sender<SubscriptionObject>,
     execution_file: BufWriter<File>,
     subscription_files: Vec<BufWriter<File>>,
 }
 
 impl Collector {
-    pub fn new(number_of_nodes: u16, ripple_message_receiver: Receiver<Box<RippleMessage>>, subscription_receiver: Receiver<PeerSubscriptionObject>, control_receiver: Receiver<String>) -> Self {
+    pub fn new(
+        number_of_nodes: u16,
+        ripple_message_receiver: Receiver<Box<RippleMessage>>,
+        subscription_receiver: Receiver<PeerSubscriptionObject>,
+        control_receiver: Receiver<String>,
+        scheduler_sender: Sender<SubscriptionObject>
+    ) -> Self {
         let execution_file = File::create(Path::new("execution.txt")).expect("Opening execution file failed");
         let mut subscription_files = vec![];
         for peer in 0..number_of_nodes {
@@ -32,6 +39,7 @@ impl Collector {
             ripple_message_receiver,
             subscription_receiver,
             control_receiver,
+            scheduler_sender,
             execution_file: BufWriter::new(execution_file),
             subscription_files
         }
@@ -58,6 +66,7 @@ impl Collector {
                     SubscriptionObject::ValidatedLedger(ledger) => {
                         println!("Ledger {} is validated", ledger.ledger_index);
                         self.write_to_subscription_file(subscription_object.peer, json!({"LedgerValidated": ledger}).to_string());
+                        self.scheduler_sender.send(SubscriptionObject::ValidatedLedger(ledger.clone())).expect("Scheduler send failed");
                     }
                     SubscriptionObject::ReceivedValidation(validation) =>
                         self.write_to_subscription_file(subscription_object.peer, json!({"ValidationReceived": validation}).to_string()),

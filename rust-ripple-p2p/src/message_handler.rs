@@ -1,7 +1,5 @@
 use std::fmt::{Debug, Display, Formatter};
 use crate::protos::ripple::{TMManifest, TMPing, TMCluster, TMEndpoints, TMTransaction, TMGetLedger, TMLedgerData, TMProposeSet, TMStatusChange, TMHaveTransactionSet, TMValidation, TMGetObjectByHash, TMGetShardInfo, TMShardInfo, TMGetPeerShardInfo, TMPeerShardInfo, TMValidatorList};
-use protobuf::{Message};
-use hex;
 use serde_json;
 
 /// Deserialize message
@@ -78,36 +76,3 @@ impl Display for RippleMessageObject {
         write!(f, "{}: {}", name, string)
     }
 }
-
-impl Display for TMManifest {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}: {}", self.descriptor().name(), hex::encode_upper(self.get_stobject()))
-    }
-}
-
-impl Display for TMTransaction {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}: {:?}, {}, {}, {}", self.descriptor().name(), self.get_status(), self.get_receiveTimestamp(), self.get_deferred(), hex::encode_upper(self.get_rawTransaction()))
-    }
-}
-
-// impl Display for TMGetLedger {
-//     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-//         write!(f, "{}: {}, {:?}, {:?}, {}, {}, {}", self.descriptor().name(), self.get_ledgerSeq(), self.get_itype(), self.get_ltype(), hex::encode_upper(self.get_ledgerHash()), self.get_nodeIDs().)
-//     }
-// }
-
-
-// fn return_pong(mut pong: Box<TMPing>, ssl_stream: &mut SslStream<TcpStream>) {
-//     let message_size: usize = (pong.compute_size() + 6) as usize;
-//     pong.set_field_type(TMPing_pingType::ptPONG);
-//     let mut write_vec = vec![0; message_size];
-//     let write_bytes: &mut [u8] = write_vec.as_mut_slice();
-//     BigEndian::write_u32(&mut write_bytes[0..4], (message_size - 6) as u32);
-//     BigEndian::write_u16(&mut write_bytes[4..6], 3);
-//     write_bytes[6..message_size].clone_from_slice(&*pong.write_to_bytes().unwrap());
-//     match ssl_stream.write_all(write_bytes) {
-//         Ok(_) => debug!("Pong successful"),
-//         Err(err) => debug!("Pong error occurred: {:?}", err)
-//     };
-// }

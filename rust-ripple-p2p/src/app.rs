@@ -63,10 +63,11 @@ impl App {
         let (collector_tx, collector_rx) = std::sync::mpsc::channel();
         let (_control_tx, control_rx) = std::sync::mpsc::channel();
         let (subscription_tx, subscription_rx) = std::sync::mpsc::channel();
+        let (collector_state_tx, scheduler_state_rx) = std::sync::mpsc::channel();
         let peer = self.peers.clone();
         // Start the collector which writes output to files
         let collector_task = thread::spawn(move || {
-            Collector::new(peer, collector_rx, subscription_rx, control_rx).start();
+            Collector::new(peer, collector_rx, subscription_rx, control_rx, collector_state_tx).start();
         });
         threads.push(collector_task);
 
@@ -95,7 +96,7 @@ impl App {
 
             let scheduler = Scheduler::new(scheduler_peer_channels, collector_tx);
             let scheduler_thread = thread::spawn(move || {
-                scheduler.start(scheduler_receiver);
+                scheduler.start(scheduler_receiver, scheduler_state_rx);
             });
             threads.push(scheduler_thread);
 
