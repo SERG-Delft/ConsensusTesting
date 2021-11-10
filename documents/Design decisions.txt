@@ -80,4 +80,15 @@ I will investigate Actix actor model.
 
 04-11-2021
 Fixed the issue. The scheduler thread was hoarding cpu resources, causing certain messages to not be delivered or sent in time.
-A call to thread::yield_now() in every scheduler loop solves the issue finally.
+A call to thread::yield_now() in every scheduler loop solves the issue finally. Better fix is to use .recv() instead of looping .try_recv(), because this reduces CPU usage.
+
+08-11-2021
+How to define a schedule? The number of messages or content of messages are not known before they are sent by the nodes. Online schedule
+1. Apply a schedule over the messages of one round? Wait after executing one 'event' to collect messages that could be dependent? How long should we wait?
+2. Split messages into consensus messages and validation messages? Two 'different' processes, so should be handled in isolation? Validation depends on outcome of consensus, use as check?
+3. Read in a certain buffer of events and schedule the events in a way. Iterave, but what is an iteration (time, round, # of messages)?
+   All events at any time in the buffer are independent, because they are not the result of executing an event?
+4. What is my test case? One transaction in a validated ledger? One round?
+5. How would a genetic algorithm work on ordering of messages. Formulate problem and problem encoding.
+   Define a chromosome and mutation. Difficult due to different # of messages maybe? Perhaps more messages is bad, thus the goal?
+   Order in which the messages come in is initial order. Reorder the messages with algorithm.

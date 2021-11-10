@@ -1,4 +1,6 @@
+use log::error;
 use std::fmt::{Debug, Display, Formatter};
+use protobuf::Message;
 use crate::protos::ripple::{TMManifest, TMPing, TMCluster, TMEndpoints, TMTransaction, TMGetLedger, TMLedgerData, TMProposeSet, TMStatusChange, TMHaveTransactionSet, TMValidation, TMGetObjectByHash, TMGetShardInfo, TMShardInfo, TMGetPeerShardInfo, TMPeerShardInfo, TMValidatorList};
 use serde_json;
 
@@ -50,6 +52,31 @@ pub enum RippleMessageObject {
     TMGetPeerShardInfo(TMGetPeerShardInfo),
     TMPeerShardInfo(TMPeerShardInfo),
     TMValidatorList(TMValidatorList)
+}
+
+impl RippleMessageObject {
+    pub fn from_str(variant: &str, json: &str) -> Vec<u8> {
+        match variant {
+            "Manifest" => serde_json::from_str::<TMManifest>(json).unwrap().write_to_bytes().unwrap(),
+            "Ping" => serde_json::from_str::<TMPing>(json).unwrap().write_to_bytes().unwrap(),
+            "Cluster" => serde_json::from_str::<TMCluster>(json).unwrap().write_to_bytes().unwrap(),
+            "Endpoints" => serde_json::from_str::<TMEndpoints>(json).unwrap().write_to_bytes().unwrap(),
+            "Transaction" => serde_json::from_str::<TMTransaction>(json).unwrap().write_to_bytes().unwrap(),
+            "GetLedger" => serde_json::from_str::<TMGetLedger>(json).unwrap().write_to_bytes().unwrap(),
+            "LedgerData" => serde_json::from_str::<TMLedgerData>(json).unwrap().write_to_bytes().unwrap(),
+            "ProposeSet" => serde_json::from_str::<TMProposeSet>(json).unwrap().write_to_bytes().unwrap(),
+            "StatusChange" => serde_json::from_str::<TMStatusChange>(json).unwrap().write_to_bytes().unwrap(),
+            "HaveTransactionSet" => serde_json::from_str::<TMHaveTransactionSet>(json).unwrap().write_to_bytes().unwrap(),
+            "Validation" => serde_json::from_str::<TMValidation>(json).unwrap().write_to_bytes().unwrap(),
+            "GetObjectByHash" => serde_json::from_str::<TMGetObjectByHash>(json).unwrap().write_to_bytes().unwrap(),
+            "GetShardInfo" => serde_json::from_str::<TMGetShardInfo>(json).unwrap().write_to_bytes().unwrap(),
+            "ShardInfo" => serde_json::from_str::<TMShardInfo>(json).unwrap().write_to_bytes().unwrap(),
+            "GetPeerShardInfo" => serde_json::from_str::<TMGetPeerShardInfo>(json).unwrap().write_to_bytes().unwrap(),
+            "PeerShardInfo" => serde_json::from_str::<TMPeerShardInfo>(json).unwrap().write_to_bytes().unwrap(),
+            "ValidatorList" => serde_json::from_str::<TMValidatorList>(json).unwrap().write_to_bytes().unwrap(),
+            _ => error!()
+        }
+    }
 }
 
 impl Display for RippleMessageObject {

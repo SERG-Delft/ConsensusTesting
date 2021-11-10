@@ -1190,6 +1190,7 @@ dependencies = [
  "powershell_script",
  "protobuf",
  "protobuf-codegen-pure",
+ "rand 0.8.4",
  "ripemd160",
  "ripple-address-codec",
  "secp256k1",

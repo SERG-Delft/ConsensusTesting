@@ -1,6 +1,10 @@
 use std::collections::HashMap;
 use std::net::{SocketAddr, Ipv4Addr, IpAddr};
 use std::thread;
+use std::thread::sleep;
+use std::time::Duration;
+use std::fs::File;
+use std::io::{BufRead, BufReader, Read};
 
 use log::*;
 use itertools::Itertools;
@@ -8,8 +12,9 @@ use itertools::Itertools;
 use super::{EmptyResult};
 use crate::client::{Client};
 use crate::collector::{Collector};
+use crate::message_handler::RippleMessageObject;
 use crate::peer_connection::PeerConnection;
-use crate::scheduler::{PeerChannel, Scheduler};
+use crate::scheduler::{Event, PeerChannel, Scheduler};
 
 
 const _NODE_PRIVATE_KEY: &str = "e55dc8f3741ac9668dbe858409e5d64f5ce88380f7228eccfe82b92b2c7848ba";
@@ -136,21 +141,21 @@ impl App {
         // Connect websocket client to ripples
         for i in 0..self.peers {
             let _client = Client::new(i, format!("ws://127.0.0.1:600{}", 5+i).as_str(), subscription_tx.clone());
-            // let sender_clone = client.sender_channel.clone();
-            // threads.push(thread::spawn(move || {
-            //     let mut counter = 0;
-            //     // Send payment transaction every 10 seconds
-            //     loop {
-            //         sleep(Duration::from_secs(10));
-            //         Client::sign_and_submit(
-            //             &sender_clone,
-            //             format!("Ripple{}: {}", i, &*counter.to_string()).as_str(),
-            //             &Client::create_payment_transaction(_AMOUNT, _ACCOUNT_ID, _GENESIS_ADDRESS),
-            //             _GENESIS_SEED
-            //         );
-            //         counter += 1;
-            //     }
-            // }));
+            let sender_clone = _client.sender_channel.clone();
+            threads.push(thread::spawn(move || {
+                let mut counter = 0;
+                // Send payment transaction every 10 seconds
+                loop {
+                    sleep(Duration::from_secs(10));
+                    Client::sign_and_submit(
+                        &sender_clone,
+                        format!("Ripple{}: {}", i, &*counter.to_string()).as_str(),
+                        &Client::create_payment_transaction(_AMOUNT, _ACCOUNT_ID, _GENESIS_ADDRESS),
+                        _GENESIS_SEED
+                    );
+                    counter += 1;
+                }
+            }));
         }
 
         for tokio_task in tokio_tasks {
@@ -162,9 +167,34 @@ impl App {
         Ok(())
     }
 
+    pub async fn start_replay(&self) {
+        let file = File::open("execution.txt").unwrap();
+        let buf_reader = BufReader::new(file);
+        let t0 = Duration::from_secs(buf_reader.lines()[0].split(" ")[0] as u64);
+        for line in buf_reader.lines() {
+            Self::parse_event(t0, line.unwrap());
+        }
+    }
+
+    fn parse_event(t0: Duration, line: String) -> ReplayEvent {
+        let split: Vec<&str> = line.split(" ").collect();
+        let t1 = split[0];
+        let from = (split[1].chars().last() as uszie)  - 1;
+        let to = (split[3].chars().last() as usize) - 1;
+        let duration = Duration::from_secs(t1 as u64).checked_sub(t0).unwrap();
+        let message: Vec<u8> = RippleMessageObject::from_str(&split[5][..split[5].len() - 1], split[6..].join(""));
+        let event = Event { from, to, message };
+        ReplayEvent { event, duration }
+    }
+
     fn get_addrs(&self, peers: u16) -> Vec<SocketAddr> {
         let nodes = (0..peers).map(|x| SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127,0,0,1)), 51235 + x)).collect();
         debug!("{:?}", nodes);
         nodes
     }
+}
+
+struct ReplayEvent {
+    event: Event,
+    duration: Duration
 }
