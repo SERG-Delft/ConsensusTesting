@@ -3,7 +3,7 @@ use crate::protos::ripple::{TMManifest, TMPing, TMCluster, TMEndpoints, TMTransa
 use serde_json;
 
 /// Deserialize message
-pub fn invoke_protocol_message(message_type: u16, payload: &[u8]) -> RippleMessageObject {
+pub fn parse_protocol_message(message_type: u16, payload: &[u8]) -> RippleMessageObject {
     let proto_message: RippleMessageObject = match message_type {
         2 => RippleMessageObject::TMManifest(parse_message::<TMManifest>(&payload)),
         3 => RippleMessageObject::TMPing(parse_message::<TMPing>(&payload)),

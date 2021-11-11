@@ -1,0 +1,77 @@
+Online vs offline schedule
+Creating an offline schedule might create infeasible schedules. Therefore, prefer online schedule.
+
+Online schedule
+Message buffer from which the sheduler picks. How to decide message buffer size. Options are: Max delay of messages, max size of buffer. 
+The bigger the buffer the greater the search space. Perhaps increase buffer size as options are exhausted?
+Better? option: Decide delay as message comes in. Will rely on message representation. Advantage is that messages will not have to be initially delayed for the buffer to fill.
+
+Is the execution only dependent on the order of the messages, or also on the exact timing of the message?
+I believe also the exact timing. Internal events happen at 'random' moments in a round. A message receive event before or after that internal event might result
+in a different state change (and different message send events). This determines that the scheduler will not only work on ordering, but also exact delay.
+In essence, delay can result in different ordering so it's perhaps best to work only with delays and allow the delays to be the building block for different message ordering.
+This will capture both order violation and atomicity violation message timing bugs.
+
+How will a genetic algorithm represent an online schedule?
+How will messages be identified? Some options:
+1. messages identified by the position at which they are received by the scheduler.
+   Chomosome is a vector of delays, where d_i is the delay applied to the i_th message received.
+2. messages identified by their type, sender and receiver. Chromosome is a map from type, sender and receiver to delay.
+3. A combination of type, sender or receiver.
+
+What are the advantages and disadvantages of the options:
+1. Con: The position at which they arrive is dependent on previous events. Different results with same chromosome. Pro: simple representation.
+2. Con: Multiple messages with the same identifier are treated equally. The same chromosome might still give different results due to non-determinism (A message arrives later in one test case compared to another)
+   Pro: Less dependence in the chromosome on previous events (still some, but not directly in the representation). allows different number of messages between test cases.
+	A chromosome that is similar also represents a relatively similar test case.
+	Length of the chromosome assuming only consensus messages are delayed: # of different messages * # of nodes * # of nodes - 1 = 6 * 5 * 4 = 120.
+3. Pro: Allows for a flexible level of abstraction. Con: Tradeoff between independent representation and simplicity.
+
+I prefer 2.
+
+What is my test case?
+Need to think about performance. Having to restart the containers after every test case is not an option, or needs to be very quick.
+Preferably, test cases are performed over subsequent rounds. This requires some way of checking the stability of the network to make sure the test cases are independent from each other.
+Some options: One validated ledger, or one transaction applied to a validated ledger.
+All test cases begin in a stable state (what is a stable state?) and end when a particular ledger is validated.
+A stable state is a state where all validators validate the same ledgers at the same time (set a ms threshold for time difference).
+If the network is not in a stable state, it means that the previous test was succesful in some way? Restart containers in that case.
+If stable, the next test case starts when it first receives a message belonging to a new round.
+
+How to determine the result of a test case? Links with fitness function
+Some metrics without instrumenting rippled code:
+- The number of rounds / time / number of messages it took to get to the desired validated ledger
+- The stability of the network after the test case. Measured as the maximum time difference between two validators in the network validating the same ledger.
+- Black box heuristics: The difference between the test case and previous test cases in terms of messages.
+
+With instrumenting rippled code:
+- Target one or multiple exceptions (or invariants) in rippled code and provide feedback to the algorithm on distance to hitting that exception.
+- Black-box heuristics: Measure code coverage in rippled throughout a diverse set of tests.
+
+TaxDC terminology
+Different error symptoms
+1. Local errors:
+	(explicit)
+	a. memory (null pointer)
+	b. semantic error (exceptions)
+	(silent)
+	c. Hanging process
+	d. local silent state corruption (half-cleaned temp files)
+
+2. global errors:
+	(explicit)
+	a. Wrong message from other node (results in exception in message handling)
+	(silent)
+	b. Missing message (node waits for message without timeout)
+	c. Global silent state corruption
+
+Will this happen in ripple and how do we catch it
+1a. Is possible and will cause an exception or error log message hopefully (TODO: Investigate further)
+1b. Specific exceptions can be targeted and will show up in error logs
+1c. Ripple node will likely stop participating in consensus
+1d. Difficult to find, will likely skip this type of bug
+2a. Is less likely as rippled nodes are very robust to other nodes' messages
+2b. Is less likely as rippled is highly synchronized by the heartbeat mechanism and will timeout
+2c. Can be seen as validating different ledgers, or creating a fork. Easily detectable
+
+
