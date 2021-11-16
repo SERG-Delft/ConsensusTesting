@@ -74,4 +74,25 @@ Will this happen in ripple and how do we catch it
 2b. Is less likely as rippled is highly synchronized by the heartbeat mechanism and will timeout
 2c. Can be seen as validating different ledgers, or creating a fork. Easily detectable
 
+Communication closure
+Will I still implement the communication closure. It's possible to isolate processes. The lossy synchronous semantics is harder to enforce.
+Could enforce sending messages of one round and phase only. For example,
+- Open phase: Only allow transaction disseminating
+- Establish phase: Only allow proposeSet messages (maybe multiple rounds, identified by ProposeSeq)
+- Accept phase: Only allow validation messages
 
+How to determine what phase. 
+open -> establish, when all nodes have sent at least one proposeSet message.
+establish -> accept, StatusChange(AcceptedLedger) message is sent by at least one node. Drop all proposeSet message afer that?
+accept -> open, LedgerValidated by all nodes, or StatusChange(ClosingLedger) by at least one node. Drop all other Validation messages after that?
+Difficulty is in the asynchronicity of consensus rounds and validation rounds.
+
+Uniform lossy sychronous semantics is valid for synchronized rounds where a single process sends messages or when all messages are sent to the same process.
+This does not happen in ripple. All processes send messages to all processes in all rounds. At best lossy synchronous
+
+Is ripple communication closed? (lossy synchronous) Not all messages carry round number information. Transaction messages, e.g., are round-agnostic. ProposeSet does not contain a round seq, but it does
+contain a prevLedgerHash. The algorithm can use this hash to determine the round number of a node. Shaky at best. Validation message contains ledger sequence in serialized data.
+StatusChange always contains ledgerseq.
+
+Some issues:
+A delayed message might be sent after the algorithm decides that a phase is finished. Fix: First get all messages from a phase and send them afterwards.
