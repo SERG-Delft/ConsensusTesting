@@ -48,6 +48,8 @@ With instrumenting rippled code:
 - Target one or multiple exceptions (or invariants) in rippled code and provide feedback to the algorithm on distance to hitting that exception.
 - Black-box heuristics: Measure code coverage in rippled throughout a diverse set of tests.
 
+The fitness function is non-deterministic (messages may arrive later in subsquent tests). https://ieeexplore.ieee.org/document/8046380
+
 TaxDC terminology
 Different error symptoms
 1. Local errors:

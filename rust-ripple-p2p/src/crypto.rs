@@ -9,11 +9,10 @@ pub fn derive_seed(pass_phrase: &String) -> [u8; 16] {
 }
 
 #[cfg(test)]
+#[allow(dead_code)]
 mod tests {
-    use std::convert::TryInto;
     use ripple_address_codec::Algorithm::Secp256k1;
     use ripple_address_codec::Entropy;
-    use super::*;
 
     struct Setup {
         genesis_passphrase: String,
