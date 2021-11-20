@@ -9,6 +9,7 @@ use byteorder::{BigEndian, ByteOrder};
 use crate::client::{SubscriptionObject};
 use crate::collector::RippleMessage;
 use crate::message_handler::{invoke_protocol_message, RippleMessageObject};
+use crate::deserialization::deserialize;
 
 type P2PConnections = HashMap<usize, HashMap<usize, PeerChannel>>;
 
@@ -38,6 +39,10 @@ impl Scheduler {
 
     fn execute_event(&self, event: Event) {
         let rmo: RippleMessageObject = invoke_protocol_message(BigEndian::read_u16(&event.message[4..6]), &event.message[6..]);
+        match rmo {
+            RippleMessageObject::TMValidation(ref x) => {deserialize(x.get_validation())}
+            _ => {}
+        }
         self.collector_sender.send(RippleMessage::new(format!("Ripple{}", event.from+1), format!("Ripple{}", event.to+1), Utc::now(), rmo)).expect("Collector receiver failed");
         self.p2p_connections.get(&event.to).unwrap().get(&event.from).unwrap().send(event.message);
     }
