@@ -10,6 +10,7 @@ use crate::client::{Client};
 use crate::collector::{Collector};
 use crate::peer_connection::PeerConnection;
 use crate::scheduler::{PeerChannel, Scheduler};
+use crate::genetic_algorithm;
 
 
 const _NODE_PRIVATE_KEY: &str = "e55dc8f3741ac9668dbe858409e5d64f5ce88380f7228eccfe82b92b2c7848ba";
@@ -78,6 +79,10 @@ impl App {
             let mut peer_receivers = HashMap::new();
             let mut scheduler_peer_channels = HashMap::new();
             let (scheduler_sender, scheduler_receiver) = tokio::sync::mpsc::channel(32);
+            let (ga_scheduler_sender, ga_scheduler_receiver) = std::sync::mpsc::channel();
+            let (scheduler_ga_sender, scheduler_ga_receiver) = std::sync::mpsc::channel();
+
+            thread::spawn(||genetic_algorithm::run(ga_scheduler_sender, scheduler_ga_receiver));
 
             for pair in (0..peer).into_iter().combinations(2).into_iter() {
                 let i = pair[0] as usize;
@@ -96,7 +101,7 @@ impl App {
 
             let scheduler = Scheduler::new(scheduler_peer_channels, collector_tx);
             let scheduler_thread = thread::spawn(move || {
-                scheduler.start(scheduler_receiver, scheduler_state_rx);
+                scheduler.start(scheduler_receiver, scheduler_state_rx, scheduler_ga_sender, ga_scheduler_receiver);
             });
             threads.push(scheduler_thread);
 

@@ -466,8 +466,6 @@ dependencies = [
 [[package]]
 name = "genevo"
 version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0bdbb05647aa37e450f4d74dacd117f136632c5e9000bac657466a7ae5d891c8"
 dependencies = [
  "chrono",
  "getrandom",

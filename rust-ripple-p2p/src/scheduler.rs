@@ -1,4 +1,4 @@
-use log::{trace, error};
+use log::{debug, trace, error};
 use std::collections::HashMap;
 use chrono::Utc;
 use tokio::sync::mpsc::{Sender as TokioSender, Receiver as TokioReceiver};
@@ -6,10 +6,12 @@ use std::sync::mpsc::{Sender as STDSender, Receiver as STDReceiver, channel};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
+use chrono::{Duration as ChronoDuration};
 use byteorder::{BigEndian, ByteOrder};
 use rand::Rng;
 use crate::client::{SubscriptionObject};
 use crate::collector::RippleMessage;
+use crate::genetic_algorithm::{DelayMapPhenotype, MessageType};
 use crate::message_handler::{parse_protocol_message, RippleMessageObject};
 
 type P2PConnections = HashMap<usize, HashMap<usize, PeerChannel>>;
@@ -25,7 +27,8 @@ pub struct Scheduler {
     collector_sender: STDSender<Box<RippleMessage>>,
     stable: Arc<Mutex<bool>>,
     latest_validated_ledger: Arc<Mutex<u32>>,
-    current_round: Arc<Mutex<u32>>
+    current_round: Arc<Mutex<u32>>,
+    current_delays: Arc<Mutex<DelayMapPhenotype>>,
 }
 
 impl Scheduler {
@@ -35,23 +38,32 @@ impl Scheduler {
             collector_sender,
             stable: Arc::new(Mutex::new(false)),
             latest_validated_ledger: Arc::new(Mutex::new(0)),
-            current_round: Arc::new(Mutex::new(0))
+            current_round: Arc::new(Mutex::new(0)),
+            current_delays: Arc::new(Mutex::new(DelayMapPhenotype::default())),
         }
     }
 
     /// Starts peer and collector listening threads and listens to the scheduler for executing messages afer delay
-    pub fn start(self, receiver: TokioReceiver<Event>, collector_receiver: STDReceiver<SubscriptionObject>) {
+    pub fn start(self,
+                 receiver: TokioReceiver<Event>,
+                 collector_receiver: STDReceiver<SubscriptionObject>,
+                 ga_sender: STDSender<ChronoDuration>,
+                 ga_receiver: STDReceiver<DelayMapPhenotype>
+    ) {
         let stable_clone = self.stable.clone();
         let latest_validated_ledger_clone = self.latest_validated_ledger.clone();
         let (event_schedule_sender, event_schedule_receiver) = channel();
         let stable_clone_2 = self.stable.clone();
         let current_round_clone = self.current_round.clone();
-        thread::spawn(move || Self::listen_to_collector(collector_receiver, stable_clone, latest_validated_ledger_clone));
-        thread::spawn(move || Self::listen_to_peers(stable_clone_2, current_round_clone, receiver, event_schedule_sender));
+        let current_delays_clone = self.current_delays.clone();
+        let current_delays_clone_2 = self.current_delays.clone();
+        thread::spawn(move || Self::listen_to_collector(collector_receiver, stable_clone, latest_validated_ledger_clone, ga_sender));
+        thread::spawn(move || Self::listen_to_peers(stable_clone_2, current_round_clone, current_delays_clone, receiver, event_schedule_sender));
+        thread::spawn(move || Self::listen_to_ga(current_delays_clone_2, ga_receiver));
         loop {
             match event_schedule_receiver.recv() {
                 Ok(event) => self.execute_event(event),
-                Err(_) => error!("Scheduler sender failed")
+                Err(_) => panic!("Scheduler sender failed")
             }
         }
     }
@@ -72,7 +84,7 @@ impl Scheduler {
     /// Listen to messages sent by peers
     /// If the network is not stable, immediately relay messages
     /// Else schedule messages with a certain delay
-    fn listen_to_peers(stable: Arc<Mutex<bool>>, current_round: Arc<Mutex<u32>>, mut receiver: TokioReceiver<Event>, event_schedule_sender: STDSender<Event>) {
+    fn listen_to_peers(stable: Arc<Mutex<bool>>, current_round: Arc<Mutex<u32>>, current_delays: Arc<Mutex<DelayMapPhenotype>>, mut receiver: TokioReceiver<Event>, event_schedule_sender: STDSender<Event>) {
         loop {
             while !*stable.lock().unwrap() {
                 match receiver.blocking_recv() {
@@ -87,10 +99,22 @@ impl Scheduler {
             match receiver.blocking_recv() {
                 Some(event) => {
                     let rmo = parse_protocol_message(BigEndian::read_u16(&event.message[4..6]), &event.message[6..]);
+                    let mut ms: u32;
+                    {
+                        let message_type_map = current_delays.lock().unwrap().delay_map.get(&event.from).unwrap().get(&event.to).unwrap().clone();
+                        ms = match rmo {
+                            RippleMessageObject::TMTransaction(_) => message_type_map.get(&MessageType::TMTransaction).unwrap().clone(),
+                            RippleMessageObject::TMProposeSet(_) => message_type_map.get(&MessageType::TMProposeSet).unwrap().clone(),
+                            RippleMessageObject::TMStatusChange(_) => message_type_map.get(&MessageType::TMStatusChange).unwrap().clone(),
+                            RippleMessageObject::TMHaveTransactionSet(_) => message_type_map.get(&MessageType::TMHaveTransactionSet).unwrap().clone(),
+                            _ => 0
+                        };
+                    }
+                    let duration = Duration::from_millis(ms as u64);
                     Self::update_current_round(rmo, current_round.clone());
                     ScheduledEvent::schedule_execution(
                         event,
-                        Self::random_delay(0f32, 500f32),
+                        duration,
                         event_schedule_sender.clone()
                     )
                 },
@@ -101,26 +125,51 @@ impl Scheduler {
 
     /// Listen to messages from the collector
     /// Responsible for determining stability and latest validated ledger of the network
-    fn listen_to_collector(collector_receiver: STDReceiver<SubscriptionObject>, stable: Arc<Mutex<bool>>, latest_validated_ledger: Arc<Mutex<u32>>) {
+    fn listen_to_collector(
+        collector_receiver: STDReceiver<SubscriptionObject>,
+        stable: Arc<Mutex<bool>>,
+        latest_validated_ledger: Arc<Mutex<u32>>,
+        ga_sender: STDSender<ChronoDuration>
+    ) {
         let mut set_stable = false;
         let mut local_latest_validated_ledger = 0;
+        let mut duration_since_last_ledger: ChronoDuration;
+        let mut now = Utc::now();
         loop {
             match collector_receiver.recv() {
                 Ok(subscription_object) => {
                     match subscription_object {
                         SubscriptionObject::ValidatedLedger(ledger) => {
-                            if !set_stable {
-                                *stable.lock().unwrap() = true;
-                                set_stable = true;
-                            }
                             if local_latest_validated_ledger < ledger.ledger_index {
                                 *latest_validated_ledger.lock().unwrap() = ledger.ledger_index;
                                 local_latest_validated_ledger = ledger.ledger_index;
+                                if set_stable {
+                                    duration_since_last_ledger = Utc::now().signed_duration_since(now);
+                                    ga_sender.send(duration_since_last_ledger).expect("scheduler_ga_receiver failed");
+                                    *stable.lock().unwrap() = false;
+                                    set_stable = false;
+                                } else {
+                                    *stable.lock().unwrap() = true;
+                                    set_stable = true;
+                                    now = Utc::now();
+                                }
                             }
                         }
                         _ => {}
                     }
                 }
+                Err(_) => {}
+            }
+        }
+    }
+
+    fn listen_to_ga(current_delays: Arc<Mutex<DelayMapPhenotype>>, ga_receiver: STDReceiver<DelayMapPhenotype>) {
+        loop {
+            match ga_receiver.recv() {
+                Ok(new_delays) => {
+                    *current_delays.lock().unwrap() = new_delays;
+                    debug!("New delays received");
+                },
                 Err(_) => {}
             }
         }

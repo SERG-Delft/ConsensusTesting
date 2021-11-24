@@ -40,3 +40,6 @@ itertools = "0.10.1"
 chrono = "0.4.19"
 rand = "0.8.4"
 genevo = "0.7.0"
+
+[patch.crates-io]
+genevo = { path = "../genevo"}
