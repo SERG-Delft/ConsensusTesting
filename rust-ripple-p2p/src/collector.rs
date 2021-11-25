@@ -46,6 +46,7 @@ impl Collector {
     }
 
     pub fn start(&mut self) {
+        let mut latest_ledger = 0;
         loop {
             // Stop writing to file if any control message is received
             // Can be extended to start writing to file later
@@ -64,7 +65,10 @@ impl Collector {
             match self.subscription_receiver.try_recv() {
                 Ok(subscription_object) => match subscription_object.subscription_object {
                     SubscriptionObject::ValidatedLedger(ledger) => {
-                        println!("Ledger {} is validated", ledger.ledger_index);
+                        if ledger.ledger_index > latest_ledger {
+                            println!("Ledger {} is validated", ledger.ledger_index);
+                            latest_ledger = ledger.ledger_index;
+                        }
                         self.write_to_subscription_file(subscription_object.peer, json!({"LedgerValidated": ledger}).to_string());
                         self.scheduler_sender.send(SubscriptionObject::ValidatedLedger(ledger.clone())).expect("Scheduler send failed");
                     }

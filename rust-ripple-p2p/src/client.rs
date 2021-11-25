@@ -170,7 +170,7 @@ impl Client<'static> {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Debug)]
 #[serde(rename_all = "PascalCase")]
 pub struct Transaction {
     #[serde(rename = "Account")]
@@ -197,7 +197,7 @@ pub struct Transaction {
     pub data: Option<Payment>
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Eq, PartialEq, Debug)]
 pub enum TransactionType {
     Payment,
     OfferCreate,
@@ -216,7 +216,7 @@ pub enum TransactionType {
     DepositPreauth
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Eq, PartialEq, Debug)]
 pub struct Payment  {
     #[serde(rename = "Amount")]
     pub amount: u32,

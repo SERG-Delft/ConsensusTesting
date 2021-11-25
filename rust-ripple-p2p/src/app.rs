@@ -72,6 +72,11 @@ impl App {
         });
         threads.push(collector_task);
 
+        let mut clients = vec![];
+        for i in 0..self.peers {
+            clients.push(Client::new(i, format!("ws://127.0.0.1:600{}", 5+i).as_str(), subscription_tx.clone()));
+        }
+
         // Start p2p connections
         if !self.only_subscribe {
             let addrs = self.get_addrs(self.peers);
@@ -101,7 +106,7 @@ impl App {
 
             let scheduler = Scheduler::new(scheduler_peer_channels, collector_tx);
             let scheduler_thread = thread::spawn(move || {
-                scheduler.start(scheduler_receiver, scheduler_state_rx, scheduler_ga_sender, ga_scheduler_receiver);
+                scheduler.start(scheduler_receiver, scheduler_state_rx, scheduler_ga_sender, ga_scheduler_receiver, clients[0].sender_channel.clone());
             });
             threads.push(scheduler_thread);
 
@@ -139,8 +144,8 @@ impl App {
             }
         }
         // Connect websocket client to ripples
-        for i in 0..self.peers {
-            let _client = Client::new(i, format!("ws://127.0.0.1:600{}", 5+i).as_str(), subscription_tx.clone());
+        // for i in 0..self.peers {
+        //     let _client = Client::new(i, format!("ws://127.0.0.1:600{}", 5+i).as_str(), subscription_tx.clone());
             // let sender_clone = client.sender_channel.clone();
             // threads.push(thread::spawn(move || {
             //     let mut counter = 0;
@@ -156,7 +161,7 @@ impl App {
             //         counter += 1;
             //     }
             // }));
-        }
+        // }
 
         for tokio_task in tokio_tasks {
             tokio_task.await.expect("task failed");

@@ -15,6 +15,7 @@ use genevo::prelude::{build_population, GenerationLimit, Population, SimResult, 
 use genevo::reinsertion::elitist::ElitistReinserter;
 use genevo::types::fmt::Display;
 
+/// Parameters for the GA
 #[derive(Debug)]
 struct Parameter {
     population_size: usize,
@@ -46,8 +47,10 @@ impl Default for Parameter {
     }
 }
 
+// TODO: Get this info from main (global constant?)
 const NUM_NODES: usize = 5;
 
+/// The message types that will be subject to delay
 #[derive(Debug, Eq, PartialEq, Hash, Clone, Copy)]
 pub enum MessageType {
     TMProposeSet,
@@ -60,9 +63,10 @@ impl MessageType {
     const VALUES: [Self; 4] = [Self::TMProposeSet, Self::TMStatusChange, Self::TMTransaction, Self::TMHaveTransactionSet];
 }
 
-// The phenotype
+// The phenotype from -> to -> message_type -> delay (ms)
 type DelayMap = HashMap<usize, HashMap<usize, HashMap<MessageType, u32>>>;
 
+/// Contains the delayMap for easy use in the scheduler and delays as genotype (vec)
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct DelayMapPhenotype {
     pub delay_map: DelayMap,
@@ -98,48 +102,12 @@ impl Phenotype<DelaysGenotype> for DelayMapPhenotype {
     }
 
     fn derive(&self, new_genes: DelaysGenotype) -> Self {
-        let index_factor_1 = MessageType::VALUES.len() * (NUM_NODES-1);
-        let index_factor_2 = MessageType::VALUES.len();
-        let mut from_node = HashMap::new();
-        for i in 0..NUM_NODES {
-            let mut to_node = HashMap::new();
-            for (j, node) in chain(0..i, i+1..NUM_NODES).enumerate() {
-                let mut message_type = HashMap::new();
-                for (k, message) in MessageType::VALUES.iter().enumerate() {
-                    message_type.insert(*message, new_genes[index_factor_1 * i + index_factor_2 * j + k]);
-                }
-                to_node.insert(node+1, message_type.clone());
-            }
-            from_node.insert(i+1, to_node.clone());
-        }
-        Self {
-            delay_map: from_node,
-            delays: new_genes
-        }
+        DelayMapPhenotype::from(&new_genes)
     }
 }
 
 // The genotype
 type DelaysGenotype = Vec<u32>;
-
-// #[derive(Clone, Debug, PartialEq, Default, Eq, Hash)]
-// pub struct DelaysGenotype {
-//     delays: Delays
-// }
-//
-// impl Genotype for DelaysGenotype {
-//     type Dna = Delays;
-// }
-//
-// impl ValueEncoded for DelaysGenotype {}
-//
-// impl MultiPointCrossover for DelaysGenotype {
-//     type Dna = Delays;
-//
-//     fn crossover<R>(parents: Parents<Self>, num_cut_points: usize, rng: &mut R) -> Children<Self> where R: Rng + Sized {
-//         Delays::crossover(parents, num_cut_points, rng)
-//     }
-// }
 
 /// Duration in ms from start of test case to validated ledger
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
@@ -168,6 +136,7 @@ impl AsScalar for FitnessValue {
     }
 }
 
+/// Fitness function communicates with scheduler handler for calculating and storing fitness of solutions.
 #[derive(Clone, Debug)]
 pub struct FitnessCalculation {
     fitness_values: Arc<RwLock<HashMap<DelaysGenotype, Duration>>>,
@@ -210,10 +179,12 @@ impl FitnessFunction<DelaysGenotype, FitnessValue> for FitnessCalculation {
     }
 
     fn lowest_possible_fitness(&self) -> FitnessValue {
-        FitnessValue { time: Duration::seconds(3) }
+        FitnessValue { time: Duration::seconds(2) }
     }
 }
 
+/// Scheduler handler is in charge of communicating new schedules to the scheduler
+/// Fitness functions send to this handler to request fitness values for untested solutions
 pub struct SchedulerHandler {
     scheduler_sender: Sender<DelayMapPhenotype>,
     scheduler_receiver: Receiver<Duration>,
@@ -257,6 +228,7 @@ impl SchedulerHandler {
     }
 }
 
+/// Run the genetic algorithm
 pub fn run(scheduler_sender: Sender<DelayMapPhenotype>, scheduler_receiver: Receiver<Duration>) {
     let params = Parameter::default();
     let initial_population: Population<DelaysGenotype> = build_population()

@@ -1288,6 +1288,7 @@ dependencies = [
  "native-tls",
  "num_cpus",
  "openssl",
+ "parking_lot 0.11.2",
  "powershell_script",
  "protobuf",
  "protobuf-codegen-pure",
