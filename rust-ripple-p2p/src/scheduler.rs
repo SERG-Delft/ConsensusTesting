@@ -14,6 +14,7 @@ use crate::client::{SubscriptionObject};
 use crate::collector::RippleMessage;
 use crate::genetic_algorithm::{DelayMapPhenotype, MessageType};
 use crate::message_handler::{parse_protocol_message, RippleMessageObject};
+use crate::node_state::NodeState;
 use crate::test_harness::TestHarness;
 
 type P2PConnections = HashMap<usize, HashMap<usize, PeerChannel>>;
@@ -32,10 +33,11 @@ pub struct Scheduler {
     latest_validated_ledger: Arc<(Mutex<u32>, Condvar)>,
     current_round: Arc<(Mutex<u32>, Condvar)>,
     current_delays: Arc<Mutex<DelayMapPhenotype>>,
+    node_states: Arc<(Mutex<Vec<NodeState>>, Condvar)>,
 }
 
 impl Scheduler {
-    pub fn new(p2p_connections: P2PConnections, collector_sender: STDSender<Box<RippleMessage>>) -> Self {
+    pub fn new(p2p_connections: P2PConnections, collector_sender: STDSender<Box<RippleMessage>>, node_states: Arc<(Mutex<Vec<NodeState>>, Condvar)>) -> Self {
         Scheduler {
             p2p_connections,
             collector_sender,
@@ -44,6 +46,7 @@ impl Scheduler {
             latest_validated_ledger: Arc::new((Mutex::new(0), Condvar::new())),
             current_round: Arc::new((Mutex::new(0), Condvar::new())),
             current_delays: Arc::new(Mutex::new(DelayMapPhenotype::default())),
+            node_states,
         }
     }
 
@@ -91,25 +94,12 @@ impl Scheduler {
     fn listen_to_peers(run: Arc<(Mutex<bool>, Condvar)>, current_round: Arc<(Mutex<u32>, Condvar)>, current_delays: Arc<Mutex<DelayMapPhenotype>>, mut receiver: TokioReceiver<Event>, event_schedule_sender: STDSender<Event>) {
         let (run_lock, _run_cvar) = &*run;
         loop {
-            while !*run_lock.lock() {
-                match receiver.blocking_recv() {
-                    Some(event) => {
-                        let rmo = parse_protocol_message(BigEndian::read_u16(&event.message[4..6]), &event.message[6..]);
-                        ScheduledEvent::schedule_execution(
-                            event,
-                            Duration::ZERO,
-                            event_schedule_sender.clone()
-                        );
-                        Self::update_current_round(rmo, current_round.clone());
-                    },
-                    None => error!("Peer senders failed")
-                }
-            }
             match receiver.blocking_recv() {
                 Some(event) => {
                     let rmo = parse_protocol_message(BigEndian::read_u16(&event.message[4..6]), &event.message[6..]);
                     let ms: u32;
-                    {
+                    // If the network is ready to apply the test case, determine delay of message, else delay = 0
+                    if *run_lock.lock() {
                         let message_type_map = current_delays.lock().delay_map.get(&event.from).unwrap().get(&event.to).unwrap().clone();
                         ms = match rmo {
                             RippleMessageObject::TMTransaction(_) => message_type_map.get(&MessageType::TMTransaction).unwrap().clone(),
@@ -118,6 +108,8 @@ impl Scheduler {
                             RippleMessageObject::TMHaveTransactionSet(_) => message_type_map.get(&MessageType::TMHaveTransactionSet).unwrap().clone(),
                             _ => 0
                         };
+                    } else {
+                        ms = 0;
                     }
                     let duration = Duration::from_millis(ms as u64);
                     Self::update_current_round(rmo, current_round.clone());

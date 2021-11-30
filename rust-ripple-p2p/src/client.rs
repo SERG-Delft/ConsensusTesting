@@ -70,7 +70,7 @@ impl Client<'static> {
                             Ok(subscription_object) => {
                                 subscription_collector_sender.send(PeerSubscriptionObject::new(peer, subscription_object)).unwrap()
                             },
-                            Err(_) => { warn!("Could not parse") }
+                            Err(_) => { warn!("Could not parse: {}", text) }
                         }
                     },
                     _ => debug!("Receive Loop: {:?}", message)
@@ -79,7 +79,7 @@ impl Client<'static> {
         });
 
         // Start subscription
-        Client::subscribe(&tx, format!("Ripple{} subscription", peer).as_str(), vec!["consensus", "ledger", "validations", "peer_status"]);
+        Client::subscribe(&tx, format!("Ripple{} subscription", peer).as_str(), vec!["consensus", "ledger", "validations", "peer_status", "transactions_proposed"]);
 
         Client {
             peer,
@@ -121,6 +121,8 @@ impl Client<'static> {
             source_tag: None,
             signing_pub_key: None,
             txn_signature: None,
+            date: None,
+            hash: None,
             data: Some(payment)
         }
     }
@@ -170,7 +172,7 @@ impl Client<'static> {
     }
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Eq, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Debug, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct Transaction {
     #[serde(rename = "Account")]
@@ -178,7 +180,7 @@ pub struct Transaction {
     #[serde(rename = "TransactionType")]
     pub transaction_type: TransactionType,
     #[serde(rename = "Fee", skip_serializing_if = "Option::is_none")]
-    pub fee: Option<u32>,
+    pub fee: Option<String>,
     #[serde(rename = "Sequence", skip_serializing_if = "Option::is_none")]
     pub sequence: Option<u32>,
     #[serde(rename = "AccountTxnID", skip_serializing_if = "Option::is_none")]
@@ -193,11 +195,15 @@ pub struct Transaction {
     pub signing_pub_key: Option<String>,
     #[serde(rename = "TxnSignature", skip_serializing_if = "Option::is_none")]
     pub txn_signature: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub date: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hash: Option<String>,
     #[serde(rename = "Data", skip_serializing_if = "Option::is_none", flatten)]
     pub data: Option<Payment>
 }
 
-#[derive(Serialize, Deserialize, Eq, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Eq, PartialEq, Debug, Clone)]
 pub enum TransactionType {
     Payment,
     OfferCreate,
@@ -216,7 +222,7 @@ pub enum TransactionType {
     DepositPreauth
 }
 
-#[derive(Serialize, Deserialize, Eq, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Eq, PartialEq, Debug, Clone)]
 pub struct Payment  {
     #[serde(rename = "Amount")]
     pub amount: u32,
@@ -232,7 +238,7 @@ pub struct Payment  {
     pub deliver_min: Option<u32>
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Default, Debug)]
 pub struct ValidatedLedger {
     #[serde(skip_serializing)]
     pub fee_base: u32,
@@ -303,7 +309,7 @@ pub struct PeerStatusChange {
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct ConsensusChange {
-    consensus: String
+    pub consensus: String
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -316,7 +322,26 @@ pub enum SubscriptionObject {
     #[serde(rename = "peerStatusChange")]
     PeerStatusChange(PeerStatusChange),
     #[serde(rename = "consensusPhase")]
-    ConsensusChange(ConsensusChange)
+    ConsensusChange(ConsensusChange),
+    #[serde(rename = "transaction")]
+    Transaction(TransactionSubscription),
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct TransactionSubscription {
+    engine_result: String,
+    engine_result_code: u32,
+    engine_result_message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    ledger_current_index: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    status: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    ledger_hash: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    ledger_index: Option<u32>,
+    transaction: Transaction,
+    validated: bool,
 }
 
 pub struct PeerSubscriptionObject {
