@@ -14,7 +14,7 @@ use crate::client::{SubscriptionObject};
 use crate::collector::RippleMessage;
 use crate::genetic_algorithm::{DelayMapPhenotype, MessageType};
 use crate::message_handler::{parse_protocol_message, RippleMessageObject};
-use crate::node_state::NodeState;
+use crate::node_state::{MutexNodeStates};
 use crate::test_harness::TestHarness;
 
 type P2PConnections = HashMap<usize, HashMap<usize, PeerChannel>>;
@@ -33,11 +33,11 @@ pub struct Scheduler {
     latest_validated_ledger: Arc<(Mutex<u32>, Condvar)>,
     current_round: Arc<(Mutex<u32>, Condvar)>,
     current_delays: Arc<Mutex<DelayMapPhenotype>>,
-    node_states: Arc<(Mutex<Vec<NodeState>>, Condvar)>,
+    node_states: Arc<MutexNodeStates>,
 }
 
 impl Scheduler {
-    pub fn new(p2p_connections: P2PConnections, collector_sender: STDSender<Box<RippleMessage>>, node_states: Arc<(Mutex<Vec<NodeState>>, Condvar)>) -> Self {
+    pub fn new(p2p_connections: P2PConnections, collector_sender: STDSender<Box<RippleMessage>>, node_states: Arc<MutexNodeStates>) -> Self {
         Scheduler {
             p2p_connections,
             collector_sender,
@@ -69,10 +69,13 @@ impl Scheduler {
         let current_delays_clone_2 = self.current_delays.clone();
         let run_clone = self.run.clone();
         let run_clone_2 = self.run.clone();
+        let node_states_clone = self.node_states.clone();
+        let node_states_clone_2 = self.node_states.clone();
         thread::spawn(move || Self::listen_to_collector(collector_receiver, latest_validated_ledger_clone));
-        thread::spawn(move || Self::listen_to_peers(run_clone_2, current_round_clone, current_delays_clone, receiver, event_schedule_sender));
+        thread::spawn(move || Self::listen_to_peers(run_clone_2, current_delays_clone, receiver, event_schedule_sender));
         thread::spawn(move || Self::listen_to_ga(current_delays_clone_2, ga_receiver));
-        thread::spawn(move || Self::harness_controller(ga_sender, client_sender, latest_validated_ledger_clone_2, current_round_clone_2, stable_clone, run_clone));
+        thread::spawn(move || Self::update_current_round(node_states_clone, current_round_clone));
+        thread::spawn(move || Self::harness_controller(ga_sender, client_sender, latest_validated_ledger_clone_2, current_round_clone_2, stable_clone, run_clone, node_states_clone_2));
         loop {
             match event_schedule_receiver.recv() {
                 Ok(event) => self.execute_event(event),
@@ -91,7 +94,7 @@ impl Scheduler {
     /// Listen to messages sent by peers
     /// If the network is not stable, immediately relay messages
     /// Else schedule messages with a certain delay
-    fn listen_to_peers(run: Arc<(Mutex<bool>, Condvar)>, current_round: Arc<(Mutex<u32>, Condvar)>, current_delays: Arc<Mutex<DelayMapPhenotype>>, mut receiver: TokioReceiver<Event>, event_schedule_sender: STDSender<Event>) {
+    fn listen_to_peers(run: Arc<(Mutex<bool>, Condvar)>, current_delays: Arc<Mutex<DelayMapPhenotype>>, mut receiver: TokioReceiver<Event>, event_schedule_sender: STDSender<Event>) {
         let (run_lock, _run_cvar) = &*run;
         loop {
             match receiver.blocking_recv() {
@@ -112,7 +115,6 @@ impl Scheduler {
                         ms = 0;
                     }
                     let duration = Duration::from_millis(ms as u64);
-                    Self::update_current_round(rmo, current_round.clone());
                     ScheduledEvent::schedule_execution(
                         event,
                         duration,
@@ -152,6 +154,7 @@ impl Scheduler {
         }
     }
 
+    /// Listen to the genetic algorithm for new individuals to test
     fn listen_to_ga(current_delays: Arc<Mutex<DelayMapPhenotype>>, ga_receiver: STDReceiver<DelayMapPhenotype>) {
         loop {
             match ga_receiver.recv() {
@@ -165,22 +168,19 @@ impl Scheduler {
     }
 
     /// Update the current round if a message is received with a higher ledger sequence number
-    fn update_current_round(rmo: RippleMessageObject, current_round: Arc<(Mutex<u32>, Condvar)>) {
-        let round = match rmo {
-            RippleMessageObject::TMGetLedger(get_ledger) => get_ledger.get_ledgerSeq(),
-            RippleMessageObject::TMLedgerData(ledger_data) => ledger_data.get_ledgerSeq(),
-            // RippleMessageObject::TMProposeSet(propose_set) => propose_set.get TODO: Use previous ledger hash to find ledgerSeq
-            RippleMessageObject::TMStatusChange(status_change) => status_change.get_ledgerSeq(),
-            //RippleMessageObject::TMValidation(_) => {} TODO: after deserialization can find ledgerSeq
-            _ => 0
-        };
-        if round > 0 {
-            let (ref lock, ref cvar) = &*current_round;
-            let mut locked_round = lock.lock();
-            if round > *locked_round {
-                println!("Updating round to {}", round);
-                *locked_round = round;
-                cvar.notify_all();
+    fn update_current_round(node_states: Arc<MutexNodeStates>, current_round: Arc<(Mutex<u32>, Condvar)>) {
+        loop {
+            let mut node_states_mutex = node_states.node_states.lock();
+            node_states.round_cvar.wait(&mut node_states_mutex);
+            let round = node_states_mutex.max_current_round();
+            if round > 0 {
+                let (ref lock, ref cvar) = &*current_round;
+                let mut locked_round = lock.lock();
+                if round > *locked_round {
+                    println!("Updating round to {}", round);
+                    *locked_round = round;
+                    cvar.notify_all();
+                }
             }
         }
     }
@@ -195,7 +195,8 @@ impl Scheduler {
         latest_validated_ledger: Arc<(Mutex<u32>, Condvar)>,
         current_round: Arc<(Mutex<u32>, Condvar)>,
         stable: Arc<(Mutex<bool>, Condvar)>,
-        run: Arc<(Mutex<bool>, Condvar)>
+        run: Arc<(Mutex<bool>, Condvar)>,
+        node_states: Arc<MutexNodeStates>,
     ) {
         let (ledger_lock, ledger_cvar) = &*latest_validated_ledger;
         let (stable_lock, stable_cvar) = &*stable;
@@ -219,17 +220,20 @@ impl Scheduler {
                 println!("Round update received: {}", *round_number);
                 // Start test as soon as a message is encountered for a new round (TODO: Use subscription messages for quicker determination)
                 if *round_number > first_round {
+                    node_states.clear_transactions();
+                    println!("After clear: {}", node_states.get_min_validated_transactions());
                     *run_lock.lock() = true;
                     drop(round_number);
                     println!("Starting test harness run");
                     run_cvar.notify_all();
                     let start = Utc::now();
-                    let number_of_ledgers = test_harness.number_of_ledgers.clone();
+                    let number_of_transactions = test_harness.transactions.len();
                     test_harness.schedule_transactions();
-                    // Wait for the last ledger of the test harness to have been validated
-                    while *ledger_number <= first_round + (number_of_ledgers as u32) {
-                        ledger_cvar.wait(&mut ledger_number);
+                    // Wait for all transactions to have been validated
+                    while node_states.get_min_validated_transactions() < number_of_transactions {
+                        node_states.transactions_cvar.wait(&mut node_states.node_states.lock());
                     }
+                    println!("After wait: {}", node_states.get_min_validated_transactions());
                     println!("Test harness over");
                     let fitness = Utc::now().signed_duration_since(start);
                     *run_lock.lock() = false;

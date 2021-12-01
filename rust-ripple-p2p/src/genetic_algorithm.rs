@@ -40,7 +40,7 @@ impl Default for Parameter {
             generation_limit: 100,
             num_individuals_per_parents: 2,
             selection_ratio: 0.7,
-            num_crossover_points: Self::num_genes() / NUM_NODES,
+            num_crossover_points: Self::num_genes() / (NUM_NODES * (NUM_NODES - 1)),
             mutation_rate: 0.05,
             reinsertion_ratio: 0.7,
         }
@@ -56,7 +56,7 @@ pub enum MessageType {
     TMProposeSet,
     TMStatusChange,
     TMTransaction,
-    TMHaveTransactionSet
+    TMHaveTransactionSet,
 }
 
 impl MessageType {
@@ -109,7 +109,7 @@ impl Phenotype<DelaysGenotype> for DelayMapPhenotype {
 // The genotype
 type DelaysGenotype = Vec<u32>;
 
-/// Duration in ms from start of test case to validated ledger
+/// Duration in ms from start of test case to validated ledger with all transactions
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
 struct FitnessValue {
     time: Duration
@@ -185,6 +185,7 @@ impl FitnessFunction<DelaysGenotype, FitnessValue> for FitnessCalculation {
 
 /// Scheduler handler is in charge of communicating new schedules to the scheduler
 /// Fitness functions send to this handler to request fitness values for untested solutions
+/// Calculated fitness values are stored in the fitness_values map and fitness functions will first check there
 pub struct SchedulerHandler {
     scheduler_sender: Sender<DelayMapPhenotype>,
     scheduler_receiver: Receiver<Duration>,
@@ -205,6 +206,7 @@ impl SchedulerHandler {
     fn run(self) {
         let mut current_delays_genotype = DelaysGenotype::default();
         loop {
+            // Receive a new individual to test from a fitness function
             match self.fitness_receiver.recv() {
                 Ok(delays_genotype) => {
                     println!("Fitness function wants fitness for: {:?}", delays_genotype);
@@ -214,9 +216,11 @@ impl SchedulerHandler {
                 }
                 Err(_) => {}
             }
+            // Send the requested individual to the scheduler
             println!("delay genome before send: {:?}", current_delays_genotype);
             self.scheduler_sender.send(DelayMapPhenotype::from(current_delays_genotype.as_ref()))
                 .expect("Scheduler receiver failed");
+            // Receive fitness from scheduler
             match self.scheduler_receiver.recv() {
                 Ok(duration) => {
                     println!("Received fitness of {} for genome: {:?}", duration, current_delays_genotype);
@@ -231,6 +235,7 @@ impl SchedulerHandler {
 /// Run the genetic algorithm
 pub fn run(scheduler_sender: Sender<DelayMapPhenotype>, scheduler_receiver: Receiver<Duration>) {
     let params = Parameter::default();
+    // Create initial population of size 8, uniformly distributed over the range of possible values
     let initial_population: Population<DelaysGenotype> = build_population()
         .with_genome_builder(ValueEncodedGenomeBuilder::new(Parameter::num_genes(), 0, 1000))
         .of_size(8)
@@ -246,15 +251,16 @@ pub fn run(scheduler_sender: Sender<DelayMapPhenotype>, scheduler_receiver: Rece
 
     let ga = genetic_algorithm()
         .with_evaluation(fitness_calculation.clone())
-        .with_selection(RouletteWheelSelector::new(
-            params.selection_ratio,
-            params.num_individuals_per_parents
+        .with_selection(RouletteWheelSelector::new( // Proportionate selection
+            params.selection_ratio,                             // How many tuples of individuals should be selected to be used by recombination?
+            params.num_individuals_per_parents                  // How many individuals are used in a single recombination (usually 2)
         ))
+        // Multi-point crossover
         .with_crossover(MultiPointCrossBreeder::new(params.num_crossover_points))
         .with_mutation(RandomValueMutator::new(params.mutation_rate, 32, 126))
         .with_reinsertion(ElitistReinserter::new(
             fitness_calculation,
-            true,
+            false,
             params.reinsertion_ratio,
         ))
         .with_initial_population(initial_population)

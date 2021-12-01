@@ -8,12 +8,12 @@ use serde_json::json;
 use crate::client::{ConsensusChange, PeerSubscriptionObject, SubscriptionObject};
 use crate::message_handler::RippleMessageObject;
 use chrono::{DateTime, Utc};
-use parking_lot::{Condvar, Mutex};
-use crate::node_state::{ConsensusPhase, MutexNodeStates, NodeState, NodeStates};
+use crate::node_state::{ConsensusPhase, MutexNodeStates};
 
-/// Collects and writes data to files
+/// Collects and writes data to files and the scheduler
 /// Execution file stores all messages sent from the proxy
 /// Subscription file stores all subscription messages received from the client
+/// Node states contains the current state of all nodes individually, info is received from subscriptions
 pub struct Collector {
     ripple_message_receiver: Receiver<Box<RippleMessage>>,
     subscription_receiver: Receiver<PeerSubscriptionObject>,
@@ -53,31 +53,33 @@ impl Collector {
 
     pub fn start(&mut self) {
         let mut latest_ledger = 0;
-        // let &(ref node_states_lock, ref node_states_cvar) = &*self.node_states.clone();
         loop {
             // Stop writing to file if any control message is received
-            // Can be extended to start writing to file later
+            // Can be extended to start writing to file later, currently not implemented
             match self.control_receiver.try_recv() {
                 Ok(_) => {
                     break;
                 }
                 _ => {}
             }
+            // Write all messages sent by the scheduler to peers to "execution.txt". After delay!
             match self.ripple_message_receiver.try_recv() {
                 Ok(mut message) => {
                     self.write_to_file(&mut message);
                 }
                 _ => {}
             }
+            // Handle subscription streams in a central place, TODO: refactor to own associated method.
             match self.subscription_receiver.try_recv() {
                 Ok(subscription_object) => match subscription_object.subscription_object {
                     SubscriptionObject::ValidatedLedger(ledger) => {
+                        // The first time a new ledger is validated by one of the nodes, consider this ledger validated
+                        // TODO: Determine whether we want all nodes to have validated the ledger.
                         if ledger.ledger_index > latest_ledger {
                             println!("Ledger {} is validated", ledger.ledger_index);
                             latest_ledger = ledger.ledger_index;
                         }
                         self.node_states.set_validated_ledger(subscription_object.peer as usize,ledger.clone());
-                        node_states_cvar.notify_all();
                         self.write_to_subscription_file(subscription_object.peer, json!({"LedgerValidated": ledger}).to_string());
                         self.scheduler_sender.send(SubscriptionObject::ValidatedLedger(ledger.clone())).expect("Scheduler send failed");
                     }
@@ -86,16 +88,30 @@ impl Collector {
                     SubscriptionObject::PeerStatusChange(peer_status) =>
                         self.write_to_subscription_file(subscription_object.peer, json!({"PeerStatus": peer_status}).to_string()),
                     SubscriptionObject::ConsensusChange(consensus_change) => {
+                        // Use new consensus phase to determine the current round of consensus of the node
                         let new_consensus_phase = Self::parse_consensus_change(consensus_change.clone());
-                        let node_state = &mut (*node_states_lock.lock())[subscription_object.peer as usize];
-                        if new_consensus_phase == ConsensusPhase::Open && node_state.consensus_phase == ConsensusPhase::Accepted { node_state.current_consensus_round += 1 }
-                        node_state.consensus_phase = new_consensus_phase;
-                        println!("{:?}", node_state);
-                        node_states_cvar.notify_all();
+                        // TODO: Sometimes open phase is skipped (this should never happen, so is a bug I should catch) Accept -> Establish
+                        if new_consensus_phase == ConsensusPhase::Open {
+                            let old_round = self.node_states.get_current_round(subscription_object.peer as usize);
+                            self.node_states.set_current_round(subscription_object.peer as usize, old_round + 1);
+                        }
+                        self.node_states.set_consensus_phase(subscription_object.peer as usize, new_consensus_phase);
+                        println!("{:?}", self.node_states.node_states.lock().node_states[subscription_object.peer as usize]);
                         self.write_to_subscription_file(subscription_object.peer, json!({"ConsensusChange": consensus_change}).to_string());
                     }
                     SubscriptionObject::Transaction(transaction_subscription) => {
-                        // if subscription_object.peer == 4 { println!("Transaction subscription received: {:?}", transaction_subscription); }
+                        // Transactions can be validated or unvalidated
+                        if transaction_subscription.validated {
+                            self.node_states.add_validated_transaction(
+                                subscription_object.peer as usize,
+                                transaction_subscription.transaction.txn_signature.clone().unwrap()
+                            );
+                        } else {
+                            self.node_states.add_unvalidated_transaction(
+                                subscription_object.peer as usize,
+                                transaction_subscription.transaction.txn_signature.clone().unwrap()
+                            );
+                        }
                         self.write_to_subscription_file(subscription_object.peer, json!({"Transaction": transaction_subscription}).to_string())
                     }
                 },
@@ -122,6 +138,7 @@ impl Collector {
     }
 }
 
+/// Struct for writing clearly to execution.txt, should definitely rename
 pub struct RippleMessage {
     from_node: String,
     to_node: String,
@@ -137,6 +154,8 @@ impl RippleMessage {
 
 impl Display for RippleMessage {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        // Use the ripple_epoch (seconds since 2000-01-01T00:00:00+00:00) for easier cross-referencing with ripple logs
+        // TODO: Store actual time and perhaps node_state information at time of send. (This is after delay!)
         let ripple_epoch = DateTime::parse_from_rfc3339("2000-01-01T00:00:00+00:00").unwrap();
         let from_node_buf = &self.from_node;
         let to_node_buf = &self.to_node;

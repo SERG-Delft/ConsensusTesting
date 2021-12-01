@@ -6,6 +6,10 @@ use serde::{Serialize, Deserialize};
 use std::thread::JoinHandle;
 use log::*;
 
+/// Client struct responsible for handling websocket connection to ripple node
+/// Start a send and receive thread,
+/// To send to node, use sender_channel
+/// Handle received messages in receive loop
 #[allow(unused)]
 pub struct Client<'a> {
     peer: u16,
@@ -64,7 +68,6 @@ impl Client<'static> {
                     }
                 };
                 match message {
-                    // Say what we received
                     OwnedMessage::Text(text) => {
                         match serde_json::from_str::<SubscriptionObject>(text.as_str()) {
                             Ok(subscription_object) => {
@@ -78,7 +81,7 @@ impl Client<'static> {
             }
         });
 
-        // Start subscription
+        // Start subscriptions
         Client::subscribe(&tx, format!("Ripple{} subscription", peer).as_str(), vec!["consensus", "ledger", "validations", "peer_status", "transactions_proposed"]);
 
         Client {
@@ -95,6 +98,7 @@ impl Client<'static> {
         self.receive_loop.join().unwrap();
     }
 
+    // Create a payment transaction
     #[allow(unused)]
     pub fn create_payment_transaction(amount: u32,
                                       destination_id: &str,
@@ -151,6 +155,7 @@ impl Client<'static> {
         tx.send(Message::text(json.to_string())).unwrap();
     }
 
+    // Sign and submit a transaction to the network
     #[allow(unused)]
     pub fn sign_and_submit(tx: &Sender<Message>, id: &str, transaction: &Transaction, secret: &str) {
         let json = json!({
@@ -172,6 +177,8 @@ impl Client<'static> {
     }
 }
 
+/// A transaction struct containing some, but not all, fields a ripple transaction can hold
+/// Used for communication with node by serde (de)serialization
 #[derive(Serialize, Deserialize, PartialEq, Eq, Debug, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct Transaction {
@@ -203,6 +210,7 @@ pub struct Transaction {
     pub data: Option<Payment>
 }
 
+/// The different transaction types
 #[derive(Serialize, Deserialize, Eq, PartialEq, Debug, Clone)]
 pub enum TransactionType {
     Payment,
@@ -222,6 +230,7 @@ pub enum TransactionType {
     DepositPreauth
 }
 
+/// Fields specific to a payment transaction
 #[derive(Serialize, Deserialize, Eq, PartialEq, Debug, Clone)]
 pub struct Payment  {
     #[serde(rename = "Amount")]
@@ -238,6 +247,7 @@ pub struct Payment  {
     pub deliver_min: Option<u32>
 }
 
+/// A validated ledger struct received from the ledger subscription stream
 #[derive(Serialize, Deserialize, Clone, Default, Debug)]
 pub struct ValidatedLedger {
     #[serde(skip_serializing)]
@@ -256,6 +266,8 @@ pub struct ValidatedLedger {
     pub validated_ledgers: Option<String>
 }
 
+/// A validation message received by the node from some other node (or itself)
+/// Received from the validations subscription stream
 #[allow(unused)]
 #[derive(Serialize, Deserialize, Clone)]
 pub struct ReceivedValidation {
@@ -281,6 +293,7 @@ pub struct ReceivedValidation {
     validation_public_key: String
 }
 
+/// A type of peer status event, sent when a peer of this node changes status
 #[derive(Serialize, Deserialize, Clone)]
 pub enum PeerStatusEvent {
     #[serde(rename = "CLOSING_LEDGER")]
@@ -293,6 +306,8 @@ pub enum PeerStatusEvent {
     LostSync
 }
 
+/// A peer status event, sent when a peer of this node changes status
+/// Sent by the peer_status subscription stream
 #[derive(Serialize, Deserialize, Clone)]
 pub struct PeerStatusChange {
     action: PeerStatusEvent,
@@ -307,11 +322,14 @@ pub struct PeerStatusChange {
     ledger_index_min: Option<u32>,
 }
 
+/// A consensus phase change done by this node
+/// Sent by the consensus subscription stream
 #[derive(Serialize, Deserialize, Clone)]
 pub struct ConsensusChange {
     pub consensus: String
 }
 
+/// The different types of subscription objects
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(tag = "type")]
 pub enum SubscriptionObject {
@@ -327,6 +345,9 @@ pub enum SubscriptionObject {
     Transaction(TransactionSubscription),
 }
 
+/// A transaction subscription object, received whenever a ledger is closed with this transaction.
+/// The same transaction is received again with validated true, when the ledger containing the transaction is validated.
+/// Sent by the transaction_proposed subscription stream.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct TransactionSubscription {
     engine_result: String,
@@ -340,10 +361,11 @@ pub struct TransactionSubscription {
     ledger_hash: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     ledger_index: Option<u32>,
-    transaction: Transaction,
-    validated: bool,
+    pub transaction: Transaction,
+    pub validated: bool,
 }
 
+/// A subscription object coupled to a peer.
 pub struct PeerSubscriptionObject {
     pub peer: u16,
     pub subscription_object: SubscriptionObject

@@ -11,19 +11,22 @@ const _ACCOUNT_ID: &str = "rE4DHSdcXafD7DkpJuFCAvc3CvsgXHjmEJ";
 const _GENESIS_ADDRESS: &str = "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh";
 const _GENESIS_SEED: &str = "snoPBrXtMeMyMHUVTgbuqAfg1SUTb";
 
+/// Struct containing transactions in the test harness.
+/// Transactions are created based on the contents of "harness.txt".
+/// Every line is one transaction where the number defines the time in ms since the start
+/// of the harness to apply the transaction to the network.
 #[derive(Debug)]
 pub struct TestHarness<'a> {
     pub transactions: Vec<TransactionTimed>,
-    pub number_of_ledgers: usize,
     pub client_sender: Sender<Message<'a>>
 }
 
 impl TestHarness<'static> {
+    // Parse the test harness file
     pub fn parse_test_harness(client_sender: Sender<Message<'static>>) -> Self {
         let file = File::open("harness.txt").unwrap();
         let buf_reader = BufReader::new(file);
         let mut lines = buf_reader.lines().map(|l| l.unwrap());
-        let number_of_ledgers: usize = lines.next().unwrap().parse::<usize>().expect("Number of ledgers not an int");
         let mut transactions = vec![];
         for line in lines {
             let transaction = Client::create_payment_transaction(_AMOUNT, _ACCOUNT_ID, _GENESIS_ADDRESS);
@@ -31,18 +34,19 @@ impl TestHarness<'static> {
             transactions.push(TransactionTimed { transaction, delay });
         }
         Self {
-            number_of_ledgers,
             transactions,
             client_sender,
         }
     }
 
+    // Schedule transactions in struct
     pub fn schedule_transactions(self) {
         for transaction in self.transactions {
             Self::schedule_transaction(transaction, self.client_sender.clone());
         }
     }
 
+    // Schedule a transaction according to its delay
     pub fn schedule_transaction(transaction: TransactionTimed, client_sender: Sender<Message<'static>>) {
         thread::spawn(move ||{
             thread::sleep(transaction.delay);
@@ -56,6 +60,7 @@ impl TestHarness<'static> {
     }
 }
 
+/// A transaction coupled with its delay
 #[derive(Eq, PartialEq, Debug)]
 pub struct TransactionTimed {
     transaction: Transaction,
@@ -69,9 +74,9 @@ mod harness_tests {
     use crate::client::Client;
     use crate::test_harness::{_ACCOUNT_ID, _AMOUNT, _GENESIS_ADDRESS, TestHarness, TransactionTimed};
 
+    // This test fails without a "harness.txt" containing 600, 1350, 6000 on separate lines
     #[test]
     fn parse_harness() {
-        let number_of_ledgers = 3;
         let transaction1 = TransactionTimed {
             transaction: Client::create_payment_transaction(_AMOUNT, _ACCOUNT_ID, _GENESIS_ADDRESS),
             delay: Duration::from_millis(600)
@@ -86,9 +91,8 @@ mod harness_tests {
         };
         let transactions = vec![transaction1, transaction2, transaction3];
         let (tx, rx) = channel();
-        let expected_harness = TestHarness { transactions, number_of_ledgers, client_sender: tx.clone() };
+        let expected_harness = TestHarness { transactions, client_sender: tx.clone() };
         let actual_harness = TestHarness::parse_test_harness(tx.clone());
         assert_eq!(actual_harness.transactions, expected_harness.transactions);
-        assert_eq!(actual_harness.number_of_ledgers, expected_harness.number_of_ledgers);
     }
 }
