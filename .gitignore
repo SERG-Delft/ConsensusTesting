@@ -25,4 +25,5 @@ config/validator*/rippled.cfg
 config/validator*/validators.txt
 rust-ripple-p2p/execution.txt
 rust-ripple-p2p/subscription*.json
+documents/results
 

@@ -12,6 +12,9 @@ mod crypto;
 mod collector;
 mod scheduler;
 mod peer_connection;
+mod genetic_algorithm;
+mod test_harness;
+mod node_state;
 
 type AnyError = Box<dyn std::error::Error + Send + Sync>;
 type AnyResult<T> = Result<T, AnyError>;
@@ -28,7 +31,6 @@ fn main() {
             Err(_) => false
         }
     } else { false };
-
 
     env_logger::Builder::new().parse_default_env().init();
 

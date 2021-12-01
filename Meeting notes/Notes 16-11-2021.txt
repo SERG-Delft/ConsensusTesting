@@ -1,2 +1,33 @@
 Meeting notes 16-11-2021
 Progress update
+
+- Online vs offline scheduling
+Do online scheduling
+
+- Buffer vs direct scheduling
+No need for buffer, just apply delay as soon as messages come in. Requires correct identification/encoding before test case.
+
+- Exact delay vs only reordering
+Exact delay is better for catching reordering internal events as well. Delays are building blocks for reordering messages as well.
+
+- Problem encoding
+See documents/MessageDelayEncoding in the repo. A message delay is identified by the sender, receiver and type of message.
+An individual consists of a delay for all combinations of sender, receiver and type.
+
+What is my test case?
+Two or three rounds would be good. Schedule transactions at some delay in these rounds as a test harness.
+
+Fitness function
+Will start with simple function, time till consensus. Possibly extend with # of rounds / # of messages.
+Later instrument code to target one or multiple branches of interest.
+
+TaxDC terminology
+Identified certain types of bugs and how to catch them.
+Validators decide on different transactions. Validation will most likely fail and consensus will retry?
+Catch this by looking at validation messages.
+One transaction applied twice. Double spend problem. If in supermajority of the validators, it will pass validation. Major bug.
+Check for this by inspecting validated ledgers and comparing to transactions submitted.
+
+Communication closure
+Big enough delay is similar to dropping a message. Transaction dissemination messages don't carry a round number.
+Will most likely not be complete in enumeration. Leave for now, might add later.

@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::net::{SocketAddr, Ipv4Addr, IpAddr};
+use std::sync::Arc;
 use std::thread;
 
 use log::*;
@@ -10,6 +11,8 @@ use crate::client::{Client};
 use crate::collector::{Collector};
 use crate::peer_connection::PeerConnection;
 use crate::scheduler::{PeerChannel, Scheduler};
+use crate::genetic_algorithm;
+use crate::node_state::{MutexNodeStates, NodeState, NodeStates};
 
 
 const _NODE_PRIVATE_KEY: &str = "e55dc8f3741ac9668dbe858409e5d64f5ce88380f7228eccfe82b92b2c7848ba";
@@ -65,11 +68,24 @@ impl App {
         let (subscription_tx, subscription_rx) = std::sync::mpsc::channel();
         let (collector_state_tx, scheduler_state_rx) = std::sync::mpsc::channel();
         let peer = self.peers.clone();
-        // Start the collector which writes output to files
+
+        let mut node_state_vec = vec![NodeState::new(0); peer as usize];
+        for i in 0..peer { node_state_vec[i as usize].peer = i as usize }
+        let node_states = NodeStates { node_states: node_state_vec };
+        let mutex_node_states = Arc::new(MutexNodeStates::new(node_states));
+        let mutex_node_states_clone = mutex_node_states.clone();
+
+        // Start the collector which writes output to files and collects information on nodes
         let collector_task = thread::spawn(move || {
-            Collector::new(peer, collector_rx, subscription_rx, control_rx, collector_state_tx).start();
+            Collector::new(peer, collector_rx, subscription_rx, control_rx, collector_state_tx, mutex_node_states_clone).start();
         });
         threads.push(collector_task);
+
+        // Create a client for each peer, which subscribes (among others) to certain streams
+        let mut clients = vec![];
+        for i in 0..self.peers {
+            clients.push(Client::new(i, format!("ws://127.0.0.1:600{}", 5+i).as_str(), subscription_tx.clone()));
+        }
 
         // Start p2p connections
         if !self.only_subscribe {
@@ -78,7 +94,13 @@ impl App {
             let mut peer_receivers = HashMap::new();
             let mut scheduler_peer_channels = HashMap::new();
             let (scheduler_sender, scheduler_receiver) = tokio::sync::mpsc::channel(32);
+            let (ga_scheduler_sender, ga_scheduler_receiver) = std::sync::mpsc::channel();
+            let (scheduler_ga_sender, scheduler_ga_receiver) = std::sync::mpsc::channel();
 
+            // Start the GA
+            thread::spawn(||genetic_algorithm::run(ga_scheduler_sender, scheduler_ga_receiver));
+
+            // For every combination (exclusive) of peers, create the necessary senders and receivers
             for pair in (0..peer).into_iter().combinations(2).into_iter() {
                 let i = pair[0] as usize;
                 let j = pair[1] as usize;
@@ -94,12 +116,14 @@ impl App {
                 scheduler_peer_channels.entry(j).or_insert(HashMap::new()).insert(i, PeerChannel::new(tx_scheduler_j));
             }
 
-            let scheduler = Scheduler::new(scheduler_peer_channels, collector_tx);
+            // Start the scheduler
+            let scheduler = Scheduler::new(scheduler_peer_channels, collector_tx, mutex_node_states);
             let scheduler_thread = thread::spawn(move || {
-                scheduler.start(scheduler_receiver, scheduler_state_rx);
+                scheduler.start(scheduler_receiver, scheduler_state_rx, scheduler_ga_sender, ga_scheduler_receiver, clients[0].sender_channel.clone());
             });
             threads.push(scheduler_thread);
 
+            // For every combination (exclusive) of peers, create connections between the peers and scheduler
             for pair in (0..peer).into_iter().combinations(2).into_iter() {
                 let i = pair[0] as usize;
                 let j = pair[1] as usize;
@@ -111,7 +135,6 @@ impl App {
                 let name = format!("ripple{}, ripple{}", i+1, j+1);
                 let address_i = addrs[i].clone();
                 let address_j = addrs[j].clone();
-                // let thread = thread::Builder::new().name(String::from(name.clone())).spawn(move || {
                 let peer = PeerConnection::new(
                     &name,
                     address_i,
@@ -132,25 +155,6 @@ impl App {
                 tokio_tasks.push(thread1);
                 tokio_tasks.push(thread2);
             }
-        }
-        // Connect websocket client to ripples
-        for i in 0..self.peers {
-            let _client = Client::new(i, format!("ws://127.0.0.1:600{}", 5+i).as_str(), subscription_tx.clone());
-            // let sender_clone = client.sender_channel.clone();
-            // threads.push(thread::spawn(move || {
-            //     let mut counter = 0;
-            //     // Send payment transaction every 10 seconds
-            //     loop {
-            //         sleep(Duration::from_secs(10));
-            //         Client::sign_and_submit(
-            //             &sender_clone,
-            //             format!("Ripple{}: {}", i, &*counter.to_string()).as_str(),
-            //             &Client::create_payment_transaction(_AMOUNT, _ACCOUNT_ID, _GENESIS_ADDRESS),
-            //             _GENESIS_SEED
-            //         );
-            //         counter += 1;
-            //     }
-            // }));
         }
 
         for tokio_task in tokio_tasks {

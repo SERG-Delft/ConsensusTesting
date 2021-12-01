@@ -12,6 +12,7 @@ use tokio_openssl::SslStream;
 use byteorder::{BigEndian, ByteOrder};
 use crate::scheduler::Event;
 
+/// A peer connection between two peers
 pub struct PeerConnection {
     name: String,
     address1: SocketAddr,

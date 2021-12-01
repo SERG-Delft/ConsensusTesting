@@ -1,3 +1,6 @@
 [submodule "rippled"]
 	path = rippled
 	url = https://github.com/mvanmeerten/rippled.git
+[submodule "genevo"]
+	path = genevo
+	url = https://github.com/mvanmeerten/genevo
