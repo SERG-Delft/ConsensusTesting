@@ -1,4 +1,5 @@
-use parking_lot::{Mutex, Condvar, MutexGuard};
+#![allow(dead_code)]
+use parking_lot::{Mutex, Condvar};
 use crate::client::ValidatedLedger;
 
 /// Contains the state for a particular node at a particular time

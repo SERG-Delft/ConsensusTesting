@@ -96,7 +96,7 @@ impl Collector {
                             self.node_states.set_current_round(subscription_object.peer as usize, old_round + 1);
                         }
                         self.node_states.set_consensus_phase(subscription_object.peer as usize, new_consensus_phase);
-                        println!("{:?}", self.node_states.node_states.lock().node_states[subscription_object.peer as usize]);
+                        // println!("{:?}", self.node_states.node_states.lock().node_states[subscription_object.peer as usize]);
                         self.write_to_subscription_file(subscription_object.peer, json!({"ConsensusChange": consensus_change}).to_string());
                     }
                     SubscriptionObject::Transaction(transaction_subscription) => {

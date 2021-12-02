@@ -9,9 +9,9 @@ use itertools::Itertools;
 use super::{EmptyResult};
 use crate::client::{Client};
 use crate::collector::{Collector};
+use crate::ga::genetic_algorithm;
 use crate::peer_connection::PeerConnection;
 use crate::scheduler::{PeerChannel, Scheduler};
-use crate::genetic_algorithm;
 use crate::node_state::{MutexNodeStates, NodeState, NodeStates};
 
 

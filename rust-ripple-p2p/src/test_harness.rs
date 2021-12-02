@@ -26,7 +26,7 @@ impl TestHarness<'static> {
     pub fn parse_test_harness(client_sender: Sender<Message<'static>>) -> Self {
         let file = File::open("harness.txt").unwrap();
         let buf_reader = BufReader::new(file);
-        let mut lines = buf_reader.lines().map(|l| l.unwrap());
+        let lines = buf_reader.lines().map(|l| l.unwrap());
         let mut transactions = vec![];
         for line in lines {
             let transaction = Client::create_payment_transaction(_AMOUNT, _ACCOUNT_ID, _GENESIS_ADDRESS);
@@ -90,7 +90,7 @@ mod harness_tests {
             delay: Duration::from_millis(6000)
         };
         let transactions = vec![transaction1, transaction2, transaction3];
-        let (tx, rx) = channel();
+        let (tx, _) = channel();
         let expected_harness = TestHarness { transactions, client_sender: tx.clone() };
         let actual_harness = TestHarness::parse_test_harness(tx.clone());
         assert_eq!(actual_harness.transactions, expected_harness.transactions);

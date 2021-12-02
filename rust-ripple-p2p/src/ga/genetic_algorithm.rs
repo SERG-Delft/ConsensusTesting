@@ -7,13 +7,13 @@ use chrono::Duration;
 use std::time::{Duration as TimeDuration};
 use genevo::ga::genetic_algorithm;
 use genevo::genetic::{AsScalar, Fitness, FitnessFunction, Phenotype};
-use genevo::mutation::value::RandomValueMutator;
 use genevo::operator::prelude::{MultiPointCrossBreeder, RouletteWheelSelector};
 use genevo::population::ValueEncodedGenomeBuilder;
 use itertools::{chain};
 use genevo::prelude::{build_population, GenerationLimit, Population, SimResult, simulate, Simulation, SimulationBuilder};
 use genevo::reinsertion::elitist::ElitistReinserter;
 use genevo::types::fmt::Display;
+use super::mutation::GaussianMutator;
 
 /// Parameters for the GA
 #[derive(Debug)]
@@ -25,6 +25,8 @@ struct Parameter {
     num_crossover_points: usize,
     mutation_rate: f64,
     reinsertion_ratio: f64,
+    min_delay: u32,
+    max_delay: u32,
 }
 
 impl Parameter {
@@ -43,6 +45,8 @@ impl Default for Parameter {
             num_crossover_points: Self::num_genes() / (NUM_NODES * (NUM_NODES - 1)),
             mutation_rate: 0.05,
             reinsertion_ratio: 0.7,
+            min_delay: 0,
+            max_delay: 1000,
         }
     }
 }
@@ -237,7 +241,7 @@ pub fn run(scheduler_sender: Sender<DelayMapPhenotype>, scheduler_receiver: Rece
     let params = Parameter::default();
     // Create initial population of size 8, uniformly distributed over the range of possible values
     let initial_population: Population<DelaysGenotype> = build_population()
-        .with_genome_builder(ValueEncodedGenomeBuilder::new(Parameter::num_genes(), 0, 1000))
+        .with_genome_builder(ValueEncodedGenomeBuilder::new(Parameter::num_genes(), params.min_delay, params.max_delay))
         .of_size(8)
         .uniform_at_random();
     println!("{:?}", initial_population);
@@ -257,7 +261,7 @@ pub fn run(scheduler_sender: Sender<DelayMapPhenotype>, scheduler_receiver: Rece
         ))
         // Multi-point crossover
         .with_crossover(MultiPointCrossBreeder::new(params.num_crossover_points))
-        .with_mutation(RandomValueMutator::new(params.mutation_rate, 32, 126))
+        .with_mutation(GaussianMutator::new(params.mutation_rate, 0.1 * (params.max_delay as f64)))
         .with_reinsertion(ElitistReinserter::new(
             fitness_calculation,
             false,
@@ -318,7 +322,7 @@ pub fn run(scheduler_sender: Sender<DelayMapPhenotype>, scheduler_receiver: Rece
 #[cfg(test)]
 mod ga_tests {
     use itertools::Itertools;
-    use crate::genetic_algorithm::{DelayMapPhenotype, DelaysGenotype};
+    use crate::ga::genetic_algorithm::{DelayMapPhenotype, DelaysGenotype};
 
     #[test]
     fn check_phenotype() {

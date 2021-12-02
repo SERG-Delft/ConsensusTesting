@@ -12,7 +12,7 @@ use byteorder::{BigEndian, ByteOrder};
 use websocket::Message;
 use crate::client::{SubscriptionObject};
 use crate::collector::RippleMessage;
-use crate::genetic_algorithm::{DelayMapPhenotype, MessageType};
+use crate::ga::genetic_algorithm::{DelayMapPhenotype, MessageType};
 use crate::message_handler::{parse_protocol_message, RippleMessageObject};
 use crate::node_state::{MutexNodeStates};
 use crate::test_harness::TestHarness;
@@ -221,7 +221,6 @@ impl Scheduler {
                 // Start test as soon as a message is encountered for a new round (TODO: Use subscription messages for quicker determination)
                 if *round_number > first_round {
                     node_states.clear_transactions();
-                    println!("After clear: {}", node_states.get_min_validated_transactions());
                     *run_lock.lock() = true;
                     drop(round_number);
                     println!("Starting test harness run");
@@ -233,7 +232,6 @@ impl Scheduler {
                     while node_states.get_min_validated_transactions() < number_of_transactions {
                         node_states.transactions_cvar.wait(&mut node_states.node_states.lock());
                     }
-                    println!("After wait: {}", node_states.get_min_validated_transactions());
                     println!("Test harness over");
                     let fitness = Utc::now().signed_duration_since(start);
                     *run_lock.lock() = false;
