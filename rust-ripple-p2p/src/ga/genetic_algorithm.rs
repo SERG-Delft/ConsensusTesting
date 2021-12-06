@@ -13,6 +13,7 @@ use itertools::{chain};
 use genevo::prelude::{build_population, GenerationLimit, Population, SimResult, simulate, Simulation, SimulationBuilder};
 use genevo::reinsertion::elitist::ElitistReinserter;
 use genevo::types::fmt::Display;
+use log::debug;
 use super::mutation::GaussianMutator;
 
 /// Parameters for the GA
@@ -213,7 +214,7 @@ impl SchedulerHandler {
             // Receive a new individual to test from a fitness function
             match self.fitness_receiver.recv() {
                 Ok(delays_genotype) => {
-                    println!("Fitness function wants fitness for: {:?}", delays_genotype);
+                    debug!("Fitness function wants fitness for: {:?}", delays_genotype);
                     if current_delays_genotype != delays_genotype && self.fitness_values.read().unwrap().contains_key(&current_delays_genotype) {
                         current_delays_genotype = delays_genotype;
                     }
@@ -221,13 +222,13 @@ impl SchedulerHandler {
                 Err(_) => {}
             }
             // Send the requested individual to the scheduler
-            println!("delay genome before send: {:?}", current_delays_genotype);
+            debug!("delay genome before send: {:?}", current_delays_genotype);
             self.scheduler_sender.send(DelayMapPhenotype::from(current_delays_genotype.as_ref()))
                 .expect("Scheduler receiver failed");
             // Receive fitness from scheduler
             match self.scheduler_receiver.recv() {
                 Ok(duration) => {
-                    println!("Received fitness of {} for genome: {:?}", duration, current_delays_genotype);
+                    debug!("Received fitness of {} for genome: {:?}", duration, current_delays_genotype);
                     self.fitness_values.write().unwrap().insert(current_delays_genotype.clone(), duration);
                 }
                 Err(_) => {}
@@ -317,6 +318,7 @@ pub fn run(scheduler_sender: Sender<DelayMapPhenotype>, scheduler_receiver: Rece
             },
         }
     }
+    // Todo: Terminate the program
 }
 
 #[cfg(test)]

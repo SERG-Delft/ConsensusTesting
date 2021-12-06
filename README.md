@@ -23,7 +23,7 @@ To run the network, follow the steps below.
 3. `.\Run.ps1 5 [p to start/stop the containers in parallel]` will run a private network with 5 nodes connected by the proxy
 4. Change directory to rust-ripple-p2p `cd ../rust-ripple-p2p`
 5. Run the proxy
-    - PowerShell: `$Env:RUST_LOG="trace";$Env:OPENSSL_DIR="[path/to/openssl/dir]"; cargo run [n (1-5)]`
+    - PowerShell: `$Env:RUST_LOG="error";$Env:OPENSSL_DIR="[path/to/openssl/dir]"; cargo run [n (1-5)]`
     - Other: `RUST_LOG=trace;OPENSSL_DIR=[path/to/openssl/dir] cargo run [n (1-5)]`
 
 ### Is the network validating ledgers?

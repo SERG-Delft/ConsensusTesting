@@ -53,10 +53,10 @@ impl Scheduler {
     /// Starts peer and collector listening threads and listens to the scheduler for executing messages after delay
     pub fn start(self,
                  receiver: TokioReceiver<Event>,
-                 collector_receiver: STDReceiver<SubscriptionObject>,
+                 _collector_receiver: STDReceiver<SubscriptionObject>,
                  ga_sender: STDSender<ChronoDuration>,
                  ga_receiver: STDReceiver<DelayMapPhenotype>,
-                 client_sender: STDSender<Message<'static>>
+                 client_senders: Vec<STDSender<Message<'static>>>
     )
     {
         let stable_clone = self.stable.clone();
@@ -71,11 +71,13 @@ impl Scheduler {
         let run_clone_2 = self.run.clone();
         let node_states_clone = self.node_states.clone();
         let node_states_clone_2 = self.node_states.clone();
-        thread::spawn(move || Self::listen_to_collector(collector_receiver, latest_validated_ledger_clone));
+        let node_states_clone_3 = self.node_states.clone();
+        // thread::spawn(move || Self::listen_to_collector(collector_receiver, latest_validated_ledger_clone));
         thread::spawn(move || Self::listen_to_peers(run_clone_2, current_delays_clone, receiver, event_schedule_sender));
         thread::spawn(move || Self::listen_to_ga(current_delays_clone_2, ga_receiver));
         thread::spawn(move || Self::update_current_round(node_states_clone, current_round_clone));
-        thread::spawn(move || Self::harness_controller(ga_sender, client_sender, latest_validated_ledger_clone_2, current_round_clone_2, stable_clone, run_clone, node_states_clone_2));
+        thread::spawn(move || Self::update_latest_validated_ledger(node_states_clone_3, latest_validated_ledger_clone));
+        thread::spawn(move || Self::harness_controller(ga_sender, client_senders, latest_validated_ledger_clone_2, current_round_clone_2, stable_clone, run_clone, node_states_clone_2));
         loop {
             match event_schedule_receiver.recv() {
                 Ok(event) => self.execute_event(event),
@@ -128,31 +130,31 @@ impl Scheduler {
 
     /// Listen to messages from the collector
     /// Responsible for determining stability and latest validated ledger of the network
-    fn listen_to_collector(
-        collector_receiver: STDReceiver<SubscriptionObject>,
-        latest_validated_ledger: Arc<(Mutex<u32>, Condvar)>,
-    )
-    {
-        let mut local_latest_validated_ledger = 0;
-        let (ledger_lock, ledger_cvar) = &*latest_validated_ledger;
-        loop {
-            match collector_receiver.recv() {
-                Ok(subscription_object) => {
-                    match subscription_object {
-                        SubscriptionObject::ValidatedLedger(ledger) => {
-                            if local_latest_validated_ledger < ledger.ledger_index {
-                                *ledger_lock.lock() = ledger.ledger_index;
-                                ledger_cvar.notify_all();
-                                local_latest_validated_ledger = ledger.ledger_index;
-                            }
-                        }
-                        _ => {}
-                    }
-                }
-                Err(_) => {}
-            }
-        }
-    }
+    // fn listen_to_collector(
+    //     collector_receiver: STDReceiver<SubscriptionObject>,
+    //     latest_validated_ledger: Arc<(Mutex<u32>, Condvar)>,
+    // )
+    // {
+    //     let mut local_latest_validated_ledger = 0;
+    //     let (ledger_lock, ledger_cvar) = &*latest_validated_ledger;
+    //     loop {
+    //         match collector_receiver.recv() {
+    //             Ok(subscription_object) => {
+    //                 match subscription_object {
+    //                     SubscriptionObject::ValidatedLedger(ledger) => {
+    //                         if local_latest_validated_ledger < ledger.ledger_index {
+    //                             *ledger_lock.lock() = ledger.ledger_index;
+    //                             ledger_cvar.notify_all();
+    //                             local_latest_validated_ledger = ledger.ledger_index;
+    //                         }
+    //                     }
+    //                     _ => {}
+    //                 }
+    //             }
+    //             Err(_) => {}
+    //         }
+    //     }
+    // }
 
     /// Listen to the genetic algorithm for new individuals to test
     fn listen_to_ga(current_delays: Arc<Mutex<DelayMapPhenotype>>, ga_receiver: STDReceiver<DelayMapPhenotype>) {
@@ -173,14 +175,28 @@ impl Scheduler {
             let mut node_states_mutex = node_states.node_states.lock();
             node_states.round_cvar.wait(&mut node_states_mutex);
             let round = node_states_mutex.max_current_round();
-            if round > 0 {
-                let (ref lock, ref cvar) = &*current_round;
-                let mut locked_round = lock.lock();
-                if round > *locked_round {
-                    println!("Updating round to {}", round);
-                    *locked_round = round;
-                    cvar.notify_all();
-                }
+            let (ref lock, ref cvar) = &*current_round;
+            let mut locked_round = lock.lock();
+            if round > *locked_round {
+                println!("Updating round to {}", round);
+                *locked_round = round;
+                cvar.notify_all();
+            }
+        }
+    }
+
+    /// Update the latest validated ledger if all nodes have validated a next ledger
+    fn update_latest_validated_ledger(node_states: Arc<MutexNodeStates>, latest_validated_ledger: Arc<(Mutex<u32>, Condvar)>) {
+        loop {
+            let mut node_states_mutex = node_states.node_states.lock();
+            node_states.validated_ledger_cvar.wait(&mut node_states_mutex);
+            let validated_ledger_index = node_states_mutex.min_validated_ledger();
+            let (ref lock, ref cvar) = &*latest_validated_ledger;
+            let mut locked_ledger_index = lock.lock();
+            if validated_ledger_index > *locked_ledger_index {
+                println!("Updating latest validated ledger to {}", validated_ledger_index);
+                *locked_ledger_index = validated_ledger_index;
+                cvar.notify_all();
             }
         }
     }
@@ -191,7 +207,7 @@ impl Scheduler {
     /// 3. Relaying fitness of chromosome over harness
     fn harness_controller(
         ga_sender: STDSender<ChronoDuration>,
-        client_sender: STDSender<Message<'static>>,
+        client_senders: Vec<STDSender<Message<'static>>>,
         latest_validated_ledger: Arc<(Mutex<u32>, Condvar)>,
         current_round: Arc<(Mutex<u32>, Condvar)>,
         stable: Arc<(Mutex<bool>, Condvar)>,
@@ -202,15 +218,17 @@ impl Scheduler {
         let (stable_lock, stable_cvar) = &*stable;
         let (round_lock, round_cvar) = &*current_round;
         let (run_lock, run_cvar) = &*run;
-        let mut ledger_number = ledger_lock.lock();
+        let mut execution_sequence = 0;
         // Every loop is one execution of the test harness
         loop {
-            let test_harness = TestHarness::parse_test_harness(client_sender.clone());
+            let test_harness = TestHarness::parse_test_harness(client_senders.clone(), execution_sequence);
+            let mut ledger_number = ledger_lock.lock();
             let first_validated_ledger = *ledger_number;
             println!("Waiting for network stabilization");
             ledger_cvar.wait(&mut ledger_number);
             // If another ledger has been validated, continue
             if *ledger_number > first_validated_ledger {
+                drop(ledger_number);
                 let mut round_number = round_lock.lock();
                 let first_round = *round_number;
                 *stable_lock.lock() = true;        // Network is deemed stable
@@ -231,6 +249,7 @@ impl Scheduler {
                     // Wait for all transactions to have been validated
                     while node_states.get_min_validated_transactions() < number_of_transactions {
                         node_states.transactions_cvar.wait(&mut node_states.node_states.lock());
+                        debug!("{} out of {} transactions validated, max: {}", node_states.get_min_validated_transactions(), number_of_transactions, node_states.get_max_validated_transaction());
                     }
                     println!("Test harness over");
                     let fitness = Utc::now().signed_duration_since(start);
@@ -242,6 +261,7 @@ impl Scheduler {
                     ga_sender.send(fitness).expect("GA receiver failed");
                 }
             }
+            execution_sequence += 1;
         }
     }
 }

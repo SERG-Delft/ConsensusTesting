@@ -48,7 +48,7 @@ impl Client<'static> {
                         ()
                     },
                     Err(e) => {
-                        debug!("Send Loop: {:?}", e);
+                        error!("Send Loop: {:?}", e);
                         let _ = sender.send_message(&Message::close());
                         return;
                     }
@@ -73,7 +73,13 @@ impl Client<'static> {
                             Ok(subscription_object) => {
                                 subscription_collector_sender.send(PeerSubscriptionObject::new(peer, subscription_object)).unwrap()
                             },
-                            Err(_) => { warn!("Could not parse: {}", text) }
+                            Err(_) => {
+                                if text.as_str().contains("Test harness") {
+                                    debug!("{}", text.as_str());
+                                } else {
+                                    warn!("Could not parse: {}", text)
+                                }
+                            }
                         }
                     },
                     _ => debug!("Receive Loop: {:?}", message)
@@ -82,7 +88,7 @@ impl Client<'static> {
         });
 
         // Start subscriptions
-        Client::subscribe(&tx, format!("Ripple{} subscription", peer).as_str(), vec!["consensus", "ledger", "validations", "peer_status", "transactions_proposed"]);
+        Client::subscribe(&tx, format!("Ripple{} subscription", peer).as_str(), vec!["consensus", "ledger", "validations", "peer_status", "transactions_proposed", "server"]);
 
         Client {
             peer,
@@ -100,9 +106,13 @@ impl Client<'static> {
 
     // Create a payment transaction
     #[allow(unused)]
-    pub fn create_payment_transaction(amount: u32,
-                                      destination_id: &str,
-                                      sender_address: &str) -> Transaction {
+    pub fn create_payment_transaction(
+        amount: u32,
+        destination_id: &str,
+        sender_address: &str,
+        sequence: Option<u32>,
+    ) -> Transaction
+    {
         // Create payment object for payment to account
         let payment = Payment {
             amount,
@@ -118,7 +128,7 @@ impl Client<'static> {
             account: String::from(sender_address),
             transaction_type: TransactionType::Payment,
             fee: None,
-            sequence: None,
+            sequence,
             account_txn_id: None,
             flags: None,
             last_ledger_sequence: None,
@@ -162,8 +172,14 @@ impl Client<'static> {
             "id": id,
             "command": "submit",
             "tx_json": transaction,
-            "secret": secret
+            "secret": secret,
+            "fee_mult_max": 10000000,
         });
+        match transaction.sequence {
+            Some(sequence) => debug!("Sending transaction: {}", sequence),
+            None => {},
+        }
+
         tx.send(Message::text(json.to_string())).unwrap();
     }
 
@@ -250,9 +266,7 @@ pub struct Payment  {
 /// A validated ledger struct received from the ledger subscription stream
 #[derive(Serialize, Deserialize, Clone, Default, Debug)]
 pub struct ValidatedLedger {
-    #[serde(skip_serializing)]
     pub fee_base: u32,
-    #[serde(skip_serializing)]
     pub fee_ref: u32,
     pub ledger_hash: String,
     pub ledger_index: u32,
@@ -273,14 +287,12 @@ pub struct ValidatedLedger {
 pub struct ReceivedValidation {
     #[serde(skip_serializing_if = "Option::is_none")]
     amendments: Option<Vec<String>>,
-    #[serde(skip_serializing)]
     base_fee: Option<u32>,
     #[serde(skip_serializing)]
     flags: u32,
     full: bool,
     ledger_hash: String,
     ledger_index: String,
-    #[serde(skip_serializing)]
     load_fee: Option<u32>,
     master_key: Option<String>,
     #[serde(skip_serializing)]
@@ -329,6 +341,19 @@ pub struct ConsensusChange {
     pub consensus: String
 }
 
+/// The status of the subscribed to server
+#[derive(Serialize, Deserialize, Clone)]
+pub struct ServerStatus {
+    base_fee: u32,
+    load_base: u32,
+    load_factor: u32,
+    load_factor_fee_escalation: u32,
+    load_factor_fee_queue: u32,
+    load_factor_fee_reference: u32,
+    load_factor_server: u32,
+    server_status: String,
+}
+
 /// The different types of subscription objects
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(tag = "type")]
@@ -343,6 +368,8 @@ pub enum SubscriptionObject {
     ConsensusChange(ConsensusChange),
     #[serde(rename = "transaction")]
     Transaction(TransactionSubscription),
+    #[serde(rename = "serverStatus")]
+    ServerStatus(ServerStatus),
 }
 
 /// A transaction subscription object, received whenever a ledger is closed with this transaction.

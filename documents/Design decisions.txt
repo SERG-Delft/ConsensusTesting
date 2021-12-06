@@ -81,3 +81,30 @@ I will investigate Actix actor model.
 04-11-2021
 Fixed the issue. The scheduler thread was hoarding cpu resources, causing certain messages to not be delivered or sent in time.
 A call to thread::yield_now() in every scheduler loop solves the issue finally.
+
+02-12-2021
+The delays are real-value endcoded. Decided to implement both gaussian and polynomial mutation as the literature suggests these provide the best results
+Test harness now runs until transactions are in validated ledger
+
+03-12-2021
+Ledger are now validated only when all nodes validated the ledger. Due to UNL, one node can slack. Want to also find that.
+
+06-12-2021
+- Transactions are quite fragile to submit. If in a short time many transactions involving the same account are transmitted, the sequence number cannot be autofilled.
+- The fees required for transactions in this case also quickly escalates. Setting the fee_mult_max high from its default 10 in the transaction_submit client method,
+solved the issue with not submitting transactions due to insufficient fees.
+- For one account a max of 10 transactions can be in the transaction queue at the same time. Either limit test harness to 10 transactions, or create multiple accounts.
+The possibilities are endless. How to know when queue filled up? Only way to know is to make a custom subscription in ripple (beyond the scope).
+Conclusion: Limit to 10 transactions per account, per test harness.
+- Transaction fee calculations are complicated due to supporting different currencies. 
+Difference between transaction level (multiplication from standard) and transaction fee (fee in drops).
+
+When submitting more transactions in one test harness, the results can vary based on when the test case is run. This is due to the network increasing and reducing
+its transaction throughput in subsequent ledgers based on the network load. Initially max 5 transactions can be applied per ledger. The maximum increase is 20% per ledger.
+Hopefully this is solved after the first few test cases.
+
+Have yet to see a proposeSeq of higher than 2. Trying to determine the theoretical maximum proposeSeq. Some info:
+1. Establish takes at least 1.95s before updating positions (result => skips one heartbeat timer)
+2. After that changes position max once per second.
+What is the max time one round of consensus can take? Derive a max and put a check in place to alert if max is every breached.
+

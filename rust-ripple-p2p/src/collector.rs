@@ -8,6 +8,7 @@ use serde_json::json;
 use crate::client::{ConsensusChange, PeerSubscriptionObject, SubscriptionObject};
 use crate::message_handler::RippleMessageObject;
 use chrono::{DateTime, Utc};
+use crate::message_handler::RippleMessageObject::TMProposeSet;
 use crate::node_state::{ConsensusPhase, MutexNodeStates};
 
 /// Collects and writes data to files and the scheduler
@@ -18,7 +19,7 @@ pub struct Collector {
     ripple_message_receiver: Receiver<Box<RippleMessage>>,
     subscription_receiver: Receiver<PeerSubscriptionObject>,
     control_receiver: Receiver<String>,
-    scheduler_sender: Sender<SubscriptionObject>,
+    _scheduler_sender: Sender<SubscriptionObject>,
     execution_file: BufWriter<File>,
     subscription_files: Vec<BufWriter<File>>,
     node_states: Arc<MutexNodeStates>,
@@ -44,7 +45,7 @@ impl Collector {
             ripple_message_receiver,
             subscription_receiver,
             control_receiver,
-            scheduler_sender,
+            _scheduler_sender: scheduler_sender,
             execution_file: BufWriter::new(execution_file),
             subscription_files,
             node_states,
@@ -52,7 +53,6 @@ impl Collector {
     }
 
     pub fn start(&mut self) {
-        let mut latest_ledger = 0;
         loop {
             // Stop writing to file if any control message is received
             // Can be extended to start writing to file later, currently not implemented
@@ -73,15 +73,9 @@ impl Collector {
             match self.subscription_receiver.try_recv() {
                 Ok(subscription_object) => match subscription_object.subscription_object {
                     SubscriptionObject::ValidatedLedger(ledger) => {
-                        // The first time a new ledger is validated by one of the nodes, consider this ledger validated
-                        // TODO: Determine whether we want all nodes to have validated the ledger.
-                        if ledger.ledger_index > latest_ledger {
-                            println!("Ledger {} is validated", ledger.ledger_index);
-                            latest_ledger = ledger.ledger_index;
-                        }
                         self.node_states.set_validated_ledger(subscription_object.peer as usize,ledger.clone());
                         self.write_to_subscription_file(subscription_object.peer, json!({"LedgerValidated": ledger}).to_string());
-                        self.scheduler_sender.send(SubscriptionObject::ValidatedLedger(ledger.clone())).expect("Scheduler send failed");
+                        // self.scheduler_sender.send(SubscriptionObject::ValidatedLedger(ledger.clone())).expect("Scheduler send failed");
                     }
                     SubscriptionObject::ReceivedValidation(validation) =>
                         self.write_to_subscription_file(subscription_object.peer, json!({"ValidationReceived": validation}).to_string()),
@@ -114,6 +108,9 @@ impl Collector {
                         }
                         self.write_to_subscription_file(subscription_object.peer, json!({"Transaction": transaction_subscription}).to_string())
                     }
+                    SubscriptionObject::ServerStatus(server_status) => {
+                        self.write_to_subscription_file(subscription_object.peer, json!({"ServerStatus": server_status}).to_string())
+                    }
                 },
                 _ => {}
             }
@@ -121,6 +118,10 @@ impl Collector {
     }
 
     fn write_to_file(&mut self, ripple_message: &mut RippleMessage) {
+        match &ripple_message.message {
+            TMProposeSet(tm_propose) => if tm_propose.get_proposeSeq() > 1 { println!("{}", ripple_message.to_string()) }
+            _ => {},
+        }
         self.execution_file.write_all(ripple_message.to_string().as_bytes()).unwrap();
     }
 

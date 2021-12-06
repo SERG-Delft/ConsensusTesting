@@ -86,6 +86,7 @@ impl App {
         for i in 0..self.peers {
             clients.push(Client::new(i, format!("ws://127.0.0.1:600{}", 5+i).as_str(), subscription_tx.clone()));
         }
+        let client_senders = clients.iter().map(|client| client.sender_channel.clone()).collect_vec();
 
         // Start p2p connections
         if !self.only_subscribe {
@@ -119,7 +120,7 @@ impl App {
             // Start the scheduler
             let scheduler = Scheduler::new(scheduler_peer_channels, collector_tx, mutex_node_states);
             let scheduler_thread = thread::spawn(move || {
-                scheduler.start(scheduler_receiver, scheduler_state_rx, scheduler_ga_sender, ga_scheduler_receiver, clients[0].sender_channel.clone());
+                scheduler.start(scheduler_receiver, scheduler_state_rx, scheduler_ga_sender, ga_scheduler_receiver, client_senders);
             });
             threads.push(scheduler_thread);
 

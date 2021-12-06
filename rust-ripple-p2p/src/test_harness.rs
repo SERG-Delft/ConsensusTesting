@@ -3,6 +3,7 @@ use std::io::{BufRead, BufReader};
 use std::sync::mpsc::Sender;
 use std::thread;
 use std::time::Duration;
+use itertools::Itertools;
 use websocket::Message;
 use crate::client::{Client, Transaction};
 
@@ -18,31 +19,43 @@ const _GENESIS_SEED: &str = "snoPBrXtMeMyMHUVTgbuqAfg1SUTb";
 #[derive(Debug)]
 pub struct TestHarness<'a> {
     pub transactions: Vec<TransactionTimed>,
-    pub client_sender: Sender<Message<'a>>
+    pub client_senders: Vec<Sender<Message<'a>>>
 }
 
 impl TestHarness<'static> {
+
     // Parse the test harness file
-    pub fn parse_test_harness(client_sender: Sender<Message<'static>>) -> Self {
+    // execution_sequence is the sequence number of this test harness execution. Used for providing correct sequence numbers to transactions
+    pub fn parse_test_harness(client_senders: Vec<Sender<Message<'static>>>, execution_sequence: usize) -> Self {
         let file = File::open("harness.txt").unwrap();
         let buf_reader = BufReader::new(file);
-        let lines = buf_reader.lines().map(|l| l.unwrap());
+        let lines = buf_reader.lines().map(|l| l.unwrap()).collect_vec();
+        let number_of_transactions = lines.len();
         let mut transactions = vec![];
-        for line in lines {
-            let transaction = Client::create_payment_transaction(_AMOUNT, _ACCOUNT_ID, _GENESIS_ADDRESS);
-            let delay = Duration::from_millis(line.parse::<u64>().expect("Transaction delay needs to be of u64"));
-            transactions.push(TransactionTimed { transaction, delay });
+        for (i, line) in lines.iter().enumerate() {
+            let transaction_timed = Self::parse_transaction(execution_sequence * number_of_transactions + i, line);
+            transactions.push(transaction_timed);
         }
         Self {
             transactions,
-            client_sender,
+            client_senders,
         }
+    }
+
+    fn parse_transaction(sequence: usize, line: &String) -> TransactionTimed {
+        let split = line.split_whitespace().collect_vec();
+        let client_index = split[0].parse::<usize>().expect("Client index needs to of u32");
+        let delay = Duration::from_millis(split[1].parse::<u64>().expect("Transaction delay needs to be of u64"));
+        let transaction = Client::create_payment_transaction(_AMOUNT, _ACCOUNT_ID, _GENESIS_ADDRESS, Some((sequence + 1) as u32));
+        // let transaction = Client::create_payment_transaction(_AMOUNT, _ACCOUNT_ID, _GENESIS_ADDRESS, None);
+        TransactionTimed { transaction, delay, client_index }
     }
 
     // Schedule transactions in struct
     pub fn schedule_transactions(self) {
         for transaction in self.transactions {
-            Self::schedule_transaction(transaction, self.client_sender.clone());
+            let client_index = transaction.client_index.clone();
+            Self::schedule_transaction(transaction, self.client_senders[client_index].clone());
         }
     }
 
@@ -60,11 +73,12 @@ impl TestHarness<'static> {
     }
 }
 
-/// A transaction coupled with its delay
+/// A transaction coupled with its delay and client
 #[derive(Eq, PartialEq, Debug)]
 pub struct TransactionTimed {
     transaction: Transaction,
     delay: Duration,
+    client_index: usize,
 }
 
 #[cfg(test)]
@@ -78,21 +92,24 @@ mod harness_tests {
     #[test]
     fn parse_harness() {
         let transaction1 = TransactionTimed {
-            transaction: Client::create_payment_transaction(_AMOUNT, _ACCOUNT_ID, _GENESIS_ADDRESS),
-            delay: Duration::from_millis(600)
+            transaction: Client::create_payment_transaction(_AMOUNT, _ACCOUNT_ID, _GENESIS_ADDRESS, Some(1)),
+            delay: Duration::from_millis(600),
+            client_index: 0,
         };
         let transaction2 = TransactionTimed {
-            transaction: Client::create_payment_transaction(_AMOUNT, _ACCOUNT_ID, _GENESIS_ADDRESS),
-            delay: Duration::from_millis(1350)
+            transaction: Client::create_payment_transaction(_AMOUNT, _ACCOUNT_ID, _GENESIS_ADDRESS, Some(2)),
+            delay: Duration::from_millis(1350),
+            client_index: 0,
         };
         let transaction3 = TransactionTimed {
-            transaction: Client::create_payment_transaction(_AMOUNT, _ACCOUNT_ID, _GENESIS_ADDRESS),
-            delay: Duration::from_millis(6000)
+            transaction: Client::create_payment_transaction(_AMOUNT, _ACCOUNT_ID, _GENESIS_ADDRESS, Some(3)),
+            delay: Duration::from_millis(6000),
+            client_index: 0,
         };
         let transactions = vec![transaction1, transaction2, transaction3];
         let (tx, _) = channel();
-        let expected_harness = TestHarness { transactions, client_sender: tx.clone() };
-        let actual_harness = TestHarness::parse_test_harness(tx.clone());
+        let expected_harness = TestHarness { transactions, client_senders: vec![tx.clone()] };
+        let actual_harness = TestHarness::parse_test_harness(vec![tx.clone()], 0);
         assert_eq!(actual_harness.transactions, expected_harness.transactions);
     }
 }
