@@ -10,6 +10,7 @@ use super::{EmptyResult};
 use crate::client::{Client};
 use crate::collector::{Collector};
 use crate::ga::genetic_algorithm;
+use crate::ga::genetic_algorithm::CurrentFitness;
 use crate::peer_connection::PeerConnection;
 use crate::scheduler::{PeerChannel, Scheduler};
 use crate::node_state::{MutexNodeStates, NodeState, NodeStates};
@@ -96,7 +97,7 @@ impl App {
             let mut scheduler_peer_channels = HashMap::new();
             let (scheduler_sender, scheduler_receiver) = tokio::sync::mpsc::channel(32);
             let (ga_scheduler_sender, ga_scheduler_receiver) = std::sync::mpsc::channel();
-            let (scheduler_ga_sender, scheduler_ga_receiver) = std::sync::mpsc::channel();
+            let (scheduler_ga_sender, scheduler_ga_receiver) = std::sync::mpsc::channel::<CurrentFitness>();
 
             // Start the GA
             thread::spawn(||genetic_algorithm::run(ga_scheduler_sender, scheduler_ga_receiver));

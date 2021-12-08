@@ -7,12 +7,11 @@ use std::sync::mpsc::{Sender as STDSender, Receiver as STDReceiver, channel};
 use parking_lot::{Mutex, Condvar};
 use std::thread;
 use std::time::Duration;
-use chrono::{Duration as ChronoDuration};
 use byteorder::{BigEndian, ByteOrder};
 use websocket::Message;
 use crate::client::{SubscriptionObject};
 use crate::collector::RippleMessage;
-use crate::ga::genetic_algorithm::{DelayMapPhenotype, MessageType};
+use crate::ga::genetic_algorithm::{CurrentFitness, DelayMapPhenotype, MessageType};
 use crate::message_handler::{parse_protocol_message, RippleMessageObject};
 use crate::node_state::{MutexNodeStates};
 use crate::test_harness::TestHarness;
@@ -22,13 +21,11 @@ type P2PConnections = HashMap<usize, HashMap<usize, PeerChannel>>;
 /// Scheduler module responsible for scheduling execution of events (message receivals in peers)
 /// p2p_connections: Contains the senders for sending from a peer to another peer
 /// collector_sender: Sender for sending the executed events to the collector (execution.txt)
-/// stable: Is the network in a stable state
 /// latest_validated_ledger: The latest validated ledger
 /// current_round: The latest round for which a message is sent by one of the peers
 pub struct Scheduler {
     p2p_connections: P2PConnections,
     collector_sender: STDSender<Box<RippleMessage>>,
-    stable: Arc<(Mutex<bool>, Condvar)>,
     run: Arc<(Mutex<bool>, Condvar)>,
     latest_validated_ledger: Arc<(Mutex<u32>, Condvar)>,
     current_round: Arc<(Mutex<u32>, Condvar)>,
@@ -41,7 +38,6 @@ impl Scheduler {
         Scheduler {
             p2p_connections,
             collector_sender,
-            stable: Arc::new((Mutex::new(false), Condvar::new())),
             run: Arc::new((Mutex::new(false), Condvar::new())),
             latest_validated_ledger: Arc::new((Mutex::new(0), Condvar::new())),
             current_round: Arc::new((Mutex::new(0), Condvar::new())),
@@ -54,12 +50,11 @@ impl Scheduler {
     pub fn start(self,
                  receiver: TokioReceiver<Event>,
                  _collector_receiver: STDReceiver<SubscriptionObject>,
-                 ga_sender: STDSender<ChronoDuration>,
+                 ga_sender: STDSender<CurrentFitness>,
                  ga_receiver: STDReceiver<DelayMapPhenotype>,
                  client_senders: Vec<STDSender<Message<'static>>>
     )
     {
-        let stable_clone = self.stable.clone();
         let latest_validated_ledger_clone = self.latest_validated_ledger.clone();
         let latest_validated_ledger_clone_2 = self.latest_validated_ledger.clone();
         let (event_schedule_sender, event_schedule_receiver) = channel();
@@ -77,7 +72,7 @@ impl Scheduler {
         thread::spawn(move || Self::listen_to_ga(current_delays_clone_2, ga_receiver));
         thread::spawn(move || Self::update_current_round(node_states_clone, current_round_clone));
         thread::spawn(move || Self::update_latest_validated_ledger(node_states_clone_3, latest_validated_ledger_clone));
-        thread::spawn(move || Self::harness_controller(ga_sender, client_senders, latest_validated_ledger_clone_2, current_round_clone_2, stable_clone, run_clone, node_states_clone_2));
+        thread::spawn(move || Self::harness_controller(ga_sender, client_senders, latest_validated_ledger_clone_2, current_round_clone_2, run_clone, node_states_clone_2));
         loop {
             match event_schedule_receiver.recv() {
                 Ok(event) => self.execute_event(event),
@@ -206,16 +201,15 @@ impl Scheduler {
     /// 2. Checking progress of harness
     /// 3. Relaying fitness of chromosome over harness
     fn harness_controller(
-        ga_sender: STDSender<ChronoDuration>,
+        ga_sender: STDSender<CurrentFitness>,
         client_senders: Vec<STDSender<Message<'static>>>,
         latest_validated_ledger: Arc<(Mutex<u32>, Condvar)>,
         current_round: Arc<(Mutex<u32>, Condvar)>,
-        stable: Arc<(Mutex<bool>, Condvar)>,
         run: Arc<(Mutex<bool>, Condvar)>,
         node_states: Arc<MutexNodeStates>,
-    ) {
+    )
+    {
         let (ledger_lock, ledger_cvar) = &*latest_validated_ledger;
-        let (stable_lock, stable_cvar) = &*stable;
         let (round_lock, round_cvar) = &*current_round;
         let (run_lock, run_cvar) = &*run;
         let mut execution_sequence = 0;
@@ -231,34 +225,21 @@ impl Scheduler {
                 drop(ledger_number);
                 let mut round_number = round_lock.lock();
                 let first_round = *round_number;
-                *stable_lock.lock() = true;        // Network is deemed stable
-                stable_cvar.notify_all();
                 println!("Waiting on round update: {}", first_round);
                 round_cvar.wait(&mut round_number);
                 println!("Round update received: {}", *round_number);
-                // Start test as soon as a message is encountered for a new round (TODO: Use subscription messages for quicker determination)
+                // Start test as a node starts a new round
                 if *round_number > first_round {
                     node_states.clear_transactions();
                     *run_lock.lock() = true;
                     drop(round_number);
                     println!("Starting test harness run");
                     run_cvar.notify_all();
-                    let start = Utc::now();
-                    let number_of_transactions = test_harness.transactions.len();
-                    test_harness.schedule_transactions();
-                    // Wait for all transactions to have been validated
-                    while node_states.get_min_validated_transactions() < number_of_transactions {
-                        node_states.transactions_cvar.wait(&mut node_states.node_states.lock());
-                        debug!("{} out of {} transactions validated, max: {}", node_states.get_min_validated_transactions(), number_of_transactions, node_states.get_max_validated_transaction());
-                    }
-                    println!("Test harness over");
-                    let fitness = Utc::now().signed_duration_since(start);
-                    *run_lock.lock() = false;
-                    run_cvar.notify_all();
-                    *stable_lock.lock() = false;        // Network is unstable
-                    stable_cvar.notify_all();
+                    let fitness = CurrentFitness::run_harness(test_harness, node_states.clone());
                     // Send duration of test case to GA
                     ga_sender.send(fitness).expect("GA receiver failed");
+                    *run_lock.lock() = false;
+                    run_cvar.notify_all();
                 }
             }
             execution_sequence += 1;

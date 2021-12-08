@@ -1,31 +1,27 @@
 Thesis research question
-How effective is applying evolutionary algorithms and the communication closure 
-to the ordering of messages in blockchain-based consensus algorithms at uncovering concurrency and consistency bugs?
+How effective is applying evolutionary algorithms to the ordering of messages in blockchain-based consensus algorithms at uncovering concurrency and consistency bugs?
 
 Explain:
 - blockchain, what is it -> ripple
-- Consensus, explain ripple's
-- Communication closure, explain messages and ordering
-- Evolutionary algorithms, explain general evolutionary algorithm and application to messages
+- Consensus, explain ripple's, messages and orderings. Schedules and executions.
+- Search based testing & Evolutionary algorithms, explain general evolutionary algorithm and why application to message ordering can be successful.
 
 Intoduction
 
 Blockchain -> General technology, implication and applications
 
-Ripple consensus -> How does it work and why is it interesting
+Ripple consensus -> How does it work and how can it break? Explain messages and orderings. Schedules and executions.
 
-Communication Closure -> Reducing state-space
+Search-based testing & Evolutionary algorithms -> What is it, what are the different approaches. Which ones am I gonna use and why, black-box or goal oriented, functional vs structural
 
-Evolutionary algorithms -> Which ones am I gonna use and why, black-box or goal oriented
+Representation of test case -> Abstract away from exact message, encode order, delays etc.
 
-Representation of test case -> Abstract away from exact message, encode order.
-
-Fitness function? -> Guide the EA
+Fitness function? -> Guide the EA. Different fitness functions and their correlation. Conclude
 
 How to determine a bug has been found? -> Invariant checking, what are concurrency and consistency bugs?
 
-Repoducability -> How to reproduce a found bug in the face of non-determinism
+Repoducability -> How to reproduce a found bug in the face of non-determinism. Combine logs of execution and messages.
 
-Experiment -> setup and results
+Experiment -> setup and results. Random testing vs GA
 
-Conclusion and discussion -> Is it effective? future research? 
+Conclusion and discussion -> Is it effective? future research?

@@ -1,11 +1,14 @@
 use std::fs::File;
 use std::io::{BufRead, BufReader};
+use std::sync::Arc;
 use std::sync::mpsc::Sender;
 use std::thread;
 use std::time::Duration;
 use itertools::Itertools;
+use log::debug;
 use websocket::Message;
 use crate::client::{Client, Transaction};
+use crate::node_state::MutexNodeStates;
 
 const _AMOUNT: u32 = 2u32.pow(31);
 const _ACCOUNT_ID: &str = "rE4DHSdcXafD7DkpJuFCAvc3CvsgXHjmEJ";
@@ -52,11 +55,18 @@ impl TestHarness<'static> {
     }
 
     // Schedule transactions in struct
-    pub fn schedule_transactions(self) {
+    pub fn schedule_transactions(self, node_states: Arc<MutexNodeStates>) {
+        let number_of_transactions = self.transactions.len();
         for transaction in self.transactions {
             let client_index = transaction.client_index.clone();
             Self::schedule_transaction(transaction, self.client_senders[client_index].clone());
         }
+        // Wait for all transactions to have been validated
+        while node_states.get_min_validated_transactions() < number_of_transactions {
+            node_states.transactions_cvar.wait(&mut node_states.node_states.lock());
+            debug!("{} out of {} transactions validated, max: {}", node_states.get_min_validated_transactions(), number_of_transactions, node_states.get_max_validated_transaction());
+        }
+        println!("Test harness over");
     }
 
     // Schedule a transaction according to its delay
