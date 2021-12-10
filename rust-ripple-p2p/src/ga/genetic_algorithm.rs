@@ -1,4 +1,7 @@
 use std::collections::HashMap;
+use std::fs::File;
+use std::io::{BufWriter, Write};
+use std::path::Path;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, RwLock};
 use std::thread;
@@ -10,10 +13,13 @@ use itertools::{chain};
 use genevo::prelude::{build_population, GenerationLimit, Population, SimResult, simulate, Simulation, SimulationBuilder};
 use genevo::reinsertion::elitist::ElitistReinserter;
 use genevo::types::fmt::Display;
-use crate::ga::fitness::{ExtendedFitness, FitnessCalculation, SchedulerHandler, TimeFitness, ValidatedLedgersFitness};
+use log::debug;
+use crate::collector::RippleMessage;
+use crate::ga::fitness::{ExtendedFitness, FailedConsensusFitness, FitnessCalculation, SchedulerHandler, TimeFitness, ValidatedLedgersFitness};
+use crate::node_state::MutexNodeStates;
 use super::mutation::GaussianMutator;
 
-pub type CurrentFitness = ValidatedLedgersFitness;
+pub type CurrentFitness = TimeFitness;
 
 /// Parameters for the GA
 #[derive(Debug)]
@@ -39,7 +45,7 @@ impl Default for Parameter {
     fn default() -> Self {
         Parameter {
             population_size: 8,
-            generation_limit: 2,
+            generation_limit: 5,
             num_individuals_per_parents: 2,
             selection_ratio: 0.7,
             num_crossover_points: Self::num_genes() / (NUM_NODES * (NUM_NODES - 1)),
@@ -113,7 +119,70 @@ impl Phenotype<DelaysGenotype> for DelayMapPhenotype {
 // The genotype
 pub(crate) type DelaysGenotype = Vec<u32>;
 
+pub struct NonGaSchedulerHandler<T>
+    where T: ExtendedFitness
+{
+    scheduler_sender: Sender<DelayMapPhenotype>,
+    scheduler_receiver: Receiver<T>,
+    fitness_values: Vec<T>,
+    file: BufWriter<File>,
+    executions: Vec<Vec<RippleMessage>>
+}
 
+impl<T> NonGaSchedulerHandler<T>
+    where T: ExtendedFitness
+{
+    pub fn new(
+        scheduler_sender: Sender<DelayMapPhenotype>,
+        scheduler_receiver: Receiver<T>,
+        fitness_values: Vec<T>,
+    ) -> Self {
+        let file = File::create(Path::new("run.txt")).expect("Opening execution file failed");
+        NonGaSchedulerHandler { scheduler_sender, scheduler_receiver, fitness_values, file: BufWriter::new(file), executions: vec![] }
+    }
+
+    pub fn run(&mut self, delays_genotype: DelaysGenotype, node_states: Arc<MutexNodeStates>) {
+        for i in 0..50 {
+            // Receive a new individual to test from a fitness function
+            // Send the requested individual to the scheduler
+            println!("Starting test {}", i);
+            debug!("delay genome before send: {:?}", delays_genotype);
+            self.scheduler_sender.send(DelayMapPhenotype::from(delays_genotype.as_ref()))
+                .expect("Scheduler receiver failed");
+            // Receive fitness from scheduler
+            match self.scheduler_receiver.recv() {
+                Ok(value) => {
+                    debug!("Received fitness of {:?} for genome: {:?}", value, delays_genotype);
+                    self.executions.push(node_states.get_executions());
+                    node_states.clear_executions();
+                    self.fitness_values.push(value);
+                    self.file.write_all(self.fitness_values[i].to_string().as_bytes()).unwrap();
+                    for message in &self.executions[i] {
+                        self.file.write_all(message.clone().simple_str().as_bytes()).unwrap();
+                    }
+                    self.file.write("\n".as_bytes()).unwrap();
+                }
+                Err(_) => {}
+            }
+        }
+        std::process::exit(0);
+    }
+}
+
+pub fn run_non_ga<T>(scheduler_sender: Sender<DelayMapPhenotype>, scheduler_receiver: Receiver<T>, node_states: Arc<MutexNodeStates>)
+    where T: ExtendedFitness + 'static
+{
+    let params = Parameter::default();
+    let initial_population: Population<DelaysGenotype> = build_population()
+        .with_genome_builder(ValueEncodedGenomeBuilder::new(Parameter::num_genes(), params.min_delay, params.max_delay))
+        .of_size(1)
+        .uniform_at_random();
+    println!("{:?}", initial_population);
+
+    let fitness_values: Vec<T> = vec![];
+    let mut scheduler_handler = NonGaSchedulerHandler::new(scheduler_sender, scheduler_receiver, fitness_values.clone());
+    thread::spawn(move ||scheduler_handler.run(initial_population.individuals()[0].clone(), node_states));
+}
 
 /// Run the genetic algorithm
 pub fn run<T>(scheduler_sender: Sender<DelayMapPhenotype>, scheduler_receiver: Receiver<T>)
@@ -198,18 +267,18 @@ pub fn run<T>(scheduler_sender: Sender<DelayMapPhenotype>, scheduler_receiver: R
             },
         }
     }
-    // Todo: Terminate the program
     std::process::exit(0);
 }
 
 #[cfg(test)]
 mod ga_tests {
     use itertools::Itertools;
-    use crate::ga::genetic_algorithm::{DelayMapPhenotype, DelaysGenotype};
+    use crate::ga::genetic_algorithm::{DelayMapPhenotype};
 
     #[test]
     fn check_phenotype() {
-        let genotype: DelaysGenotype = (1..81).collect_vec();
+        //let genotype: DelaysGenotype = (1..81).collect_vec();
+        let genotype = vec![959, 533, 12, 717, 406, 603, 767, 0, 304, 366, 925, 54, 854, 159, 611, 747, 839, 555, 985, 146, 678, 499, 67, 802, 991, 557, 185, 312, 557, 676, 659, 149, 963, 347, 817, 987, 451, 972, 515, 631, 174, 564, 551, 889, 665, 527, 645, 336, 977, 946, 641, 441, 113, 872, 778, 385, 878, 528, 947, 435, 913, 643, 4, 101, 472, 416, 624, 792, 925, 573, 225, 948, 862, 142, 580, 50, 742, 648, 338, 914];
         let phenotype = DelayMapPhenotype::from(&genotype);
         println!("{:?}", phenotype.delay_map);
     }

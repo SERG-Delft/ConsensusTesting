@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 use parking_lot::{Mutex, Condvar};
 use crate::client::ValidatedLedger;
+use crate::collector::RippleMessage;
 
 /// Contains the state for a particular node at a particular time
 #[derive(Clone, Debug)]
@@ -11,6 +12,7 @@ pub struct NodeState {
     pub last_validated_ledger: ValidatedLedger,
     pub unvalidated_transactions: Vec<String>,
     pub validated_transactions: Vec<String>,
+    pub number_of_failed_consensus_rounds: u32,
 }
 
 impl NodeState {
@@ -22,6 +24,7 @@ impl NodeState {
             last_validated_ledger: ValidatedLedger::default(),
             unvalidated_transactions: vec![],
             validated_transactions: vec![],
+            number_of_failed_consensus_rounds: 0,
         }
     }
 }
@@ -37,6 +40,7 @@ pub enum ConsensusPhase {
 #[derive(Clone, Debug)]
 pub struct NodeStates {
     pub node_states: Vec<NodeState>,
+    pub executions: Vec<RippleMessage>,
 }
 
 impl NodeStates {
@@ -58,6 +62,23 @@ impl NodeStates {
 
     pub fn max_validated_ledger(&self) -> u32 {
         self.node_states.iter().map(|state| state.last_validated_ledger.ledger_index).max().expect("node states is empty")
+    }
+
+    pub fn total_number_of_failed_consensus_rounds(&self) -> u32 {
+        self.node_states.iter().map(|state| state.number_of_failed_consensus_rounds).sum()
+    }
+
+    pub fn clear_number_of_failed_consensus_rounds(&mut self) {
+        for i in 0..self.node_states.len() {
+            self.node_states[i].number_of_failed_consensus_rounds = 0;
+        }
+    }
+
+    pub fn clear_transactions(&mut self) {
+        for i in 0..self.node_states.len() {
+            self.node_states[i].unvalidated_transactions.clear();
+            self.node_states[i].validated_transactions.clear();
+        }
     }
 }
 
@@ -89,7 +110,21 @@ impl MutexNodeStates {
         self.round_cvar.notify_all();
     }
 
+    /// Take care not to get a deadlock here, calls to associated methods acquire locks
     pub fn set_consensus_phase(&self, peer: usize, new_phase: ConsensusPhase) {
+        let current_phase = self.node_states.lock().node_states[peer].consensus_phase.clone();
+        if new_phase == ConsensusPhase::Open {
+            let old_round = self.get_current_round(peer);
+            self.set_current_round(peer, old_round + 1);
+            if current_phase != ConsensusPhase::Accepted {
+                self.node_states.lock().node_states[peer].number_of_failed_consensus_rounds += 1;
+                println!("Failed consensus round");
+            }
+        }
+        else if new_phase == ConsensusPhase::Establish && current_phase != ConsensusPhase::Open {
+            self.node_states.lock().node_states[peer].number_of_failed_consensus_rounds += 1;
+            println!("Failed consensus round");
+        }
         self.node_states.lock().node_states[peer].consensus_phase = new_phase;
         self.consensus_phase_cvar.notify_all();
     }
@@ -100,11 +135,7 @@ impl MutexNodeStates {
     }
 
     pub fn clear_transactions(&self) {
-        let mut node_states = self.node_states.lock();
-        for i in 0..node_states.node_states.len() {
-            node_states.node_states[i].unvalidated_transactions.clear();
-            node_states.node_states[i].validated_transactions.clear();
-        }
+        self.node_states.lock().clear_transactions();
         self.transactions_cvar.notify_all();
     }
 
@@ -124,6 +155,18 @@ impl MutexNodeStates {
 
     pub fn get_consensus_phase(&self, peer: usize) -> ConsensusPhase {
         self.node_states.lock().node_states[peer].consensus_phase.clone()
+    }
+
+    pub fn get_number_of_failed_consensus_rounds(&self, peer: usize) -> u32 {
+        self.node_states.lock().node_states[peer].number_of_failed_consensus_rounds
+    }
+
+    pub fn get_total_number_of_failed_consensus_rounds(&self) -> u32 {
+        self.node_states.lock().total_number_of_failed_consensus_rounds()
+    }
+
+    pub fn clear_number_of_failed_consensus_rounds(&self) {
+        self.node_states.lock().clear_number_of_failed_consensus_rounds();
     }
 
     pub fn get_validated_ledger(&self, peer: usize) -> ValidatedLedger {
@@ -164,5 +207,17 @@ impl MutexNodeStates {
 
     pub fn diff_rounds(self) -> u32 {
         self.node_states.lock().diff_rounds()
+    }
+
+    pub fn add_execution(&self, ripple_message: RippleMessage) {
+        self.node_states.lock().executions.push(ripple_message);
+    }
+
+    pub fn get_executions(&self) -> Vec<RippleMessage> {
+        self.node_states.lock().executions.clone()
+    }
+
+    pub fn clear_executions(&self) {
+        self.node_states.lock().executions.clear();
     }
 }

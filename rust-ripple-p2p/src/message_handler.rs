@@ -31,7 +31,7 @@ pub fn parse_message<T: protobuf::Message>(payload: &[u8]) -> T {
     return protobuf::Message::parse_from_bytes(&payload).unwrap()
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum RippleMessageObject {
     TMManifest(TMManifest),
     TMPing(TMPing),

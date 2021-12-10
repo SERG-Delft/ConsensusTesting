@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use std::collections::HashMap;
 use std::ops::{Add, Div, Sub};
 use std::sync::mpsc::{Receiver, Sender};
@@ -6,17 +7,76 @@ use std::thread;
 use std::time::{Duration as TimeDuration};
 use chrono::Duration;
 use genevo::genetic::{AsScalar, Fitness, FitnessFunction};
+use std::fmt::{Display, Formatter};
 use log::debug;
 use crate::ga::genetic_algorithm::{DelayMapPhenotype, DelaysGenotype};
 use crate::node_state::MutexNodeStates;
 use crate::test_harness::TestHarness;
 
-pub trait ExtendedFitness: Fitness + AsScalar + Clone + Send + Sync {
+pub trait ExtendedFitness: Fitness + AsScalar + Clone + Send + Sync + Display {
     fn average(a: &[Self]) -> Self;
 
     fn highest_possible_fitness() -> Self;
 
     fn lowest_possible_fitness() -> Self;
+}
+
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
+pub struct FailedConsensusFitness {
+    value: u32
+}
+
+impl FailedConsensusFitness {
+    pub fn new(value: u32) -> Self {
+        Self { value }
+    }
+
+    pub fn run_harness(test_harness: TestHarness<'static>, node_states: Arc<MutexNodeStates>) -> Self {
+        node_states.clear_number_of_failed_consensus_rounds();
+        test_harness.schedule_transactions(node_states.clone());
+        Self::new(node_states.get_total_number_of_failed_consensus_rounds())
+    }
+}
+
+impl Fitness for FailedConsensusFitness {
+    fn zero() -> Self {
+        Self { value: 0 }
+    }
+
+    fn abs_diff(&self, other: &Self) -> Self {
+        let value = self.value.abs_diff(&other.value);
+        Self { value }
+    }
+}
+
+impl Display for FailedConsensusFitness {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Fitness value: {}\n", self.value)
+    }
+}
+
+impl ExtendedFitness for FailedConsensusFitness {
+    fn average(a: &[Self]) -> Self {
+        let mut sum = 0u32;
+        for fitness in a {
+            sum = sum.add(fitness.value);
+        }
+        Self { value: sum.div(a.len() as u32) }
+    }
+
+    fn highest_possible_fitness() -> Self {
+        Self { value: 100 }
+    }
+
+    fn lowest_possible_fitness() -> Self {
+        Self { value: 0 }
+    }
+}
+
+impl AsScalar for FailedConsensusFitness {
+    fn as_scalar(&self) -> f64 {
+        self.value as f64
+    }
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
@@ -44,6 +104,12 @@ impl Fitness for ValidatedLedgersFitness {
     fn abs_diff(&self, other: &Self) -> Self {
         let value = self.value.abs_diff(&other.value);
         Self { value }
+    }
+}
+
+impl Display for ValidatedLedgersFitness {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Fitness value: {}\n", self.value)
     }
 }
 
@@ -101,6 +167,12 @@ impl Fitness for TimeFitness {
             other.value.sub(self.value)
         };
         TimeFitness { value: time }
+    }
+}
+
+impl Display for TimeFitness {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Fitness value: {}\n", self.value)
     }
 }
 

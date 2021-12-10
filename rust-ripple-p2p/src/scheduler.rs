@@ -84,7 +84,15 @@ impl Scheduler {
     /// Execute event and report to collector (execution.txt)
     fn execute_event(&self, event: Event) {
         let rmo = parse_protocol_message(BigEndian::read_u16(&event.message[4..6]), &event.message[6..]);
-        self.collector_sender.send(RippleMessage::new(format!("Ripple{}", event.from+1), format!("Ripple{}", event.to+1), Utc::now(), rmo)).expect("Collector receiver failed");
+        let message = RippleMessage::new(format!("Ripple{}", event.from+1), format!("Ripple{}", event.to+1), Utc::now(), rmo.clone());
+        self.collector_sender.send(message.clone()).expect("Collector receiver failed");
+        let (ref run_lock, ref _run_cvar) = &*self.run;
+        if *run_lock.lock() {
+            match rmo {
+                RippleMessageObject::TMTransaction(_) | RippleMessageObject::TMProposeSet(_) | RippleMessageObject::TMStatusChange(_) | RippleMessageObject::TMHaveTransactionSet(_) => self.node_states.add_execution(message.as_ref().clone()),
+                _ => {}
+            }
+        }
         self.p2p_connections.get(&event.to).unwrap().get(&event.from).unwrap().send(event.message);
     }
 
@@ -230,13 +238,12 @@ impl Scheduler {
                 println!("Round update received: {}", *round_number);
                 // Start test as a node starts a new round
                 if *round_number > first_round {
-                    node_states.clear_transactions();
-                    *run_lock.lock() = true;
                     drop(round_number);
+                    *run_lock.lock() = true;
                     println!("Starting test harness run");
                     run_cvar.notify_all();
                     let fitness = CurrentFitness::run_harness(test_harness, node_states.clone());
-                    // Send duration of test case to GA
+                    // Send fitness of test case to GA
                     ga_sender.send(fitness).expect("GA receiver failed");
                     *run_lock.lock() = false;
                     run_cvar.notify_all();

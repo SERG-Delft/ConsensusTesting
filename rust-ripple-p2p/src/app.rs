@@ -72,9 +72,10 @@ impl App {
 
         let mut node_state_vec = vec![NodeState::new(0); peer as usize];
         for i in 0..peer { node_state_vec[i as usize].peer = i as usize }
-        let node_states = NodeStates { node_states: node_state_vec };
+        let node_states = NodeStates { node_states: node_state_vec, executions: vec![] };
         let mutex_node_states = Arc::new(MutexNodeStates::new(node_states));
         let mutex_node_states_clone = mutex_node_states.clone();
+        let mutex_node_states_clone_2 = mutex_node_states.clone();
 
         // Start the collector which writes output to files and collects information on nodes
         let collector_task = thread::spawn(move || {
@@ -100,7 +101,8 @@ impl App {
             let (scheduler_ga_sender, scheduler_ga_receiver) = std::sync::mpsc::channel::<CurrentFitness>();
 
             // Start the GA
-            thread::spawn(||genetic_algorithm::run(ga_scheduler_sender, scheduler_ga_receiver));
+            // thread::spawn(||genetic_algorithm::run(ga_scheduler_sender, scheduler_ga_receiver));
+            thread::spawn(||genetic_algorithm::run_non_ga(ga_scheduler_sender, scheduler_ga_receiver, mutex_node_states_clone_2));
 
             // For every combination (exclusive) of peers, create the necessary senders and receivers
             for pair in (0..peer).into_iter().combinations(2).into_iter() {

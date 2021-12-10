@@ -27,3 +27,5 @@ rust-ripple-p2p/execution.txt
 rust-ripple-p2p/subscription*.json
 documents/results
 
+analysis/venv
+

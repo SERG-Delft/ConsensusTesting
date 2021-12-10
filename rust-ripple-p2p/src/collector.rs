@@ -8,6 +8,7 @@ use serde_json::json;
 use crate::client::{ConsensusChange, PeerSubscriptionObject, SubscriptionObject};
 use crate::message_handler::RippleMessageObject;
 use chrono::{DateTime, Utc};
+use itertools::Itertools;
 use crate::message_handler::RippleMessageObject::TMProposeSet;
 use crate::node_state::{ConsensusPhase, MutexNodeStates};
 
@@ -84,11 +85,6 @@ impl Collector {
                     SubscriptionObject::ConsensusChange(consensus_change) => {
                         // Use new consensus phase to determine the current round of consensus of the node
                         let new_consensus_phase = Self::parse_consensus_change(consensus_change.clone());
-                        // TODO: Sometimes open phase is skipped (this should never happen, so is a bug I should catch) Accept -> Establish
-                        if new_consensus_phase == ConsensusPhase::Open {
-                            let old_round = self.node_states.get_current_round(subscription_object.peer as usize);
-                            self.node_states.set_current_round(subscription_object.peer as usize, old_round + 1);
-                        }
                         self.node_states.set_consensus_phase(subscription_object.peer as usize, new_consensus_phase);
                         // println!("{:?}", self.node_states.node_states.lock().node_states[subscription_object.peer as usize]);
                         self.write_to_subscription_file(subscription_object.peer, json!({"ConsensusChange": consensus_change}).to_string());
@@ -140,6 +136,7 @@ impl Collector {
 }
 
 /// Struct for writing clearly to execution.txt, should definitely rename
+#[derive(Debug, Clone)]
 pub struct RippleMessage {
     from_node: String,
     to_node: String,
@@ -150,6 +147,12 @@ pub struct RippleMessage {
 impl RippleMessage {
     pub fn new(from_node: String, to_node: String, timestamp: DateTime<Utc>, message: RippleMessageObject) -> Box<Self> {
         Box::from(RippleMessage { from_node, to_node, timestamp, message })
+    }
+
+    pub fn simple_str(&self) -> String {
+        let message = self.message.to_string();
+        let message_type = message.split(" ").collect_vec()[0];
+        format!("{}{}{}\n", self.from_node.as_str().chars().next_back().unwrap(), self.to_node.as_str().chars().next_back().unwrap(), message_type[0..message_type.len() - 1].to_string())
     }
 }
 

@@ -56,6 +56,7 @@ impl TestHarness<'static> {
 
     // Schedule transactions in struct
     pub fn schedule_transactions(self, node_states: Arc<MutexNodeStates>) {
+        node_states.clear_transactions();
         let number_of_transactions = self.transactions.len();
         for transaction in self.transactions {
             let client_index = transaction.client_index.clone();
@@ -93,6 +94,7 @@ pub struct TransactionTimed {
 
 #[cfg(test)]
 mod harness_tests {
+    #[allow(unused_imports)]
     use std::sync::mpsc::channel;
     use std::time::Duration;
     use crate::client::Client;
