@@ -108,3 +108,6 @@ Have yet to see a proposeSeq of higher than 2. Trying to determine the theoretic
 2. After that changes position max once per second.
 What is the max time one round of consensus can take? Derive a max and put a check in place to alert if max is every breached.
 
+10-12-2021
+Decided to test the variability of schedules created by applying the same chromosome delays.
+Edit distance is used, bad outcome. Think of other distance.

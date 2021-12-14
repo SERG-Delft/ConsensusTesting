@@ -141,10 +141,18 @@ impl<T> NonGaSchedulerHandler<T>
         NonGaSchedulerHandler { scheduler_sender, scheduler_receiver, fitness_values, file: BufWriter::new(file), executions: vec![] }
     }
 
-    pub fn run(&mut self, delays_genotype: DelaysGenotype, node_states: Arc<MutexNodeStates>) {
+    pub fn run(&mut self, node_states: Arc<MutexNodeStates>) {
+        let params = Parameter::default();
+        let initial_population: Population<DelaysGenotype> = build_population()
+            .with_genome_builder(ValueEncodedGenomeBuilder::new(Parameter::num_genes(), params.min_delay, params.max_delay))
+            .of_size(50)
+            .uniform_at_random();
+        println!("{:?}", initial_population);
+
+        let delays_genotype = vec![0u32; Parameter::num_genes()];
+
         for i in 0..50 {
-            // Receive a new individual to test from a fitness function
-            // Send the requested individual to the scheduler
+            // let delays_genotype = initial_population.individuals()[i].clone();
             println!("Starting test {}", i);
             debug!("delay genome before send: {:?}", delays_genotype);
             self.scheduler_sender.send(DelayMapPhenotype::from(delays_genotype.as_ref()))
@@ -172,16 +180,9 @@ impl<T> NonGaSchedulerHandler<T>
 pub fn run_non_ga<T>(scheduler_sender: Sender<DelayMapPhenotype>, scheduler_receiver: Receiver<T>, node_states: Arc<MutexNodeStates>)
     where T: ExtendedFitness + 'static
 {
-    let params = Parameter::default();
-    let initial_population: Population<DelaysGenotype> = build_population()
-        .with_genome_builder(ValueEncodedGenomeBuilder::new(Parameter::num_genes(), params.min_delay, params.max_delay))
-        .of_size(1)
-        .uniform_at_random();
-    println!("{:?}", initial_population);
-
     let fitness_values: Vec<T> = vec![];
     let mut scheduler_handler = NonGaSchedulerHandler::new(scheduler_sender, scheduler_receiver, fitness_values.clone());
-    thread::spawn(move ||scheduler_handler.run(initial_population.individuals()[0].clone(), node_states));
+    thread::spawn(move ||scheduler_handler.run(node_states));
 }
 
 /// Run the genetic algorithm

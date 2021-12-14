@@ -1,22 +1,17 @@
 import nltk
+import Levenshtein
 
 schedules = []
+edit = [[0 for _ in range(50)] for _ in range(50)]
 
 
 def parse_execution_file():
-    with open('executions.txt', 'r') as fp:
-        # print(fp.readline().strip())
-        # print(fp.readline().strip())
-        # print(fp.readline().strip())
-        # print(fp.readline().strip())
-        # print(fp.readline().strip())
-        # print(fp.readline().strip())
+    with open('executions0Delay.txt', 'r') as fp:
         fp.readline()
         for i in range(50):
             execution = []
             line = fp.readline().strip()
             while line != '':
-                print(line)
                 execution.append(line)
                 line = fp.readline().strip()
 
@@ -28,8 +23,16 @@ def parse_execution_file():
     print(len(schedules))
 
 
+def calc_edit_ratios():
+    for i, schedule1 in enumerate(schedules):
+        for j, schedule2 in enumerate(schedules):
+            print(str(i) + " " + str(j))
+            edit[i][j] = Levenshtein.seqratio(schedule1, schedule2)
+
+    print(edit)
+
+
 def calc_edit_distances():
-    edit = [[0 for _ in range(50)] for _ in range(50)]
     for i, schedule1 in enumerate(schedules):
         for j, schedule2 in enumerate(schedules):
             print(str(i) + " " + str(j))
@@ -38,6 +41,29 @@ def calc_edit_distances():
     print(edit)
 
 
+result = [0 for _ in range(50)]
+
+
+def calc_edit_averages():
+    for i in range(50):
+        sum = 0
+        for j in range(50):
+            if i != j:
+                sum += edit[i][j]
+
+        sum /= 49
+        result[i] = sum
+
+    total_average = 0
+    for i in range(50):
+        total_average += result[i]
+
+    total_average /= 50
+    print(result)
+    print(total_average)
+
+
 if __name__ == '__main__':
     parse_execution_file()
-    calc_edit_distances()
+    calc_edit_ratios()
+    calc_edit_averages()
