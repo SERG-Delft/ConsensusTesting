@@ -67,8 +67,9 @@ impl Scheduler {
         let node_states_clone = self.node_states.clone();
         let node_states_clone_2 = self.node_states.clone();
         let node_states_clone_3 = self.node_states.clone();
+        let node_states_clone_4 = self.node_states.clone();
         // thread::spawn(move || Self::listen_to_collector(collector_receiver, latest_validated_ledger_clone));
-        thread::spawn(move || Self::listen_to_peers(run_clone_2, current_delays_clone, receiver, event_schedule_sender));
+        thread::spawn(move || Self::listen_to_peers(run_clone_2, current_delays_clone, node_states_clone_4, receiver, event_schedule_sender));
         thread::spawn(move || Self::listen_to_ga(current_delays_clone_2, ga_receiver));
         thread::spawn(move || Self::update_current_round(node_states_clone, current_round_clone));
         thread::spawn(move || Self::update_latest_validated_ledger(node_states_clone_3, latest_validated_ledger_clone));
@@ -99,7 +100,14 @@ impl Scheduler {
     /// Listen to messages sent by peers
     /// If the network is not stable, immediately relay messages
     /// Else schedule messages with a certain delay
-    fn listen_to_peers(run: Arc<(Mutex<bool>, Condvar)>, current_delays: Arc<Mutex<DelayMapPhenotype>>, mut receiver: TokioReceiver<Event>, event_schedule_sender: STDSender<Event>) {
+    fn listen_to_peers(
+        run: Arc<(Mutex<bool>, Condvar)>,
+        current_delays: Arc<Mutex<DelayMapPhenotype>>,
+        node_states: Arc<MutexNodeStates>,
+        mut receiver: TokioReceiver<Event>,
+        event_schedule_sender: STDSender<Event>
+    )
+    {
         let (run_lock, _run_cvar) = &*run;
         loop {
             match receiver.blocking_recv() {
@@ -108,6 +116,9 @@ impl Scheduler {
                     let ms: u32;
                     // If the network is ready to apply the test case, determine delay of message, else delay = 0
                     if *run_lock.lock() {
+                        if Self::is_consensus_rmo(&rmo) {
+                            node_states.add_send_dependency(RippleMessage::new(format!("Ripple{}", event.from+1), format!("Ripple{}", event.to+1), Utc::now(), rmo.clone()).as_ref().clone());
+                        }
                         let message_type_map = current_delays.lock().delay_map.get(&event.from).unwrap().get(&event.to).unwrap().clone();
                         ms = match rmo {
                             RippleMessageObject::TMTransaction(_) => message_type_map.get(&MessageType::TMTransaction).unwrap().clone(),
@@ -128,6 +139,16 @@ impl Scheduler {
                 },
                 None => error!("Peer senders failed")
             }
+        }
+    }
+
+    fn is_consensus_rmo(rmo: &RippleMessageObject) -> bool {
+        match rmo {
+            RippleMessageObject::TMTransaction(_) |
+            RippleMessageObject::TMProposeSet(_) |
+            RippleMessageObject::TMStatusChange(_) |
+            RippleMessageObject::TMHaveTransactionSet(_) => true,
+            _ => false
         }
     }
 

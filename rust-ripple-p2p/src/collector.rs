@@ -138,8 +138,8 @@ impl Collector {
 /// Struct for writing clearly to execution.txt, should definitely rename
 #[derive(Debug, Clone)]
 pub struct RippleMessage {
-    from_node: String,
-    to_node: String,
+    pub from_node: String,
+    pub to_node: String,
     timestamp: DateTime<Utc>,
     message: RippleMessageObject
 }
@@ -149,12 +149,31 @@ impl RippleMessage {
         Box::from(RippleMessage { from_node, to_node, timestamp, message })
     }
 
+    pub fn message_type(&self) -> String {
+        self.message.message_type().to_string()
+    }
+
+    pub fn sender_index(&self) -> usize {
+        self.from_node.as_str().chars().next_back().unwrap().to_digit(10).unwrap() as usize - 1
+    }
+
+    pub fn receiver_index(&self) -> usize {
+        self.to_node.as_str().chars().next_back().unwrap().to_digit(10).unwrap() as usize - 1
+    }
+
     pub fn simple_str(&self) -> String {
         let message = self.message.to_string();
         let message_type = message.split(" ").collect_vec()[0];
         format!("{}{}{}\n", self.from_node.as_str().chars().next_back().unwrap(), self.to_node.as_str().chars().next_back().unwrap(), message_type[0..message_type.len() - 1].to_string())
     }
 }
+
+impl PartialEq for RippleMessage {
+    fn eq(&self, other: &Self) -> bool {
+        self.to_node == other.to_node && self.from_node == other.from_node && self.message == other.message
+    }
+}
+impl Eq for RippleMessage {}
 
 impl Display for RippleMessage {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {

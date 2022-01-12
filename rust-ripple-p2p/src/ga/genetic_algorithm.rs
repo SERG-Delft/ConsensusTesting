@@ -14,6 +14,7 @@ use genevo::prelude::{build_population, GenerationLimit, Population, SimResult, 
 use genevo::reinsertion::elitist::ElitistReinserter;
 use genevo::types::fmt::Display;
 use log::debug;
+use petgraph::dot::{Config, Dot};
 use crate::collector::RippleMessage;
 use crate::ga::fitness::{ExtendedFitness, FailedConsensusFitness, FitnessCalculation, SchedulerHandler, TimeFitness, ValidatedLedgersFitness};
 use crate::node_state::MutexNodeStates;
@@ -151,7 +152,7 @@ impl<T> NonGaSchedulerHandler<T>
 
         let delays_genotype = vec![0u32; Parameter::num_genes()];
 
-        for i in 0..50 {
+        for i in 0..1 {
             // let delays_genotype = initial_population.individuals()[i].clone();
             println!("Starting test {}", i);
             debug!("delay genome before send: {:?}", delays_genotype);
@@ -169,6 +170,7 @@ impl<T> NonGaSchedulerHandler<T>
                         self.file.write_all(message.clone().simple_str().as_bytes()).unwrap();
                     }
                     self.file.write("\n".as_bytes()).unwrap();
+                    self.file.write(format!("{:?}", Dot::with_config(&node_states.get_dependency_graph(), &[Config::EdgeNoLabel])).as_bytes()).unwrap();
                 }
                 Err(_) => {}
             }

@@ -31,7 +31,7 @@ pub fn parse_message<T: protobuf::Message>(payload: &[u8]) -> T {
     return protobuf::Message::parse_from_bytes(&payload).unwrap()
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum RippleMessageObject {
     TMManifest(TMManifest),
     TMPing(TMPing),
@@ -50,6 +50,30 @@ pub enum RippleMessageObject {
     TMGetPeerShardInfo(TMGetPeerShardInfo),
     TMPeerShardInfo(TMPeerShardInfo),
     TMValidatorList(TMValidatorList)
+}
+
+impl RippleMessageObject {
+    pub fn message_type(&self) -> &'static str {
+        match self {
+            RippleMessageObject::TMManifest(_) => "Manifest",
+            RippleMessageObject::TMPing(_) => "Ping",
+            RippleMessageObject::TMCluster(_) => "Cluster",
+            RippleMessageObject::TMEndpoints(_) => "Endpoints",
+            RippleMessageObject::TMTransaction(_) => "Transaction",
+            RippleMessageObject::TMGetLedger(_) => "GetLedger",
+            RippleMessageObject::TMLedgerData(_) => "LedgerData",
+            RippleMessageObject::TMProposeSet(_) => "ProposeSet",
+            RippleMessageObject::TMStatusChange(_) => "StatusChange",
+            RippleMessageObject::TMHaveTransactionSet(_) => "HaveTransactionSet",
+            RippleMessageObject::TMValidation(_) => "Validation",
+            RippleMessageObject::TMGetObjectByHash(_) => "GetObjectByHash",
+            RippleMessageObject::TMGetShardInfo(_) => "GetShardInfo",
+            RippleMessageObject::TMShardInfo(_) => "ShardInfo",
+            RippleMessageObject::TMGetPeerShardInfo(_) => "GetPeerShardInfo",
+            RippleMessageObject::TMPeerShardInfo(_) => "PeerShardInfo",
+            RippleMessageObject::TMValidatorList(_) => "ValidatorList",
+        }
+    }
 }
 
 impl Display for RippleMessageObject {
