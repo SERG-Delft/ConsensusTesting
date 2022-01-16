@@ -1,15 +1,18 @@
-use log::error;
 use std::collections::HashMap;
-use chrono::Utc;
-use tokio::sync::mpsc::{Sender as TokioSender, Receiver as TokioReceiver};
-use std::sync::mpsc::{Sender as STDSender, Receiver as STDReceiver};
 use std::sync::{Arc, Mutex};
+use std::sync::mpsc::{Receiver as STDReceiver, Sender as STDSender};
 use std::thread;
+
 use byteorder::{BigEndian, ByteOrder};
-use crate::client::{SubscriptionObject};
+use chrono::Utc;
+use log::error;
+use tokio::sync::mpsc::{Receiver as TokioReceiver, Sender as TokioSender};
+
+use crate::client::SubscriptionObject;
 use crate::collector::RippleMessage;
-use crate::message_handler::{invoke_protocol_message, RippleMessageObject};
 use crate::deserialization::deserialize;
+use crate::message_handler::{invoke_protocol_message, RippleMessageObject};
+use crate::protos::ripple::TMLedgerInfoType;
 
 type P2PConnections = HashMap<usize, HashMap<usize, PeerChannel>>;
 
@@ -17,7 +20,7 @@ pub struct Scheduler {
     p2p_connections: P2PConnections,
     collector_sender: STDSender<Box<RippleMessage>>,
     stable: Arc<Mutex<bool>>,
-    latest_validated_ledger: Arc<Mutex<u32>>
+    latest_validated_ledger: Arc<Mutex<u32>>,
 }
 
 impl Scheduler {
@@ -40,41 +43,9 @@ impl Scheduler {
     fn execute_event(&self, event: Event) {
         let rmo: RippleMessageObject = invoke_protocol_message(BigEndian::read_u16(&event.message[4..6]), &event.message[6..]);
         println!("[{}->{}] {}", event.from + 1, event.to + 1, rmo);
-        let mut drop = false;
-        match rmo {
-            RippleMessageObject::TMValidation(ref x) => {
-                // deserialize(x.get_validation());
-                // println!("dropped");
-                // drop = true;
-            }
-            RippleMessageObject::TMTransaction(ref x) => {
-                deserialize(x.get_rawTransaction());
-                drop = true;
-                // if event.from + 1 == 1 {
-                println!("dropped");
-                drop = true;
-                // }
-            }
-            RippleMessageObject::TMLedgerData(ref x) => {
-                for y in x.get_nodes() {
-                    println!("#{:?} node id", y.get_nodeid());
-                    // deserialize(y.get_nodedata()) // will fail
-                }
-            }
-            // RippleMessageObject::TMLe(ref x) => {
-            //     x.get_
-            // }
-            // RippleMessageObject::TMManifest(ref x) => {
-            //     deserialize(x.get_stobject())
-            // }
-            _ => {
-
-            }
-        }
-        if !drop {
-            self.collector_sender.send(RippleMessage::new(format!("Ripple{}", event.from+1), format!("Ripple{}", event.to+1), Utc::now(), rmo)).expect("Collector receiver failed");
-            self.p2p_connections.get(&event.to).unwrap().get(&event.from).unwrap().send(event.message);
-        }
+        deserialize(&rmo);
+        self.collector_sender.send(RippleMessage::new(format!("Ripple{}", event.from + 1), format!("Ripple{}", event.to + 1), Utc::now(), rmo)).expect("Collector receiver failed");
+        self.p2p_connections.get(&event.to).unwrap().get(&event.from).unwrap().send(event.message);
     }
 
     #[allow(unused)]
@@ -119,7 +90,7 @@ impl PeerChannel {
 
     pub fn send(&self, message: Vec<u8>) {
         match self.sender.blocking_send(message) {
-            Ok(_) => { }
+            Ok(_) => {}
             Err(_err) => error!("Failed to send message to peer {}", _err)
         }
     }
@@ -128,5 +99,5 @@ impl PeerChannel {
 pub struct Event {
     pub from: usize,
     pub to: usize,
-    pub message: Vec<u8>
+    pub message: Vec<u8>,
 }
