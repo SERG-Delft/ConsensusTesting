@@ -19,7 +19,7 @@ pub fn deserialize(blob: &[u8]) {
             break;
         }
         let type_name = decode_field_code(field_type, res.1);
-        if type_name == "UNKNOWN" {
+        if type_name == "UNKNOWN".to_string() {
             break;
         }
         // println!("type code: {}, field code: {:?}", field_type, type_name);
@@ -145,7 +145,7 @@ fn get_type_field_code(blob: &mut BlobIterator) -> (u8, u8) {
 ///
 pub fn read_from_file() -> HashMap<FieldType, FieldInformation> {
     let mut data = String::new();
-    let mut file = File::open("/definitions.json").expect("Getting the file did not work.");
+    let mut file = File::open("src/deserialization/definitions.json").expect("Getting the file did not work.");
     file.read_to_string(&mut data).expect("Reading from file did not work.");
 
     let all_values: serde_json::Value = serde_json::from_str(&*data).expect("Parsing the data did not work.");
