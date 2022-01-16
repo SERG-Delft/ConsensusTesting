@@ -39,12 +39,42 @@ impl Scheduler {
 
     fn execute_event(&self, event: Event) {
         let rmo: RippleMessageObject = invoke_protocol_message(BigEndian::read_u16(&event.message[4..6]), &event.message[6..]);
+        println!("[{}->{}] {}", event.from + 1, event.to + 1, rmo);
+        let mut drop = false;
         match rmo {
-            RippleMessageObject::TMValidation(ref x) => {deserialize(x.get_validation())}
-            _ => {}
+            RippleMessageObject::TMValidation(ref x) => {
+                // deserialize(x.get_validation());
+                // println!("dropped");
+                // drop = true;
+            }
+            RippleMessageObject::TMTransaction(ref x) => {
+                deserialize(x.get_rawTransaction());
+                drop = true;
+                // if event.from + 1 == 1 {
+                println!("dropped");
+                drop = true;
+                // }
+            }
+            RippleMessageObject::TMLedgerData(ref x) => {
+                for y in x.get_nodes() {
+                    println!("#{:?} node id", y.get_nodeid());
+                    // deserialize(y.get_nodedata()) // will fail
+                }
+            }
+            // RippleMessageObject::TMLe(ref x) => {
+            //     x.get_
+            // }
+            // RippleMessageObject::TMManifest(ref x) => {
+            //     deserialize(x.get_stobject())
+            // }
+            _ => {
+
+            }
         }
-        self.collector_sender.send(RippleMessage::new(format!("Ripple{}", event.from+1), format!("Ripple{}", event.to+1), Utc::now(), rmo)).expect("Collector receiver failed");
-        self.p2p_connections.get(&event.to).unwrap().get(&event.from).unwrap().send(event.message);
+        if !drop {
+            self.collector_sender.send(RippleMessage::new(format!("Ripple{}", event.from+1), format!("Ripple{}", event.to+1), Utc::now(), rmo)).expect("Collector receiver failed");
+            self.p2p_connections.get(&event.to).unwrap().get(&event.from).unwrap().send(event.message);
+        }
     }
 
     #[allow(unused)]

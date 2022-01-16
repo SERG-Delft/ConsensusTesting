@@ -4,6 +4,7 @@ mod uint32;
 mod uint64;
 mod hash256;
 mod blob;
+mod accountid;
 
 use std::fmt;
 use std::fmt::Formatter;
@@ -13,3 +14,4 @@ pub use uint32::UInt32;
 pub use uint64::UInt64;
 pub use hash256::Hash256;
 pub use blob::Blob;
+pub use accountid::AccountID;
