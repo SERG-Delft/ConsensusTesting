@@ -32,6 +32,6 @@ impl<'b> Blob<'b> {
 
 impl fmt::Display for Blob<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "Hash256<{}>", self.blob.iter().map(|b| format!("{:02X}", b)).collect::<String>())
+        write!(f, "Blob<{}>", self.blob.iter().map(|b| format!("{:02X}", b)).collect::<String>())
     }
 }
