@@ -157,18 +157,18 @@ pub fn read_from_file() -> HashMap<FieldType, FieldInformation> {
 
     for field in fields.as_array().unwrap() {
         // the array of each field in the JSON
-        let current_field = field[1].as_array().unwrap();
+        let current_field = field[1].as_object().unwrap();
         // key: nth + type
-        let current_key = FieldType { nth: current_field[0].as_u64().unwrap() as u8, type_field: current_field[4].to_string() };
+        let current_key = FieldType { nth: current_field["nth"].as_u64().unwrap() as u8, type_field: current_field["type"].to_string() };
         let current_value = FieldInformation {
             // field name
             field_name: field[0].to_string(),
             // isVLEncoded
-            is_vl_encoded: current_field[1].as_bool().unwrap(),
+            is_vl_encoded: current_field["isVLEncoded"].as_bool().unwrap(),
             // isSerialized
-            is_serialized: current_field[2].as_bool().unwrap(),
+            is_serialized: current_field["isSerialized"].as_bool().unwrap(),
             // isSigningField
-            is_signing_field: current_field[3].as_bool().unwrap()
+            is_signing_field: current_field["isSigningField"].as_bool().unwrap()
         };
         all_fields.insert(current_key, current_value);
     }

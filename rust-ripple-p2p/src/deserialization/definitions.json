@@ -55,16 +55,6 @@
       }
     ],
     [
-      "Invalid",
-      {
-        "nth": -1,
-        "isVLEncoded": false,
-        "isSerialized": false,
-        "isSigningField": false,
-        "type": "Unknown"
-      }
-    ],
-    [
       "LedgerEntryType",
       {
         "nth": 1,
