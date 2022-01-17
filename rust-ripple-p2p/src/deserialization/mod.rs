@@ -171,44 +171,44 @@ fn decode_type_code(type_code: u8) -> &'static str {
     };
 }
 
-fn decode_field_code(field_type: &str, field_code: u8) -> &'static str {
-    // let fields = read_from_file();
-    // let current_key = FieldType { nth: field_code, type_field: field_type.to_string() };
-    // return match fields.get(&current_key) {
-    //     Some(field) => { field.field_name.to_string() }
-    //     None => { "UNKNOWN".to_string() }
-    // };
-    return match (field_type, field_code) {
-        ("UInt16", 1) => { "LedgerEntryType" }
-        ("UInt16", 2) => { "TransactionType" }
-        ("UInt32", 2) => { "Flags" }
-        ("UInt32", 4) => { "Sequence" }
-        ("UInt32", 5) => { "PreviousTxnLgrSeq" }
-        ("UInt32", 6) => { "LedgerSequence" }
-        ("UInt32", 9) => { "SigningTime" }
-        ("UInt32", 13) => { "OwnerCount" }
-        ("UInt32", 27) => { "LastLedgerSequence" }
-        ("UInt32", 31) => { "ReserveBase" }
-        ("UInt32", 32) => { "ReserveIncrement" }
-        ("UInt64", 10) => { "Cookie" }
-        ("UInt64", 11) => { "ServerVersion" }
-        ("Hash256", 1) => { "LedgerHash" }
-        ("Hash256", 5) => { "PreviousTxnID" }
-        ("Hash256", 23) => { "ConsensusHash" }
-        ("Hash256", 25) => { "ValidatedHash" }
-        ("Amount", 1) => { "Amount" }
-        ("Amount", 2) => { "Balance" }
-        ("Amount", 6) => { "LowLimit" }
-        ("Amount", 8) => { "Fee" }
-        ("Blob", 3) => { "SigningPubKey" }
-        ("Blob", 4) => { "TxnSignature" }
-        ("Blob", 6) => { "Signature" }
-        ("AccountID", 1) => { "Account" }
-        ("AccountID", 3) => { "Destination" }
-        ("Vector256", 2) => { "Hashes" }
-        // _ => { "UNKNOWN" }
-        _ => { panic!("unknown field code: {} for type {}", field_code, field_type) }
+fn decode_field_code(field_type: &str, field_code: u8) -> String {
+    let fields = read_from_file();
+    let current_key = FieldType { nth: field_code, type_field: field_type.to_string() };
+    return match fields.get(&current_key) {
+        Some(field) => { field.field_name.to_string() }
+        None => { "UNKNOWN".to_string() }
     };
+    // return match (field_type, field_code) {
+    //     ("UInt16", 1) => { "LedgerEntryType" }
+    //     ("UInt16", 2) => { "TransactionType" }
+    //     ("UInt32", 2) => { "Flags" }
+    //     ("UInt32", 4) => { "Sequence" }
+    //     ("UInt32", 5) => { "PreviousTxnLgrSeq" }
+    //     ("UInt32", 6) => { "LedgerSequence" }
+    //     ("UInt32", 9) => { "SigningTime" }
+    //     ("UInt32", 13) => { "OwnerCount" }
+    //     ("UInt32", 27) => { "LastLedgerSequence" }
+    //     ("UInt32", 31) => { "ReserveBase" }
+    //     ("UInt32", 32) => { "ReserveIncrement" }
+    //     ("UInt64", 10) => { "Cookie" }
+    //     ("UInt64", 11) => { "ServerVersion" }
+    //     ("Hash256", 1) => { "LedgerHash" }
+    //     ("Hash256", 5) => { "PreviousTxnID" }
+    //     ("Hash256", 23) => { "ConsensusHash" }
+    //     ("Hash256", 25) => { "ValidatedHash" }
+    //     ("Amount", 1) => { "Amount" }
+    //     ("Amount", 2) => { "Balance" }
+    //     ("Amount", 6) => { "LowLimit" }
+    //     ("Amount", 8) => { "Fee" }
+    //     ("Blob", 3) => { "SigningPubKey" }
+    //     ("Blob", 4) => { "TxnSignature" }
+    //     ("Blob", 6) => { "Signature" }
+    //     ("AccountID", 1) => { "Account" }
+    //     ("AccountID", 3) => { "Destination" }
+    //     ("Vector256", 2) => { "Hashes" }
+    //     // _ => { "UNKNOWN" }
+    //     _ => { panic!("unknown field code: {} for type {}", field_code, field_type) }
+    // };
 }
 
 ///
@@ -262,10 +262,11 @@ pub fn read_from_file() -> HashMap<FieldType, FieldInformation> {
         // the array of each field in the JSON
         let current_field = field[1].as_object().unwrap();
         // key: nth + type
-        let current_key = FieldType { nth: current_field["nth"].as_u64().unwrap() as u8, type_field: current_field["type"].to_string() };
+        let current_key = FieldType { nth: current_field["nth"].as_u64().unwrap() as u8, type_field: current_field["type"]
+            .to_string().replace("\"", "") };
         let current_value = FieldInformation {
             // field name
-            field_name: field[0].to_string(),
+            field_name: field[0].to_string().replace("\"", ""),
             // isVLEncoded
             is_vl_encoded: current_field["isVLEncoded"].as_bool().unwrap(),
             // isSerialized
