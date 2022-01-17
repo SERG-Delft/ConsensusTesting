@@ -176,7 +176,7 @@ fn decode_field_code(field_type: &str, field_code: u8) -> String {
     let current_key = FieldType { nth: field_code, type_field: field_type.to_string() };
     return match fields.get(&current_key) {
         Some(field) => { field.field_name.to_string() }
-        None => { "UNKNOWN".to_string() }
+        None => { "Unknown".to_string() }
     };
     // return match (field_type, field_code) {
     //     ("UInt16", 1) => { "LedgerEntryType" }
@@ -255,7 +255,7 @@ pub fn read_from_file() -> HashMap<FieldType, FieldInformation> {
     // get only the fields
     let fields = serde_json::json!(all_values["FIELDS"]);
 
-    // Hashmap with all the fields (key: nth + type)
+    // hashmap with all the fields (key: nth + type)
     let mut all_fields = HashMap::new();
 
     for field in fields.as_array().unwrap() {
