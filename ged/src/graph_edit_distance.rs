@@ -1,4 +1,5 @@
 use petgraph::Graph;
+use ndarray::Array2;
 
 pub fn calculate_graph_edit_distance<N: Clone, E>(graph1: Graph<N, E>, graph2: Graph<N, E>) -> f64
     where N: PartialEq
@@ -50,8 +51,9 @@ pub fn calculate_cost_matrix<N>(elements1: Vec<N>, elements2: Vec<N>) -> Vec<Vec
     matrix
 }
 
-pub fn munkres_min_cost(cost_matrix: &mut Vec<Vec<i32>>) {
+pub fn munkres_min_cost(cost_matrix: &mut Vec<Vec<i32>>) -> Vec<Vec<bool>> {
     let mut star_matrix = vec![vec![false; cost_matrix[0].len()]; cost_matrix.len()];
+    let mut prime_matrix = vec![vec![false; cost_matrix[0].len()]; cost_matrix.len()];
     let mut covered_columns = vec![false; cost_matrix[0].len()];
     let mut covered_rows = vec![false; cost_matrix.len()];
 
@@ -69,7 +71,94 @@ pub fn munkres_min_cost(cost_matrix: &mut Vec<Vec<i32>>) {
     }
 
     //Step 1
-    for j in start_matrix.iter().any(|row| row.iter().any(|x| x))
+    loop {
+        let columns = (0..star_matrix.len()).map(|i| star_matrix.iter().map(|row| row[i])).collect();
+        let dz = DynamicZip { iterators: star_matrix.iter().map(|v| v.into_iter()).collect() };
+        for (i, col) in dz.enumerate() {
+            if col.iter().any(|x| **x) {
+                covered_columns[i] = true;
+            }
+        }
+        if covered_columns.iter().filter(|x| **x).count() != cost_matrix.len() {
+            //step 2
+            loop {
+                if let Some((x, y)) = find_uncovered_zero(cost_matrix, &covered_columns, &covered_rows) {
+                    prime_matrix[x][y] = true;
+                    if !star_matrix[x].iter().any(|v| *v) {
+                        //Step 3
+                        let mut z0 = (x, y);
+                        let mut s = vec![];
+                        s.push(z0);
+                        while let Some(z1) = find_z1(&star_matrix, &z0) {
+                            s.push(z1);
+                            let new_y = prime_matrix[z1.0].iter().position(|v| *v).unwrap();
+                            z0 = (z1.0, new_y);
+                            s.push(z0);
+                        }
+                        for (x, y) in s {
+                            star_matrix[x][y] = false;
+                            if prime_matrix[x][y] {
+                                star_matrix[x][y] = true;
+                            }
+                        }
+                        prime_matrix = vec![vec![false; cost_matrix[0].len()]; cost_matrix.len()];
+                        covered_columns = vec![false; cost_matrix[0].len()];
+                        covered_rows = vec![false; cost_matrix[0].len()];
+                        break;
+                        //// 3
+                    } else {
+                        covered_rows[x] = true;
+                        covered_columns[y] = false;
+                    }
+                } else {
+                    let e_min = find_smallest_uncovered_element(cost_matrix, &covered_columns, &covered_rows);
+                    // Step 4
+                    for i in 0..cost_matrix.len() {
+                        for j in 0..cost_matrix.len() {
+                            if covered_rows[i] { cost_matrix[i][j] += e_min }
+                            if !covered_columns[j] { cost_matrix[i][j] -= e_min }
+                        }
+                    }
+                }
+            }
+        } else {
+            break;
+        }
+    }
+    star_matrix
+}
+
+fn find_z1(star_matrix: &Vec<Vec<bool>>, z0: &(usize, usize)) -> Option<(usize, usize)> {
+    let column: Vec<bool> = star_matrix.iter().map(|row| row[z0.1]).collect();
+    for x in 0..column.len() {
+        if column[x] {
+            return Some((x, z0.1));
+        }
+    }
+    None
+}
+
+fn find_smallest_uncovered_element(cost_matrix: &mut Vec<Vec<i32>>, covered_columns: &Vec<bool>, covered_rows: &Vec<bool>) -> i32 {
+    let mut smallest_e = i32::MAX;
+    for i in 0..cost_matrix.len() {
+        for j in 0..cost_matrix.len() {
+            if cost_matrix[i][j] < smallest_e && !covered_columns[j] && !covered_rows[i] {
+                smallest_e = cost_matrix[i][j]
+            }
+        }
+    }
+    smallest_e
+}
+
+fn find_uncovered_zero(cost_matrix: &mut Vec<Vec<i32>>, covered_columns: &Vec<bool>, covered_rows: &Vec<bool>) -> Option<(usize, usize)> {
+    for i in 0..cost_matrix.len() {
+        for j in 0..cost_matrix.len() {
+            if cost_matrix[i][j] == 0 && !covered_columns[j] && !covered_rows[i] {
+                Some((i, j));
+            }
+        }
+    }
+    None
 }
 
 /// Return true if no other value in col and row is true
@@ -77,9 +166,23 @@ fn star_row_col_check(star_matrix: &Vec<Vec<bool>>, row: usize, col: usize) -> b
     !star_matrix[row].iter().any(|x| *x) && !star_matrix.iter().map(|x| x[col]).any(|x| x)
 }
 
+struct DynamicZip<I>
+    where I: Iterator {
+    iterators: Vec<I>
+}
+
+impl<I, T> Iterator for DynamicZip<I>
+    where I: Iterator<Item = T> {
+    type Item = Vec<T>;
+    fn next(&mut self) -> Option<Self::Item> {
+        let output: Option<Vec<T>> = self.iterators.iter_mut().map(|iter| iter.next()).collect();
+        output
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::graph_edit_distance::{calculate_cost_matrix, star_row_col_check};
+    use crate::graph_edit_distance::{calculate_cost_matrix, munkres_min_cost, star_row_col_check};
 
     #[test]
     fn star_row_col_check_test() {
@@ -105,5 +208,12 @@ mod tests {
         ];
         let actual_cost_matrix = calculate_cost_matrix(n1, n2);
         assert_eq!(actual_cost_matrix, expected_cost_matrix);
+    }
+
+    #[test]
+    fn munkres_algorithm_test() {
+        let mut cost_matrix = vec![vec![2, 1, 3], vec![3, 2, 3], vec![3, 3, 2]];
+        let result = munkres_min_cost(&mut cost_matrix);
+        println!("{:?}", result);
     }
 }
