@@ -1,49 +1,36 @@
-use std::fmt::Display;
-use petgraph::Graph;
+use std::collections::HashSet;
+use std::fmt::{Debug, Display};
+use std::hash::Hash;
+use petgraph::{Direction, Graph};
 use ndarray::{Array2};
-use petgraph::adj::IndexType;
+use petgraph::prelude::EdgeRef;
 
 #[allow(unused_variables)]
 #[allow(dead_code)]
-pub fn calculate_graph_edit_distance<N: Clone, E, Ix>(graph1: Graph<N, E, petgraph::Directed, Ix>, graph2: Graph<N, E, petgraph::Directed, Ix>) -> (i32, AStarNode<N>)
-    where N: PartialEq + Eq + Clone + Display, E: PartialEq + Eq + Clone + Display, Ix: IndexType
+pub fn calculate_graph_edit_distance<N: Clone, E>(graph1: Graph<N, E, petgraph::Directed>, graph2: Graph<N, E, petgraph::Directed>) -> (i32, AStarNode<N>)
+    where N: PartialEq + Eq + Clone + Debug + Hash, E: PartialEq + Eq + Clone + Display
 {
-    let (nodes1, edges1) = graph1.clone().into_nodes_edges();
-    let (nodes2, edges2) = graph2.clone().into_nodes_edges();
-    let mut indexed_nodes_1 = vec![];
-    let mut indexed_nodes_2 = vec![];
-    for (i, node) in nodes1.iter().enumerate() {
-        indexed_nodes_1.push(IndexNodePair::new(node.clone().weight, i));
-    }
-    for (i, node) in nodes2.iter().enumerate() {
-        indexed_nodes_2.push(IndexNodePair::new(node.clone().weight, i));
-    }
-    let mut indexed_edges_1: Vec<IndexEdgePair<N>> = vec![];
-    let mut indexed_edges_2: Vec<IndexEdgePair<N>> = vec![];
-    for (i, edge) in edges1.iter().enumerate() {
-        indexed_edges_1.push(IndexEdgePair::new(graph1.node_weight(edge.source()).unwrap().clone(), graph1.node_weight(edge.target()).unwrap().clone(), i));
-    }
-    for (i, edge) in edges2.iter().enumerate() {
-        indexed_edges_2.push(IndexEdgePair::new(graph2.node_weight(edge.source()).unwrap().clone(), graph2.node_weight(edge.target()).unwrap().clone(), i));
-    }
+    let (indexed_nodes_1, indexed_nodes_2, indexed_edges_1, indexed_edges_2) = create_indexed_graph(&graph1, &graph2);
 
-
-    let mut node_matrix_cost = calculate_cost_matrix(&indexed_nodes_1, &indexed_nodes_2);
-    // let mut edge_matrix_cost = calculate_cost_matrix(graph1.raw_edges().iter().map(|e| (e.source(), e.target())).collect(), graph2.raw_edges().iter().map(|e| (e.source(), e.target())).collect());
+    let node_matrix_cost = calculate_cost_matrix(&indexed_nodes_1, &indexed_nodes_2);
+    let edge_matrix_cost = calculate_cost_matrix(&indexed_edges_1, &indexed_edges_2);
     let munkres_nodes = munkres_min_cost(&mut node_matrix_cost.clone());
-    // let munkres_edges = munkres_min_cost(&mut edge_matrix_cost);
+    let munkres_edges = munkres_min_cost(&mut edge_matrix_cost.clone());
 
-    let sorted_v1 = sort_nodes(&indexed_nodes_1, &node_matrix_cost, &munkres_nodes);
+    let sorted_v1: Vec<IndexNodePair<N>> = sort_nodes(&indexed_nodes_1, &node_matrix_cost, &munkres_nodes);
+    println!("{:?}", sorted_v1);
 
     let mut upper_bound = calculate_upper_bound(&node_matrix_cost, &munkres_nodes) + 1;
-    // upper_bound += calculate_upper_bound(&edge_matrix_cost, &munkres_edges);
+    upper_bound += calculate_upper_bound(&edge_matrix_cost, &munkres_edges) + 1;
 
     let mut open: Vec<AStarNode<N>> = vec![];
     let mut best_edit_path: Vec<AStarNode<N>> = vec![];
 
-    let mut root = AStarNode::new(vec![], vec![], indexed_nodes_1.clone(), indexed_nodes_2.clone(), indexed_edges_1, indexed_edges_2, None, 0);
+    let root: AStarNode<N> = AStarNode::new(vec![], vec![], indexed_nodes_1.clone(), indexed_nodes_2.clone(), indexed_edges_1, indexed_edges_2, None, 0);
     let mut parent_temp: AStarNode<N> = root.clone();
     let children = parent_temp.children(&sorted_v1[0]);
+    children.iter().for_each(|child| print!("g: {}, lb: {}; ", child.g, child.lb));
+    println!("UB: {}", upper_bound);
     open.extend(children);
     let mut k = 0;
     loop {
@@ -61,10 +48,14 @@ pub fn calculate_graph_edit_distance<N: Clone, E, Ix>(graph1: Graph<N, E, petgra
             return (upper_bound, best_edit_path[0].clone());
         }
         open.remove(open.iter().position(|v| *v == p_min[0]).unwrap());
+        println!("new p_min: matched_nodes {:?}, matched_edges {:?}", p_min[0].matched_nodes, p_min[0].matched_edges);
         k += 1;
         if p_min[0].g + p_min[0].lb < upper_bound {
             if !p_min[0].pending_nodes_1.is_empty() {
                 let children = p_min[0].children(&sorted_v1[k]);
+                children.iter().for_each(|child| print!("g: {}, lb: {}; ", child.g, child.lb));
+                println!("UB: {}", upper_bound);
+
                 for i in 0..children.len() {
                     if children[i].g + children[i].lb < upper_bound {
                         open.push(children[i].clone());
@@ -72,6 +63,7 @@ pub fn calculate_graph_edit_distance<N: Clone, E, Ix>(graph1: Graph<N, E, petgra
                 }
             } else {
                 let p = p_min[0].clone().generate_complete_solution();
+                println!("g: {}", p.g);
                 if p.g < upper_bound {
                     upper_bound = p.g;
                     best_edit_path.push(p.clone());
@@ -85,7 +77,7 @@ pub fn calculate_graph_edit_distance<N: Clone, E, Ix>(graph1: Graph<N, E, petgra
 
 }
 
-fn sort_nodes<N: Clone + Eq>(nodes: &Vec<IndexNodePair<N>>, node_cost_matrix: &Array2<i32>, munkres_nodes: &Array2<bool>) -> Vec<IndexNodePair<N>> {
+fn sort_nodes<N: Clone + Eq + Debug + Hash>(nodes: &Vec<IndexNodePair<N>>, node_cost_matrix: &Array2<i32>, munkres_nodes: &Array2<bool>) -> Vec<IndexNodePair<N>> {
     let mut index_node_value_pairs = vec![];
     for i in 0..nodes.len() {
         index_node_value_pairs.push((nodes[i].clone(), node_cost_matrix[(i, munkres_nodes.row(i).iter().position(|v| *v).unwrap())]));
@@ -106,16 +98,43 @@ fn calculate_upper_bound(cost_matrix: &Array2<i32>, munkres_matrix: &Array2<bool
     upper_bound
 }
 
-pub fn calculate_cost_matrix<N>(elements1: &Vec<IndexNodePair<N>>, elements2: &Vec<IndexNodePair<N>>) -> Array2<i32>
-    where N: PartialEq + Eq + Clone + Display
-{
+fn create_indexed_graph<'a, N: Clone + Eq + Debug + Hash, E>(graph1: &'a Graph<N, E>, graph2: &'a Graph<N, E>) -> (Vec<IndexNodePair<N>>, Vec<IndexNodePair<N>>, Vec<IndexEdgePair<N>>, Vec<IndexEdgePair<N>>) {
+    let mut indexed_nodes_1: Vec<IndexNodePair<N>> = vec![];
+    let mut indexed_nodes_2: Vec<IndexNodePair<N>> = vec![];
+    let mut edge_set_1: HashSet<IndexEdgePair<N>> = HashSet::new();
+    let mut edge_set_2: HashSet<IndexEdgePair<N>> = HashSet::new();
+    fill_nodes_edges(graph1, &mut indexed_nodes_1, &mut edge_set_1);
+    fill_nodes_edges(graph2, &mut indexed_nodes_2, &mut edge_set_2);
+
+    (indexed_nodes_1, indexed_nodes_2, edge_set_1.into_iter().collect::<Vec<IndexEdgePair<N>>>(), edge_set_2.into_iter().collect::<Vec<IndexEdgePair<N>>>())
+}
+
+pub fn fill_nodes_edges<N: Clone + Eq + Debug + Hash, E>(graph: &Graph<N, E>, indexed_nodes: &mut Vec<IndexNodePair<N>>, edge_set: &mut HashSet<IndexEdgePair<N>>) {
+    for (i, index) in graph.node_indices().enumerate() {
+        let mut outgoing_edges = vec![];
+        let mut incoming_edges = vec![];
+        for edge in graph.edges_directed(index, Direction::Outgoing) {
+            let index_edge = IndexEdgePair::new(graph.node_weight(edge.source()).unwrap().clone(), graph.node_weight(edge.target()).unwrap().clone());
+            outgoing_edges.push(index_edge.clone());
+            edge_set.insert(index_edge);
+        }
+        for edge in graph.edges_directed(index, Direction::Incoming) {
+            let index_edge = IndexEdgePair::new(graph.node_weight(edge.source()).unwrap().clone(), graph.node_weight(edge.target()).unwrap().clone());
+            incoming_edges.push(index_edge.clone());
+            edge_set.insert(index_edge);
+        }
+        indexed_nodes.push(IndexNodePair::new(graph.node_weight(index).unwrap().clone(), incoming_edges, outgoing_edges, i));
+    }
+}
+
+pub fn calculate_cost_matrix<T: GraphComponent>(elements1: &Vec<T>, elements2: &Vec<T>) -> Array2<i32> {
     let k = elements1.len() + elements2.len();
     let mut matrix = Array2::from_elem((k, k), 0);
 
     // Substitution cost
     for i in 0..elements1.len() {
         for j in 0..elements2.len() {
-            if elements1[i].node == elements2[j].node {
+            if elements1[i].value() == elements2[j].value() {
                 matrix[(i, j)] = 0
             } else {
                 matrix[(i, j)] = 1
@@ -247,12 +266,10 @@ fn find_uncovered_zero(cost_matrix: &mut Array2<i32>, covered_columns: &Vec<bool
     for i in 0..cost_matrix.nrows() {
         for j in 0..cost_matrix.ncols() {
             if cost_matrix[(i, j)] == 0 && !covered_columns[j] && !covered_rows[i] {
-                println!("Uncovered zero found: {:?}\n cost_matrix: \n{}\n  covered_rows: {:?}\n covered_cols: {:?}", (i, j), cost_matrix, covered_rows, covered_columns);
                 return Some((i, j));
             }
         }
     }
-    println!("Uncovered zero not found found: cost_matrix: \n{}\n  covered_rows: {:?}\n covered_cols: {:?}", cost_matrix, covered_rows, covered_columns);
     None
 }
 
@@ -263,7 +280,7 @@ fn star_row_col_check(star_matrix: &Array2<bool>, row: usize, col: usize) -> boo
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct AStarNode<N>
-    where N: PartialEq + Eq + Clone
+    where N: PartialEq + Eq + Clone + Debug + Hash
 {
     matched_nodes: Vec<IndexNodePair<N>>,
     matched_edges: Vec<IndexEdgePair<N>>,
@@ -275,11 +292,12 @@ pub struct AStarNode<N>
     g: i32,
     lb: i32,
     node_cost_matrix: Array2<i32>,
+    edge_cost_matrix: Array2<i32>,
     children: Option<Vec<AStarNode<N>>>
 }
 
 impl<N> AStarNode<N>
-    where N: PartialEq + Eq + Clone + Display
+    where N: PartialEq + Eq + Clone + Debug + Hash
 {
     fn new(
         matched_nodes: Vec<IndexNodePair<N>>,
@@ -291,24 +309,32 @@ impl<N> AStarNode<N>
         parent: Option<AStarNode<N>>,
         g: i32
     ) -> Self {
-        let mut cost_matrix = calculate_cost_matrix(&pending_nodes_1, &pending_nodes_2);
+        let node_cost_matrix = calculate_cost_matrix(&pending_nodes_1, &pending_nodes_2);
+        let edge_cost_matrix = calculate_cost_matrix(&pending_edges_1, &pending_edges_2);
+
         if parent == None {
-            return Self { matched_nodes, matched_edges, pending_nodes_1, pending_nodes_2, pending_edges_1, pending_edges_2, parent: None, g, lb: i32::MAX, node_cost_matrix: cost_matrix, children: None };
+            return Self { matched_nodes, matched_edges, pending_nodes_1, pending_nodes_2, pending_edges_1, pending_edges_2, parent: None, g, lb: i32::MAX, node_cost_matrix, edge_cost_matrix, children: None };
         }
-        let munkres_matrix = munkres_min_cost(&mut cost_matrix.clone());
+        let node_munkres_matrix = munkres_min_cost(&mut node_cost_matrix.clone());
         let mut lb = 0;
-        for i in 0..munkres_matrix.nrows() {
-            for j in 0..munkres_matrix.ncols() {
-                if munkres_matrix[(i, j)] { lb += cost_matrix[(i, j)] }
+        for i in 0..node_munkres_matrix.nrows() {
+            for j in 0..node_munkres_matrix.ncols() {
+                if node_munkres_matrix[(i, j)] { lb += node_cost_matrix[(i, j)] }
+            }
+        }
+        let edge_munkres_matrix = munkres_min_cost(&mut edge_cost_matrix.clone());
+        for i in 0..edge_munkres_matrix.nrows() {
+            for j in 0..edge_munkres_matrix.ncols() {
+                if edge_munkres_matrix[(i, j)] { lb += edge_cost_matrix[(i, j)] }
             }
         }
         return match parent {
-            None => Self { matched_nodes, matched_edges, pending_nodes_1, pending_nodes_2, pending_edges_1, pending_edges_2, parent: None, g, lb, node_cost_matrix: cost_matrix, children: None },
-            Some(par) => Self { matched_nodes, matched_edges, pending_nodes_1, pending_nodes_2, pending_edges_1, pending_edges_2, parent: Some(Box::new(par)), g, lb, node_cost_matrix: cost_matrix, children: None }
+            None => Self { matched_nodes, matched_edges, pending_nodes_1, pending_nodes_2, pending_edges_1, pending_edges_2, parent: None, g, lb, node_cost_matrix, edge_cost_matrix, children: None },
+            Some(par) => Self { matched_nodes, matched_edges, pending_nodes_1, pending_nodes_2, pending_edges_1, pending_edges_2, parent: Some(Box::new(par)), g, lb, node_cost_matrix, edge_cost_matrix, children: None }
         }
     }
 
-    fn children(&mut self, v1: &IndexNodePair<N>) -> Vec<AStarNode<N>> where N: Clone {
+    fn children(&mut self, v1: &IndexNodePair<N>) -> Vec<AStarNode<N>> where N: Clone + Hash {
         if self.pending_nodes_1.is_empty() { return vec![]; }
 
         let mut children = vec![];
@@ -316,33 +342,53 @@ impl<N> AStarNode<N>
         let new_node_1_index = new_pending_nodes_1.iter().position(|node| *node == *v1).unwrap();
         new_pending_nodes_1.remove(new_node_1_index);
 
+        let mut new_pending_edges_1 = self.pending_edges_1.clone();
+        let matched_edges = self.matched_edges.clone();
+        let mut new_matched_edges = vec![];
+        for edge in &v1.edges() {
+            if new_pending_edges_1.contains(edge) {
+                let new_edges_1_index = new_pending_edges_1.iter().position(|edg| *edg == *edge).unwrap();
+                new_matched_edges.push(new_pending_edges_1.remove(new_edges_1_index));
+            }
+        }
+
         let mut new_matched_nodes = self.matched_nodes.clone();
         new_matched_nodes.push(v1.clone());
 
         for i in 0..self.pending_nodes_2.len() {
             let mut new_pending_nodes_2 = self.pending_nodes_2.clone();
-            new_pending_nodes_2.remove(i);
+            let removed_node = new_pending_nodes_2.remove(i);
+            let mut new_pending_edges_2 = self.pending_edges_2.clone();
+            let mut new_matched_edges_2 = vec![];
+            for edge in &removed_node.edges() {
+                if new_pending_edges_2.contains(edge) {
+                    let removed_edge_index = new_pending_edges_2.iter().position(|edg| *edg == *edge).unwrap();
+                    new_matched_edges_2.push(new_pending_edges_2.remove(removed_edge_index));
+                }
+            }
             let child_node = Self::new(
                 [new_matched_nodes.as_slice(), &[self.pending_nodes_2[i].clone()]].concat().to_vec(),
-                self.matched_edges.clone(),
+                [matched_edges.as_slice(), new_matched_edges.clone().as_slice(), new_matched_edges_2.as_slice()].concat().to_vec(),
                 new_pending_nodes_1.clone(),
                 new_pending_nodes_2,
-                self.pending_edges_1.clone(),
-                self.pending_edges_2.clone(),
+                new_pending_edges_1.clone(),
+                new_pending_edges_2,
                 Some(self.clone()),
-                self.g + self.node_cost_matrix[(new_node_1_index, i)].clone()
+                self.g + self.node_cost_matrix[(new_node_1_index, i)].clone() + self.calculate_edge_cost_substitution(&v1, &removed_node)
+                // self.g + self.node_cost_matrix[(new_node_1_index, i)].clone() + self.calculate_edge_cost(&new_matched_edges, &new_matched_edges_2)
             );
             children.push(child_node);
         }
         children.push(Self::new(
             new_matched_nodes.clone(),
-            self.matched_edges.clone(),
+            [matched_edges.as_slice(), new_matched_edges.as_slice()].concat().to_vec(),
             new_pending_nodes_1.clone(),
             self.pending_nodes_2.clone(),
-            self.pending_edges_1.clone(),
+            new_pending_edges_1.clone(),
             self.pending_edges_2.clone(),
             Some(self.clone()),
-            self.g + self.node_cost_matrix[(new_node_1_index, self.pending_nodes_2.len() + new_node_1_index)].clone()
+            self.g + self.node_cost_matrix[(new_node_1_index, self.pending_nodes_2.len() + new_node_1_index)].clone() + self.calculate_edge_cost_deletion(&new_matched_edges)
+            // self.g + self.node_cost_matrix[(new_node_1_index, self.pending_nodes_2.len() + new_node_1_index)].clone() + self.calculate_edge_cost(&new_matched_edges, &vec![])
         ));
 
         children
@@ -366,44 +412,94 @@ impl<N> AStarNode<N>
         for i in 0..self.pending_nodes_2.len() {
             g += self.node_cost_matrix[(i, i)];
         }
+        if !self.pending_edges_1.is_empty() {
+            println!("Ohjeeeee edges niet leeg, maar nodes wel");
+        }
+        g += self.calculate_edge_cost_insertion(&self.pending_edges_2);
 
         Self::new([self.matched_nodes.as_slice(), self.pending_nodes_2.as_slice()].concat().to_vec(), self.matched_edges.clone(), vec![], vec![], vec![], vec![], Some(self.clone()), g)
+    }
+
+    fn calculate_edge_cost_substitution(&self, node_1: &IndexNodePair<N>, node_2: &IndexNodePair<N>) -> i32 {
+        // let edge_cost_matrix = calculate_cost_matrix(&edges_1, &edges_2);
+        // let edge_cost_munkres = munkres_min_cost(&mut edge_cost_matrix.clone());
+        ((node_2.outgoing_edges.len() as i32 - node_1.outgoing_edges.len() as i32).abs() + (node_2.incoming_edges.len() as i32 - node_1.incoming_edges.len() as i32).abs()) as i32
+    }
+
+    fn calculate_edge_cost_deletion(&self, edges: &Vec<IndexEdgePair<N>>) -> i32 {
+        edges.len() as i32
+    }
+
+    fn calculate_edge_cost_insertion(&self, edges: &Vec<IndexEdgePair<N>>) -> i32 {
+        edges.len() as i32
     }
 }
 
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct IndexNodePair<N>
-    where N: PartialEq + Eq + Clone
+    where N: PartialEq + Eq + Clone + Debug + Hash
 {
     node: N,
+    incoming_edges: Vec<IndexEdgePair<N>>,
+    outgoing_edges: Vec<IndexEdgePair<N>>,
     index: usize,
 }
 
-impl<N> IndexNodePair<N> where N: PartialEq + Eq + Clone{
-    pub fn new(node: N, index: usize) -> Self {
-        Self { node, index }
+impl<N> IndexNodePair<N> where N: PartialEq + Eq + Clone + Debug + Hash {
+    pub fn new(node: N, incoming_edges: Vec<IndexEdgePair<N>>, outgoing_edges: Vec<IndexEdgePair<N>>, index: usize) -> Self {
+        Self { node, incoming_edges, outgoing_edges, index }
+    }
+
+    pub fn edges(&self) -> Vec<IndexEdgePair<N>>{
+        let mut edge_set = HashSet::new();
+        self.incoming_edges.iter().for_each(|edge| { edge_set.insert(edge.clone()); });
+        self.outgoing_edges.iter().for_each(|edge| { edge_set.insert(edge.clone()); });
+        edge_set.into_iter().collect::<Vec<IndexEdgePair<N>>>()
     }
 }
 
-#[derive(PartialEq, Eq, Clone, Debug)]
+impl<N> GraphComponent for IndexNodePair<N> where N: PartialEq + Eq + Clone + Debug + Hash {
+    type ValueType = N;
+
+    fn value(&self) -> Self::ValueType {
+        self.node.clone()
+    }
+}
+
+#[derive(PartialEq, Eq, Clone, Debug, Hash)]
 pub struct IndexEdgePair<N>
-    where N: PartialEq + Eq + Clone
+    where N: PartialEq + Eq + Clone + Debug + Hash
 {
+    source: N,
+    target: N,
     edge: (N, N),
-    index: usize,
 }
 
-impl<N> IndexEdgePair<N> where N: PartialEq + Eq + Clone{
-    pub fn new(source: N, target: N, index: usize) -> Self {
-        Self { edge: (source, target), index }
+impl<N> IndexEdgePair<N> where N: PartialEq + Eq + Clone + Debug + Hash {
+    pub fn new(source: N, target: N) -> Self {
+        Self { source: source.clone(), target: target.clone(), edge: (source, target) }
     }
+}
+
+impl<N> GraphComponent for IndexEdgePair<N> where N: PartialEq + Eq + Clone + Debug + Hash {
+    type ValueType = (N, N);
+
+    fn value(&self) -> Self::ValueType {
+        self.edge.clone()
+    }
+}
+
+pub trait GraphComponent {
+    type ValueType: PartialEq + Eq + Clone + Hash;
+
+    fn value(&self) -> Self::ValueType;
 }
 
 #[cfg(test)]
 mod tests {
     use ndarray::{arr2, Array2};
     use petgraph::Graph;
-    use crate::graph_edit_distance::{AStarNode, calculate_cost_matrix, calculate_graph_edit_distance, IndexNodePair, munkres_min_cost, sort_nodes, star_row_col_check};
+    use crate::graph_edit_distance::{AStarNode, calculate_cost_matrix, calculate_graph_edit_distance, create_indexed_graph, IndexEdgePair, IndexNodePair, munkres_min_cost, sort_nodes, star_row_col_check};
 
     #[test]
     fn star_row_col_check_test() {
@@ -417,8 +513,8 @@ mod tests {
 
     #[test]
     fn calculate_cost_matrix_test() {
-        let n1 = vec![IndexNodePair::new(1, 0), IndexNodePair::new(2, 1), IndexNodePair::new(3, 2)];
-        let n2 = vec![IndexNodePair::new(3, 0), IndexNodePair::new(4, 1), IndexNodePair::new(5, 2)];
+        let n1 = vec![IndexNodePair::new(1, vec![],vec![],0), IndexNodePair::new(2, vec![], vec![],1), IndexNodePair::new(3, vec![], vec![], 2)];
+        let n2 = vec![IndexNodePair::new(3, vec![], vec![], 0), IndexNodePair::new(4, vec![], vec![], 1), IndexNodePair::new(5, vec![], vec![], 2)];
         let expected_cost_matrix: Array2<i32> = arr2(&[
             [1, 1, 1, 1, i32::MAX, i32::MAX],
             [1, 1, 1, i32::MAX, 1, i32::MAX],
@@ -454,50 +550,50 @@ mod tests {
     fn test_a_star_node() {
         let matched_nodes = vec![];
         let matched_edges = vec![];
-        let pending_nodes_1 = vec![IndexNodePair::new("node1", 0), IndexNodePair::new("node2", 1)];
-        let pending_nodes_2 = vec![IndexNodePair::new("node1", 0), IndexNodePair::new("node3", 1)];
+        let edge1 = IndexEdgePair::new("node1", "node2");
+        let edge2 = IndexEdgePair::new("node1", "node3");
+        let node1 = IndexNodePair::new("node1", vec![], vec![edge1.clone()], 0);
+        let node2 = IndexNodePair::new("node1", vec![], vec![edge2.clone()], 0);
+        let node3 = IndexNodePair::new("node2", vec![], vec![edge1.clone()], 1);
+        let node4 = IndexNodePair::new("node3", vec![], vec![edge2.clone()], 1);
+        let pending_nodes_1 = vec![node1, node3];
+        let pending_nodes_2 = vec![node2, node4];
         let mut star_node = AStarNode::new(matched_nodes,
                                            matched_edges,
                                            pending_nodes_1.clone(),
                                            pending_nodes_2,
-                                           vec![],
-                                           vec![],
+                                           vec![edge1],
+                                           vec![edge2],
                                            None,
                                            1);
         assert_eq!(star_node.lb, i32::MAX);
-        let expected_cost_matrix = arr2(
+        let expected_node_cost_matrix = arr2(
             &[[0, 1, 1, i32::MAX],
                 [1, 1, i32::MAX, 1],
                 [1, i32::MAX, 0, 0],
                 [i32::MAX, 1, 0, 0]]);
-        assert_eq!(star_node.node_cost_matrix, expected_cost_matrix);
+        assert_eq!(star_node.node_cost_matrix, expected_node_cost_matrix);
+        let expected_edge_cost_matrix = arr2(
+            &[[1, 1],
+                [1, 0]]);
+        assert_eq!(star_node.edge_cost_matrix, expected_edge_cost_matrix);
         let children = star_node.children(&pending_nodes_1[0]);
         assert_eq!(children.len(), 3);
-        assert_eq!(children[0].g, 1);
-        assert_eq!(children[1].g, 2);
-        assert_eq!(children[2].g, 2);
+        assert_eq!(children[0].g, 2);
+        assert_eq!(children[1].g, 3);
+        assert_eq!(children[2].g, 3);
         assert_eq!(star_node.best_child(&pending_nodes_1[0], &children)[0], children[0]);
     }
 
     #[test]
     fn test_sort_v1() {
         let (graph1, graph2) = setup_graph();
-
-        let (nodes1, edges1) = graph1.clone().into_nodes_edges();
-        let (nodes2, edges2) = graph2.clone().into_nodes_edges();
-        let mut indexed_nodes_1 = vec![];
-        let mut indexed_nodes_2 = vec![];
-        for (i, node) in nodes1.iter().enumerate() {
-            indexed_nodes_1.push(IndexNodePair::new(node.clone().weight, i));
-        }
-        for (i, node) in nodes2.iter().enumerate() {
-            indexed_nodes_2.push(IndexNodePair::new(node.clone().weight, i));
-        }
+        let (indexed_nodes_1, indexed_nodes_2, _indexed_edges_1, _indexed_edges_2) = create_indexed_graph(&graph1, &graph2);
 
         println!("{:?}", indexed_nodes_1);
         println!("{:?}", indexed_nodes_2);
 
-        let mut node_matrix_cost = calculate_cost_matrix(&indexed_nodes_1, &indexed_nodes_2);
+        let node_matrix_cost = calculate_cost_matrix(&indexed_nodes_1, &indexed_nodes_2);
         let munkres_nodes = munkres_min_cost(&mut node_matrix_cost.clone());
 
         println!("{}", node_matrix_cost);
@@ -511,24 +607,14 @@ mod tests {
     #[test]
     fn test_children_twice_equality() {
         let (graph1, graph2) = setup_graph();
+        let (indexed_nodes_1, indexed_nodes_2, indexed_edges_1, indexed_edges_2) = create_indexed_graph(&graph1, &graph2);
 
-        let (nodes1, edges1) = graph1.clone().into_nodes_edges();
-        let (nodes2, edges2) = graph2.clone().into_nodes_edges();
-        let mut indexed_nodes_1 = vec![];
-        let mut indexed_nodes_2 = vec![];
-        for (i, node) in nodes1.iter().enumerate() {
-            indexed_nodes_1.push(IndexNodePair::new(node.clone().weight, i));
-        }
-        for (i, node) in nodes2.iter().enumerate() {
-            indexed_nodes_2.push(IndexNodePair::new(node.clone().weight, i));
-        }
-
-        let mut node_matrix_cost = calculate_cost_matrix(&indexed_nodes_1, &indexed_nodes_2);
+        let node_matrix_cost = calculate_cost_matrix(&indexed_nodes_1, &indexed_nodes_2);
         let munkres_nodes = munkres_min_cost(&mut node_matrix_cost.clone());
 
         let sorted_v1 = sort_nodes(&indexed_nodes_1, &node_matrix_cost, &munkres_nodes);
 
-        let mut root = AStarNode::new(vec![], vec![], indexed_nodes_1.clone(), indexed_nodes_2.clone(), vec![], vec![], None, 0);
+        let mut root = AStarNode::new(vec![], vec![], indexed_nodes_1.clone(), indexed_nodes_2.clone(), indexed_edges_1.clone(), indexed_edges_2.clone(), None, 0);
         assert_eq!(root.children(&sorted_v1[0]), root.children(&sorted_v1[0]))
     }
 
@@ -536,7 +622,14 @@ mod tests {
     fn test_graph_edit_distance() {
         let (graph1, graph2) = setup_graph();
         let (upper_bound, edit_path) = calculate_graph_edit_distance(graph1, graph2);
-        println!("{}, {:?}", upper_bound, edit_path);
+        assert_eq!(upper_bound, 3);
+    }
+
+    #[test]
+    fn test_graph_edit_distance_2() {
+        let (graph1, graph2) = setup_graph_2();
+        let (upper_bound, edit_path) = calculate_graph_edit_distance(graph1, graph2);
+        assert_eq!(upper_bound, 4);
     }
 
     fn setup_graph() -> (Graph<&'static str, &'static str>, Graph<&'static str, &'static str>) {
@@ -552,6 +645,22 @@ mod tests {
         let message3 = graph2.add_node("Proposal");
         let message4 = graph2.add_node("Transaction");
         graph2.extend_with_edges(&[(message1, message2), (message3, message4)]);
+        (graph1, graph2)
+    }
+
+    fn setup_graph_2() -> (Graph<&'static str, &'static str>, Graph<&'static str, &'static str>) {
+        let mut graph1 = Graph::<&str, &str>::new();
+        let message1 = graph1.add_node("Proposal");
+        let message2 = graph1.add_node("Validation");
+        let message3 = graph1.add_node("Proposal");
+        let message4 = graph1.add_node("Validation");
+        graph1.extend_with_edges(&[(message1, message3), (message2, message4), (message2, message3)]);
+        let mut graph2 = Graph::<&str, &str>::new();
+        let message1 = graph2.add_node("Proposal");
+        let message2 = graph2.add_node("Transaction");
+        let message3 = graph2.add_node("Proposal");
+        let message4 = graph2.add_node("Transaction");
+        graph2.extend_with_edges(&[(message1, message2), (message3, message4), (message1, message4)]);
         (graph1, graph2)
     }
 }
