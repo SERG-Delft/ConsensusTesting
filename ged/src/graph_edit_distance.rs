@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use std::fmt::{Debug, Display};
+use std::fmt::{Debug};
 use std::hash::Hash;
 use petgraph::{Direction, Graph};
 use ndarray::{Array2};
@@ -7,8 +7,8 @@ use petgraph::prelude::EdgeRef;
 
 #[allow(unused_variables)]
 #[allow(dead_code)]
-pub fn calculate_graph_edit_distance<N: Clone, E>(graph1: Graph<N, E, petgraph::Directed>, graph2: Graph<N, E, petgraph::Directed>) -> (i32, AStarNode<N>)
-    where N: PartialEq + Eq + Clone + Debug + Hash, E: PartialEq + Eq + Clone + Display
+pub fn calculate_graph_edit_distance<N, E>(graph1: Graph<N, E, petgraph::Directed>, graph2: Graph<N, E, petgraph::Directed>) -> (i32, AStarNode<N>)
+    where N: PartialEq + Eq + Clone + Debug + Hash, E: PartialEq + Eq + Clone
 {
     let (indexed_nodes_1, indexed_nodes_2, indexed_edges_1, indexed_edges_2) = create_indexed_graph(&graph1, &graph2);
 
@@ -48,7 +48,7 @@ pub fn calculate_graph_edit_distance<N: Clone, E>(graph1: Graph<N, E, petgraph::
             return (upper_bound, best_edit_path[0].clone());
         }
         open.remove(open.iter().position(|v| *v == p_min[0]).unwrap());
-        println!("new p_min: matched_nodes {:?}, matched_edges {:?}", p_min[0].matched_nodes, p_min[0].matched_edges);
+        println!("new p_min: matched_nodes {:?}, matched_edges {:?}", p_min[0].matched_nodes.iter().map(|node| (&node.node, &node.index)).collect::<Vec<(&N, &usize)>>(), p_min[0].matched_edges);
         k += 1;
         if p_min[0].g + p_min[0].lb < upper_bound {
             if !p_min[0].pending_nodes_1.is_empty() {

@@ -287,7 +287,7 @@ impl MutexNodeStates {
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub struct DependencyEvent {
     pub ripple_message: RippleMessage,
 }

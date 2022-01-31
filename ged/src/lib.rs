@@ -1,4 +1,4 @@
-mod graph_edit_distance;
+pub mod graph_edit_distance;
 
 #[cfg(test)]
 mod tests {

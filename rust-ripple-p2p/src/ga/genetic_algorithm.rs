@@ -152,7 +152,9 @@ impl<T> NonGaSchedulerHandler<T>
 
         let delays_genotype = vec![0u32; Parameter::num_genes()];
 
-        for i in 0..1 {
+        let mut graphs = vec![];
+
+        for i in 0..2 {
             // let delays_genotype = initial_population.individuals()[i].clone();
             println!("Starting test {}", i);
             debug!("delay genome before send: {:?}", delays_genotype);
@@ -169,12 +171,16 @@ impl<T> NonGaSchedulerHandler<T>
                     for message in &self.executions[i] {
                         self.file.write_all(message.clone().simple_str().as_bytes()).unwrap();
                     }
+                    graphs.push(node_states.get_dependency_graph());
                     self.file.write("\n".as_bytes()).unwrap();
                     self.file.write(format!("{:?}", Dot::with_config(&node_states.get_dependency_graph(), &[Config::EdgeNoLabel])).as_bytes()).unwrap();
                 }
                 Err(_) => {}
             }
         }
+        println!("Starting ged calc");
+        let (upper_bound, edit_path) = ged::graph_edit_distance::calculate_graph_edit_distance(graphs[0].clone(), graphs[1].clone());
+        println!("Finished ged calc");
         std::process::exit(0);
     }
 }

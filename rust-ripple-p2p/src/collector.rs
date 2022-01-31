@@ -1,5 +1,6 @@
 use std::fmt::{Display, Formatter};
 use std::fs::File;
+use std::hash::{Hash, Hasher};
 use std::io::{BufWriter, Write};
 use std::path::Path;
 use std::sync::Arc;
@@ -165,6 +166,14 @@ impl RippleMessage {
         let message = self.message.to_string();
         let message_type = message.split(" ").collect_vec()[0];
         format!("{}{}{}\n", self.from_node.as_str().chars().next_back().unwrap(), self.to_node.as_str().chars().next_back().unwrap(), message_type[0..message_type.len() - 1].to_string())
+    }
+}
+
+impl Hash for RippleMessage {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.to_node.hash(state);
+        self.from_node.hash(state);
+        self.message.hash(state);
     }
 }
 
