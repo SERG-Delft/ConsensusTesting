@@ -178,7 +178,8 @@ fn decode_field_code(field_type: &str, field_code: u8) -> String {
         Some(field) => { field.field_name.to_string() }
         None => { "Unknown".to_string() }
     };
-    if result.to_string().eq("Unknown") {
+    // if the key is not in the fields in definitions.json
+    if result.eq("Unknown") {
         return match (field_type, field_code) {
             ("UInt64", 10) => { "Cookie".to_string() }
             ("Hash256", 25) => { "ValidatedHash".to_string() }
