@@ -1,4 +1,4 @@
-$total = 5
+$total = 7
 $n = $args[0]
 $connected = $args[1]
 $path = "..\config"
@@ -36,15 +36,15 @@ For ($i=0; $i -lt $n; $i++) {
   if ($connected -eq "1") {
     $ips_fixed = (-join(($rippled_cfg_base[48..(48+$i)] -ne $own_ip | Out-String), ($rippled_cfg_base[(48+$i)..(48+$n-1)] -ne $own_ip | Out-String)))
   } else {
-    $ips_fixed = $rippled_cfg_base[53]
+    $ips_fixed = $rippled_cfg_base[55]
   }
   $cluster_keys_filtered = (-join(($cluster_keys[0..$i] -ne $own_cluster_pub_key | Out-String),
       ($cluster_keys[$i..($n-1)] -ne $own_cluster_pub_key | Out-String)))
-  $cluster = (-join(($rippled_cfg_base[54 ..55] | out-string), $cluster_seeds[$i], ($rippled_cfg_base[56..58] | Out-String), ($cluster_keys_filtered | Out-String)))
+  $cluster = (-join(($rippled_cfg_base[56 ..57] | out-string), $cluster_seeds[$i], ($rippled_cfg_base[58..60] | Out-String), ($cluster_keys_filtered | Out-String)))
   $config_contents = (-join(($rippled_cfg_base[0..33] | out-string), $validator_tokens[$i],
         ($rippled_cfg_base[34..47] | Out-String), $ips_fixed,
         $cluster,
-        ($rippled_cfg_base[59..$rippled_cfg_base.Length] | out-string)))
+        ($rippled_cfg_base[61..$rippled_cfg_base.Length] | out-string)))
   $config_contents | Out-File -Encoding ascii -FilePath (-join($path, "\validator_" , ($i+1), "\rippled.cfg"))
 
   # validators.txt
