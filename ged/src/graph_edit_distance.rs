@@ -98,7 +98,7 @@ fn calculate_upper_bound(cost_matrix: &Array2<i32>, munkres_matrix: &Array2<bool
     upper_bound
 }
 
-fn create_indexed_graph<'a, N: Clone + Eq + Debug + Hash, E>(graph1: &'a Graph<N, E>, graph2: &'a Graph<N, E>) -> (Vec<IndexNodePair<N>>, Vec<IndexNodePair<N>>, Vec<IndexEdgePair<N>>, Vec<IndexEdgePair<N>>) {
+pub fn create_indexed_graph<'a, N: Clone + Eq + Debug + Hash, E>(graph1: &'a Graph<N, E>, graph2: &'a Graph<N, E>) -> (Vec<IndexNodePair<N>>, Vec<IndexNodePair<N>>, Vec<IndexEdgePair<N>>, Vec<IndexEdgePair<N>>) {
     let mut indexed_nodes_1: Vec<IndexNodePair<N>> = vec![];
     let mut indexed_nodes_2: Vec<IndexNodePair<N>> = vec![];
     let mut edge_set_1: HashSet<IndexEdgePair<N>> = HashSet::new();
@@ -178,6 +178,11 @@ pub fn munkres_min_cost(cost_matrix: &mut Array2<i32>) -> Array2<bool> {
         row -= min
     }
 
+    for mut col in cost_matrix.columns_mut().into_iter() {
+        let min = *col.iter().min().unwrap();
+        col -= min;
+    }
+
     for i in 0..cost_matrix.nrows() {
         for j in 0..cost_matrix.ncols() {
             if cost_matrix.get((i, j)).unwrap() == &0 && star_row_col_check(&star_matrix, i, j) {
@@ -202,8 +207,7 @@ pub fn munkres_min_cost(cost_matrix: &mut Array2<i32>) -> Array2<bool> {
                     if !star_matrix.row(x).iter().any(|v| *v) {
                         //Step 3
                         let mut z0 = (x, y);
-                        let mut s = vec![];
-                        s.push(z0);
+                        let mut s = vec![z0];
                         while let Some(z1) = find_z1(&star_matrix, &z0) {
                             s.push(z1);
                             let new_y = prime_matrix.row(z1.0).iter().position(|v| *v).unwrap();
@@ -223,6 +227,7 @@ pub fn munkres_min_cost(cost_matrix: &mut Array2<i32>) -> Array2<bool> {
                         //// 3
                     } else {
                         covered_rows[x] = true;
+                        let y = star_matrix.row(x).iter().position(|v| *v).unwrap();
                         covered_columns[y] = false;
                     }
                 } else {
@@ -442,19 +447,18 @@ pub struct IndexNodePair<N>
     node: N,
     incoming_edges: Vec<IndexEdgePair<N>>,
     outgoing_edges: Vec<IndexEdgePair<N>>,
+    pub number_of_edges: i32,
     index: usize,
 }
 
 impl<N> IndexNodePair<N> where N: PartialEq + Eq + Clone + Debug + Hash {
     pub fn new(node: N, incoming_edges: Vec<IndexEdgePair<N>>, outgoing_edges: Vec<IndexEdgePair<N>>, index: usize) -> Self {
-        Self { node, incoming_edges, outgoing_edges, index }
+        let number_of_edges = incoming_edges.len() as i32 + outgoing_edges.len() as i32;
+        Self { node, incoming_edges, outgoing_edges, number_of_edges, index }
     }
 
     pub fn edges(&self) -> Vec<IndexEdgePair<N>>{
-        let mut edge_set = HashSet::new();
-        self.incoming_edges.iter().for_each(|edge| { edge_set.insert(edge.clone()); });
-        self.outgoing_edges.iter().for_each(|edge| { edge_set.insert(edge.clone()); });
-        edge_set.into_iter().collect::<Vec<IndexEdgePair<N>>>()
+        [self.incoming_edges.as_slice(), self.outgoing_edges.as_slice()].concat().to_vec()
     }
 }
 
@@ -496,7 +500,7 @@ pub trait GraphComponent {
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use ndarray::{arr2, Array2};
     use petgraph::Graph;
     use crate::graph_edit_distance::{AStarNode, calculate_cost_matrix, calculate_graph_edit_distance, create_indexed_graph, IndexEdgePair, IndexNodePair, munkres_min_cost, sort_nodes, star_row_col_check};
@@ -632,7 +636,7 @@ mod tests {
         assert_eq!(upper_bound, 4);
     }
 
-    fn setup_graph() -> (Graph<&'static str, &'static str>, Graph<&'static str, &'static str>) {
+    pub fn setup_graph() -> (Graph<&'static str, &'static str>, Graph<&'static str, &'static str>) {
         let mut graph1 = Graph::<&str, &str>::new();
         let message1 = graph1.add_node("Proposal");
         let message2 = graph1.add_node("Validation");
@@ -648,7 +652,7 @@ mod tests {
         (graph1, graph2)
     }
 
-    fn setup_graph_2() -> (Graph<&'static str, &'static str>, Graph<&'static str, &'static str>) {
+    pub fn setup_graph_2() -> (Graph<&'static str, &'static str>, Graph<&'static str, &'static str>) {
         let mut graph1 = Graph::<&str, &str>::new();
         let message1 = graph1.add_node("Proposal");
         let message2 = graph1.add_node("Validation");

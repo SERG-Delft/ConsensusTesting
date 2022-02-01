@@ -1,4 +1,5 @@
 mod graph_edit_distance;
+pub mod approximate_edit_distance;
 
 #[cfg(test)]
 mod tests {
