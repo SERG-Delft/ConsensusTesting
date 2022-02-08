@@ -202,14 +202,18 @@ impl<T> NonGaSchedulerHandler<T>
         let random_delays: Vec<u32> = rand::thread_rng().sample_iter(&range).take(Parameter::num_genes()).collect();
         let delays = vec![zero_delays, one_delays, random_delays];
 
-        self.scheduler_sender.send(DelayMapPhenotype::from(&delays[0]))
-            .expect("Scheduler receiver failed");
-        // Receive fitness from scheduler
-        match self.scheduler_receiver.recv() {
-            Ok(_) => {},
-            Err(_) => {},
+        // Allow five ledgers to pass to mitigate any startup difficulties in the network
+        for i in 0..5 {
+            self.scheduler_sender.send(DelayMapPhenotype::from(&delays[0]))
+                .expect("Scheduler receiver failed");
+            // Receive fitness from scheduler
+            match self.scheduler_receiver.recv() {
+                Ok(_) => {},
+                Err(_) => {},
+            }
         }
 
+        // Run three different delays twice and write the resulting graphs to the graph_file
         for i in 0..3 {
             let cur_delays = delays[i].clone();
             for j in 0..2 {

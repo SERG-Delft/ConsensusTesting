@@ -9,22 +9,26 @@ mod graph_comparisons {
     use petgraph::Graph;
     use crate::collector::RippleMessage;
     use crate::message_handler::RippleMessageObject;
-    use crate::node_state::DependencyEvent;
+    use crate::node_state::{DependencyEvent, EventType};
     use crate::protos::ripple::{TMProposeSet, TMTransaction};
 
     #[test]
     fn trace_comparison_test1() {
         let mut graph1: Graph<DependencyEvent, ()> = Graph::new();
-        let message1 = graph1.add_node(DependencyEvent{ ripple_message: *RippleMessage::new("0".to_string(), "1".to_string(), MAX_DATETIME, RippleMessageObject::TMTransaction(TMTransaction::default())) });
-        let message2 = graph1.add_node(DependencyEvent{ ripple_message: *RippleMessage::new("0".to_string(), "2".to_string(), MAX_DATETIME, RippleMessageObject::TMProposeSet(TMProposeSet::default())) });
-        let message3 = graph1.add_node(DependencyEvent{ ripple_message: *RippleMessage::new("2".to_string(), "1".to_string(), MAX_DATETIME, RippleMessageObject::TMTransaction(TMTransaction::default())) });
-        let message4 = graph1.add_node(DependencyEvent{ ripple_message: *RippleMessage::new("3".to_string(), "1".to_string(), MAX_DATETIME, RippleMessageObject::TMProposeSet(TMProposeSet::default())) });
+        let event_1 = DependencyEvent{ ripple_message: *RippleMessage::new("0".to_string(), "1".to_string(), MAX_DATETIME, RippleMessageObject::TMTransaction(TMTransaction::default())), event_type: EventType::Receive };
+        let event_2 = DependencyEvent{ ripple_message: *RippleMessage::new("0".to_string(), "2".to_string(), MAX_DATETIME, RippleMessageObject::TMProposeSet(TMProposeSet::default())), event_type: EventType::Send };
+        let event_3 = DependencyEvent{ ripple_message: *RippleMessage::new("2".to_string(), "1".to_string(), MAX_DATETIME, RippleMessageObject::TMTransaction(TMTransaction::default())), event_type: EventType::Send };
+        let event_4 = DependencyEvent{ ripple_message: *RippleMessage::new("3".to_string(), "1".to_string(), MAX_DATETIME, RippleMessageObject::TMProposeSet(TMProposeSet::default())), event_type: EventType::Receive };
+        let message1 = graph1.add_node(event_1.clone());
+        let message2 = graph1.add_node(event_2.clone());
+        let message3 = graph1.add_node(event_3.clone());
+        let message4 = graph1.add_node(event_4.clone());
         graph1.extend_with_edges(&[(message1, message3), (message2, message4)]);
         let mut graph2: Graph<DependencyEvent, ()> = Graph::new();
-        let message1 = graph2.add_node(DependencyEvent{ ripple_message: *RippleMessage::new("0".to_string(), "1".to_string(), MAX_DATETIME, RippleMessageObject::TMTransaction(TMTransaction::default())) });
-        let message2 = graph2.add_node(DependencyEvent{ ripple_message: *RippleMessage::new("0".to_string(), "2".to_string(), MAX_DATETIME, RippleMessageObject::TMProposeSet(TMProposeSet::default())) });
-        let message3 = graph2.add_node(DependencyEvent{ ripple_message: *RippleMessage::new("2".to_string(), "1".to_string(), MAX_DATETIME, RippleMessageObject::TMTransaction(TMTransaction::default())) });
-        let message4 = graph2.add_node(DependencyEvent{ ripple_message: *RippleMessage::new("3".to_string(), "1".to_string(), MAX_DATETIME, RippleMessageObject::TMProposeSet(TMProposeSet::default())) });
+        let message1 = graph2.add_node(event_1);
+        let message2 = graph2.add_node(event_2);
+        let message3 = graph2.add_node(event_3);
+        let message4 = graph2.add_node(event_4);
         graph2.extend_with_edges(&[(message1, message2), (message3, message4)]);
         let actual_similarity = ged::approximate_edit_distance::approximate_hed_graph_edit_distance(graph1, graph2);
         let expected_similarity = 1.0 - (2.0 / 12.0);
@@ -34,9 +38,10 @@ mod graph_comparisons {
     #[test]
     fn trace_comparison_test2() {
         let mut graph1: Graph<DependencyEvent, ()> = Graph::new();
-        let message1 = graph1.add_node(DependencyEvent{ ripple_message: *RippleMessage::new("0".to_string(), "1".to_string(), MAX_DATETIME, RippleMessageObject::TMTransaction(TMTransaction::default())) });
+        let event_1 = DependencyEvent{ ripple_message: *RippleMessage::new("0".to_string(), "1".to_string(), MAX_DATETIME, RippleMessageObject::TMTransaction(TMTransaction::default())), event_type: EventType::Receive };
+        let message1 = graph1.add_node(event_1.clone());
         let mut graph2: Graph<DependencyEvent, ()> = Graph::new();
-        let message1 = graph2.add_node(DependencyEvent{ ripple_message: *RippleMessage::new("0".to_string(), "1".to_string(), MAX_DATETIME, RippleMessageObject::TMTransaction(TMTransaction::default())) });
+        let message1 = graph2.add_node(event_1);
         let actual_similarity = ged::approximate_edit_distance::approximate_hed_graph_edit_distance(graph1, graph2);
         let expected_similarity = 1.0;
         assert_eq!(actual_similarity, expected_similarity);
@@ -45,12 +50,14 @@ mod graph_comparisons {
     #[test]
     fn trace_comparison_test3() {
         let mut graph1: Graph<DependencyEvent, ()> = Graph::new();
-        let message1 = graph1.add_node(DependencyEvent{ ripple_message: *RippleMessage::new("0".to_string(), "1".to_string(), MAX_DATETIME, RippleMessageObject::TMTransaction(TMTransaction::default())) });
-        let message2 = graph1.add_node(DependencyEvent{ ripple_message: *RippleMessage::new("0".to_string(), "2".to_string(), MAX_DATETIME, RippleMessageObject::TMProposeSet(TMProposeSet::default())) });
+        let event_1 = DependencyEvent{ ripple_message: *RippleMessage::new("0".to_string(), "1".to_string(), MAX_DATETIME, RippleMessageObject::TMTransaction(TMTransaction::default())), event_type: EventType::Receive };
+        let event_2 = DependencyEvent{ ripple_message: *RippleMessage::new("0".to_string(), "2".to_string(), MAX_DATETIME, RippleMessageObject::TMProposeSet(TMProposeSet::default())), event_type: EventType::Send };
+        let message1 = graph1.add_node(event_1.clone());
+        let message2 = graph1.add_node(event_2.clone());
         graph1.extend_with_edges(&[(message1, message2)]);
         let mut graph2: Graph<DependencyEvent, ()> = Graph::new();
-        let message1 = graph2.add_node(DependencyEvent{ ripple_message: *RippleMessage::new("0".to_string(), "1".to_string(), MAX_DATETIME, RippleMessageObject::TMTransaction(TMTransaction::default())) });
-        let message2 = graph2.add_node(DependencyEvent{ ripple_message: *RippleMessage::new("0".to_string(), "2".to_string(), MAX_DATETIME, RippleMessageObject::TMProposeSet(TMProposeSet::default())) });
+        let message1 = graph2.add_node(event_1);
+        let message2 = graph2.add_node(event_2);
         graph2.extend_with_edges(&[(message1, message2)]);
         let actual_similarity = ged::approximate_edit_distance::approximate_hed_graph_edit_distance(graph1, graph2);
         let expected_similarity = 1.0;
@@ -60,12 +67,14 @@ mod graph_comparisons {
     #[test]
     fn trace_comparison_test4() {
         let mut graph1: Graph<DependencyEvent, ()> = Graph::new();
-        let message1 = graph1.add_node(DependencyEvent{ ripple_message: *RippleMessage::new("0".to_string(), "1".to_string(), MAX_DATETIME, RippleMessageObject::TMTransaction(TMTransaction::default())) });
-        let message2 = graph1.add_node(DependencyEvent{ ripple_message: *RippleMessage::new("0".to_string(), "2".to_string(), MAX_DATETIME, RippleMessageObject::TMProposeSet(TMProposeSet::default())) });
+        let event_1 = DependencyEvent{ ripple_message: *RippleMessage::new("0".to_string(), "1".to_string(), MAX_DATETIME, RippleMessageObject::TMTransaction(TMTransaction::default())), event_type: EventType::Receive };
+        let event_2 = DependencyEvent{ ripple_message: *RippleMessage::new("0".to_string(), "2".to_string(), MAX_DATETIME, RippleMessageObject::TMProposeSet(TMProposeSet::default())), event_type: EventType::Send };
+        let message1 = graph1.add_node(event_1.clone());
+        let message2 = graph1.add_node(event_2.clone());
         graph1.extend_with_edges(&[(message1, message2)]);
         let mut graph2: Graph<DependencyEvent, ()> = Graph::new();
-        let message1 = graph2.add_node(DependencyEvent{ ripple_message: *RippleMessage::new("0".to_string(), "1".to_string(), MAX_DATETIME, RippleMessageObject::TMTransaction(TMTransaction::default())) });
-        let message2 = graph2.add_node(DependencyEvent{ ripple_message: *RippleMessage::new("0".to_string(), "2".to_string(), MAX_DATETIME, RippleMessageObject::TMProposeSet(TMProposeSet::default())) });
+        let message1 = graph2.add_node(event_1);
+        let message2 = graph2.add_node(event_2);
         graph2.extend_with_edges(&[(message2, message1)]);
         let actual_similarity = ged::approximate_edit_distance::approximate_hed_graph_edit_distance(graph1, graph2);
         let expected_similarity = 1.0 - (1.0 / 6.0);

@@ -285,7 +285,7 @@ impl MutexNodeStates {
     }
 }
 
-#[derive(Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq, Hash)]
+#[derive(Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq, Hash, Default)]
 pub struct DependencyEvent {
     pub ripple_message: RippleMessage,
     pub event_type: EventType,
@@ -307,4 +307,10 @@ struct DependencyNode {
 pub enum EventType {
     Send,
     Receive,
+}
+
+impl Default for EventType {
+    fn default() -> Self {
+        Self::Receive
+    }
 }
