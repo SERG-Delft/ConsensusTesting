@@ -8,10 +8,11 @@ use std::sync::mpsc::{Receiver, Sender};
 use serde_json::json;
 use crate::client::{ConsensusChange, PeerSubscriptionObject, SubscriptionObject};
 use crate::message_handler::RippleMessageObject;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, MAX_DATETIME, Utc};
 use itertools::Itertools;
 use crate::message_handler::RippleMessageObject::TMProposeSet;
 use crate::node_state::{ConsensusPhase, MutexNodeStates};
+use crate::protos::ripple::TMTransaction;
 
 /// Collects and writes data to files and the scheduler
 /// Execution file stores all messages sent from the proxy
@@ -179,7 +180,7 @@ impl Hash for RippleMessage {
 
 impl PartialEq for RippleMessage {
     fn eq(&self, other: &Self) -> bool {
-        self.to_node == other.to_node && self.from_node == other.from_node && self.message == other.message
+        self.to_node == other.to_node && self.from_node == other.from_node && self.message.message_type() == other.message.message_type()
     }
 }
 impl Eq for RippleMessage {}
@@ -194,5 +195,11 @@ impl Display for RippleMessage {
         let time_since = self.timestamp.signed_duration_since(ripple_epoch).num_seconds();
         let message_buf = self.message.to_string();
         write!(f, "{} {} -> {} sent {}\n", time_since, from_node_buf, to_node_buf, message_buf)
+    }
+}
+
+impl Default for RippleMessage {
+    fn default() -> Self {
+        *Self::new("".to_string(), "".to_string(), MAX_DATETIME, RippleMessageObject::TMTransaction(TMTransaction::default()))
     }
 }

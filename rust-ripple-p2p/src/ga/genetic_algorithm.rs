@@ -17,7 +17,6 @@ use log::debug;
 use petgraph::dot::{Config, Dot};
 use rand::distributions::Uniform;
 use rand::Rng;
-use serde_json::json;
 use crate::collector::RippleMessage;
 use crate::ga::fitness::{ExtendedFitness, FailedConsensusFitness, FitnessCalculation, SchedulerHandler, TimeFitness, ValidatedLedgersFitness};
 use crate::node_state::MutexNodeStates;
@@ -207,7 +206,7 @@ impl<T> NonGaSchedulerHandler<T>
             .expect("Scheduler receiver failed");
         // Receive fitness from scheduler
         match self.scheduler_receiver.recv() {
-            Ok(value) => {},
+            Ok(_) => {},
             Err(_) => {},
         }
 
@@ -219,7 +218,7 @@ impl<T> NonGaSchedulerHandler<T>
                     .expect("Scheduler receiver failed");
                 // Receive fitness from scheduler
                 match self.scheduler_receiver.recv() {
-                    Ok(value) => {
+                    Ok(_) => {
                         self.graph_file.write(format!("{:?}", cur_delays).as_bytes()).unwrap();
                         self.graph_file.write(b"+\n").unwrap();
                         let j = serde_json::to_string(&node_states.get_dependency_graph()).unwrap();
@@ -332,7 +331,6 @@ pub fn run<T>(scheduler_sender: Sender<DelayMapPhenotype>, scheduler_receiver: R
 
 #[cfg(test)]
 mod ga_tests {
-    use itertools::Itertools;
     use crate::ga::genetic_algorithm::{DelayMapPhenotype};
 
     #[test]

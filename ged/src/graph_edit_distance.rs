@@ -1,9 +1,7 @@
-use std::collections::HashSet;
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
 use petgraph::{Direction, Graph};
 use ndarray::{Array2};
-use petgraph::data::DataMap;
 use petgraph::prelude::EdgeRef;
 
 #[allow(unused_variables)]
@@ -102,8 +100,6 @@ fn calculate_upper_bound(cost_matrix: &Array2<i32>, munkres_matrix: &Array2<bool
 pub fn create_indexed_graph<'a, N: Clone + Eq + Debug + Hash, E>(graph1: &'a Graph<N, E>, graph2: &'a Graph<N, E>) -> (Vec<IndexNodePair<N>>, Vec<IndexNodePair<N>>, Vec<IndexEdgePair<N>>, Vec<IndexEdgePair<N>>) {
     let mut indexed_nodes_1: Vec<IndexNodePair<N>> = vec![];
     let mut indexed_nodes_2: Vec<IndexNodePair<N>> = vec![];
-    let mut edge_set_1: HashSet<IndexEdgePair<N>> = HashSet::new();
-    let mut edge_set_2: HashSet<IndexEdgePair<N>> = HashSet::new();
     let indexed_edges_1 = fill_nodes_edges(graph1, &mut indexed_nodes_1);
     let indexed_edges_2 = fill_nodes_edges(graph2, &mut indexed_nodes_2);
 
@@ -443,18 +439,20 @@ pub struct IndexNodePair<N>
     pub node: N,
     pub incoming_edges: Vec<N>,
     pub outgoing_edges: Vec<N>,
+    pub edges: Vec<(N, N)>,
     pub number_of_edges: i32,
     index: usize,
 }
 
 impl<N> IndexNodePair<N> where N: PartialEq + Eq + Clone + Debug + Hash {
     pub fn new(node: N, incoming_edges: Vec<N>, outgoing_edges: Vec<N>, index: usize) -> Self {
-        let number_of_edges = incoming_edges.len() as i32 + outgoing_edges.len() as i32;
-        Self { node, incoming_edges, outgoing_edges, number_of_edges, index }
+        let edges = [incoming_edges.iter().map(|x| (x.clone(), node.clone())).collect::<Vec<(N, N)>>().as_slice(), outgoing_edges.iter().map(|x| (node.clone(), x.clone())).collect::<Vec<(N, N)>>().as_slice()].concat().to_vec();
+        let number_of_edges = edges.len() as i32;
+        Self { node, incoming_edges, outgoing_edges, edges, number_of_edges, index }
     }
 
-    pub fn edges(&self) -> Vec<N>{
-        [self.incoming_edges.as_slice(), self.outgoing_edges.as_slice()].concat().to_vec()
+    pub fn edges(&self) -> Vec<(N, N)> {
+        [self.incoming_edges.iter().map(|x| (x.clone(), self.node.clone())).collect::<Vec<(N, N)>>().as_slice(), self.outgoing_edges.iter().map(|x| (self.node.clone(), x.clone())).collect::<Vec<(N, N)>>().as_slice()].concat().to_vec()
     }
 
     pub fn index_edges(&self) -> Vec<IndexEdgePair<N>> {

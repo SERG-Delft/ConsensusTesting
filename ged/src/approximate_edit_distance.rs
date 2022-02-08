@@ -1,14 +1,13 @@
-use std::cmp::{max};
 use std::fmt::Debug;
 use std::hash::Hash;
 use ndarray::{Array2};
 use petgraph::Graph;
-use crate::graph_edit_distance::{calculate_cost_matrix, create_indexed_graph, GraphComponent, IndexEdgePair, IndexNodePair, munkres_min_cost};
+use crate::graph_edit_distance::{calculate_cost_matrix, create_indexed_graph, IndexNodePair, munkres_min_cost};
 
 pub fn approximate_aed_graph_edit_distance<N, E>(graph1: Graph<N, E, petgraph::Directed>, graph2: Graph<N, E, petgraph::Directed>) -> i32
     where N: PartialEq + Eq + Clone + Debug + Hash, E: PartialEq + Eq + Clone
 {
-    let (indexed_nodes_1, indexed_nodes_2, indexed_edges_1, indexed_edges_2) = create_indexed_graph(&graph1, &graph2);
+    let (indexed_nodes_1, indexed_nodes_2, _indexed_edges_1, _indexed_edges_2) = create_indexed_graph(&graph1, &graph2);
     println!("Graphs indexed");
     let mut node_matrix_cost = calculate_cost_matrix(&indexed_nodes_1, &indexed_nodes_2);
     println!("node cost matrix calced: {:?}", node_matrix_cost.dim());
@@ -23,7 +22,7 @@ pub fn approximate_aed_graph_edit_distance<N, E>(graph1: Graph<N, E, petgraph::D
 pub fn approximate_hed_graph_edit_distance<N, E>(graph1: Graph<N, E, petgraph::Directed>, graph2: Graph<N, E, petgraph::Directed>) -> f32
     where N: PartialEq + Eq + Clone + Debug + Hash, E: PartialEq + Eq + Clone
 {
-    let (indexed_nodes_1, indexed_nodes_2, indexed_edges_1, indexed_edges_2) = create_indexed_graph(&graph1, &graph2);
+    let (indexed_nodes_1, indexed_nodes_2, _indexed_edges_1, _indexed_edges_2) = create_indexed_graph(&graph1, &graph2);
     println!("Nodes_1: {}, Edges_1: {}, Nodes_2: {}, Edges_2: {}", indexed_nodes_1.len(),
              indexed_nodes_1.iter().map(|x| x.number_of_edges).sum::<i32>() / 2,
              indexed_nodes_2.len(), indexed_nodes_2.iter().map(|x| x.number_of_edges).sum::<i32>() / 2);
@@ -48,10 +47,8 @@ fn hausdorff_edit_distance<N: PartialEq + Eq + Clone + Debug + Hash>(nodes_1: &V
         println!("{}", i);
         for j in 0..nodes_2.len() {
             let mut cost_edge: f32 = hausdorff_edit_cost(
-                &nodes_1[i].incoming_edges,
-                &nodes_2[j].incoming_edges,
-                &nodes_1[i].outgoing_edges,
-                &nodes_2[j].outgoing_edges
+                &nodes_1[i].edges,
+                &nodes_2[j].edges,
             );
             cost_edge = ((nodes_1[i].number_of_edges - nodes_2[j].number_of_edges).abs() as f32).max(cost_edge);
             let sub_cost = match nodes_1[i] == nodes_2[j] {
@@ -68,32 +65,20 @@ fn hausdorff_edit_distance<N: PartialEq + Eq + Clone + Debug + Hash>(nodes_1: &V
 }
 
 fn hausdorff_edit_cost<N: PartialEq + Eq + Clone + Debug + Hash>(
-    incoming_edges_1: &Vec<N>,
-    incoming_edges_2: &Vec<N>,
-    outgoing_edges_1: &Vec<N>,
-    outgoing_edges_2: &Vec<N>
+    edges_1: &Vec<(N, N)>,
+    edges_2: &Vec<(N, N)>,
 ) -> f32
 {
-    let mut cost_1: Vec<f32> = vec![1.0; incoming_edges_1.len() + outgoing_edges_1.len()];
-    let mut cost_2: Vec<f32> = vec![1.0; incoming_edges_2.len() + outgoing_edges_2.len()];
-    for i in 0..incoming_edges_1.len() {
-        for j in 0..incoming_edges_2.len() {
-            let new_cost = match incoming_edges_1[i] == incoming_edges_2[j] {
+    let mut cost_1: Vec<f32> = vec![1.0; edges_1.len()];
+    let mut cost_2: Vec<f32> = vec![1.0; edges_2.len()];
+    for i in 0..edges_1.len() {
+        for j in 0..edges_2.len() {
+            let sub_cost = match edges_1[i] == edges_2[j] {
                 true => 0.0,
                 false => 1.0 / 2.0
             };
-            cost_1[i] = new_cost;
-            cost_2[j] = new_cost;
-        }
-    }
-    for i in 0..outgoing_edges_1.len() {
-        for j in 0..outgoing_edges_2.len() {
-            let new_cost = match outgoing_edges_1[i] == outgoing_edges_2[j] {
-                true => 0.0,
-                false => 1.0 / 2.0
-            };
-            cost_1[i+incoming_edges_1.len()] = new_cost;
-            cost_2[j+incoming_edges_2.len()] = new_cost;
+            cost_1[i] = f32::min(sub_cost, cost_1[i]);
+            cost_2[j] = f32::min(sub_cost, cost_2[j]);
         }
     }
     cost_1.iter().sum::<f32>() + cost_2.iter().sum::<f32>()
