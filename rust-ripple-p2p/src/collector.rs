@@ -137,7 +137,7 @@ impl Collector {
 }
 
 /// Struct for writing clearly to execution.txt, should definitely rename
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct RippleMessage {
     pub from_node: String,
     pub to_node: String,

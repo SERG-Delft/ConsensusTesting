@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use std::hash::Hash;
 use ndarray::{Array2};
 use petgraph::Graph;
-use crate::graph_edit_distance::{calculate_cost_matrix, create_indexed_graph, GraphComponent, IndexNodePair, munkres_min_cost};
+use crate::graph_edit_distance::{calculate_cost_matrix, create_indexed_graph, GraphComponent, IndexEdgePair, IndexNodePair, munkres_min_cost};
 
 pub fn approximate_aed_graph_edit_distance<N, E>(graph1: Graph<N, E, petgraph::Directed>, graph2: Graph<N, E, petgraph::Directed>) -> i32
     where N: PartialEq + Eq + Clone + Debug + Hash, E: PartialEq + Eq + Clone
@@ -20,15 +20,21 @@ pub fn approximate_aed_graph_edit_distance<N, E>(graph1: Graph<N, E, petgraph::D
     calculate_min_cost(&node_matrix_cost, &star_matrix)
 }
 
-pub fn approximate_hed_graph_edit_distance<N, E>(graph1: Graph<N, E, petgraph::Directed>, graph2: Graph<N, E, petgraph::Directed>) -> i32
+pub fn approximate_hed_graph_edit_distance<N, E>(graph1: Graph<N, E, petgraph::Directed>, graph2: Graph<N, E, petgraph::Directed>) -> f32
     where N: PartialEq + Eq + Clone + Debug + Hash, E: PartialEq + Eq + Clone
 {
     let (indexed_nodes_1, indexed_nodes_2, indexed_edges_1, indexed_edges_2) = create_indexed_graph(&graph1, &graph2);
-    println!("Nodes_1: {}, Edges_1: {}, Nodes_2: {}, Edges_2: {}", indexed_nodes_1.len(), indexed_edges_1.len(), indexed_nodes_2.len(), indexed_edges_2.len());
-    hausdorff_edit_distance(&indexed_nodes_1, &indexed_nodes_2)
+    println!("Nodes_1: {}, Edges_1: {}, Nodes_2: {}, Edges_2: {}", indexed_nodes_1.len(),
+             indexed_nodes_1.iter().map(|x| x.number_of_edges).sum::<i32>() / 2,
+             indexed_nodes_2.len(), indexed_nodes_2.iter().map(|x| x.number_of_edges).sum::<i32>() / 2);
+    let hed = hausdorff_edit_distance(&indexed_nodes_1, &indexed_nodes_2);
+    let max_hed: f32 = ((indexed_nodes_1.len() as i32 + indexed_nodes_1.iter().map(|x| x.number_of_edges).sum::<i32>() / 2
+        + indexed_nodes_2.len() as i32 + indexed_nodes_2.iter().map(|x| x.number_of_edges).sum::<i32>() / 2) as i32) as f32;
+    println!("{}, {}", hed, max_hed);
+    1.0 - (hed / max_hed)
 }
 
-fn hausdorff_edit_distance<N: PartialEq + Eq + Clone + Debug + Hash>(nodes_1: &Vec<IndexNodePair<N>>, nodes_2: &Vec<IndexNodePair<N>>) -> i32
+fn hausdorff_edit_distance<N: PartialEq + Eq + Clone + Debug + Hash>(nodes_1: &Vec<IndexNodePair<N>>, nodes_2: &Vec<IndexNodePair<N>>) -> f32
 {
     let mut distance_1: Vec<f32> = vec![1f32; nodes_1.len()];
     let mut distance_2: Vec<f32> = vec![1f32; nodes_2.len()];
@@ -41,32 +47,56 @@ fn hausdorff_edit_distance<N: PartialEq + Eq + Clone + Debug + Hash>(nodes_1: &V
     for i in 0..nodes_1.len() {
         println!("{}", i);
         for j in 0..nodes_2.len() {
-            let mut cost_edge = hausdorff_edit_cost(&nodes_1[i].edges(), &nodes_2[j].edges());
-            cost_edge = max((nodes_1[i].number_of_edges - nodes_2[j].number_of_edges).abs(), cost_edge);
-            distance_1[i] = (((1 + cost_edge / 2) / 2) as f32).min(distance_1[i]);
-            distance_2[j] = (((1 + cost_edge / 2) / 2) as f32).min(distance_2[j]);
+            let mut cost_edge: f32 = hausdorff_edit_cost(
+                &nodes_1[i].incoming_edges,
+                &nodes_2[j].incoming_edges,
+                &nodes_1[i].outgoing_edges,
+                &nodes_2[j].outgoing_edges
+            );
+            cost_edge = ((nodes_1[i].number_of_edges - nodes_2[j].number_of_edges).abs() as f32).max(cost_edge);
+            let sub_cost = match nodes_1[i] == nodes_2[j] {
+                true => 0.0,
+                false => 1.0
+            };
+            distance_1[i] = (((sub_cost + cost_edge / 2.0) / 2.0) as f32).min(distance_1[i]);
+            distance_2[j] = (((sub_cost + cost_edge / 2.0) / 2.0) as f32).min(distance_2[j]);
         }
     }
     let distance = distance_1.iter().sum::<f32>() + distance_2.iter().sum::<f32>();
-    println!("Lower graph bound: {}, distance: {}", (nodes_1.len() as i32 - nodes_2.len() as i32).abs(), distance as i32);
-    max((nodes_1.len() as i32 - nodes_2.len() as i32).abs(), distance as i32)
+    println!("Lower graph bound: {}, distance: {}", (nodes_1.len() as i32 - nodes_2.len() as i32).abs(), distance);
+    (nodes_1.len() as f32 - nodes_2.len() as f32).abs().max(distance)
 }
 
-fn hausdorff_edit_cost<T: GraphComponent>(nodes_1: &Vec<T>, nodes_2: &Vec<T>) -> i32 {
-    let mut cost_1: Vec<f32> = vec![1.0; nodes_1.len()];
-    let mut cost_2: Vec<f32> = vec![1.0; nodes_2.len()];
-    for i in 0..nodes_1.len() {
-        for j in 0..nodes_2.len() {
-            if nodes_1[i].value() == nodes_2[j].value() {
-                cost_1[i] = 0f32.min(cost_1[i]);
-                cost_2[j] = 0f32.min(cost_2[j]);
-            } else {
-                cost_1[i] = (1f32/2f32).min(cost_1[i]);
-                cost_2[j] = (1f32/2f32).min(cost_2[j]);
-            }
+fn hausdorff_edit_cost<N: PartialEq + Eq + Clone + Debug + Hash>(
+    incoming_edges_1: &Vec<N>,
+    incoming_edges_2: &Vec<N>,
+    outgoing_edges_1: &Vec<N>,
+    outgoing_edges_2: &Vec<N>
+) -> f32
+{
+    let mut cost_1: Vec<f32> = vec![1.0; incoming_edges_1.len() + outgoing_edges_1.len()];
+    let mut cost_2: Vec<f32> = vec![1.0; incoming_edges_2.len() + outgoing_edges_2.len()];
+    for i in 0..incoming_edges_1.len() {
+        for j in 0..incoming_edges_2.len() {
+            let new_cost = match incoming_edges_1[i] == incoming_edges_2[j] {
+                true => 0.0,
+                false => 1.0 / 2.0
+            };
+            cost_1[i] = new_cost;
+            cost_2[j] = new_cost;
         }
     }
-    (cost_1.iter().sum::<f32>() + cost_2.iter().sum::<f32>()) as i32
+    for i in 0..outgoing_edges_1.len() {
+        for j in 0..outgoing_edges_2.len() {
+            let new_cost = match outgoing_edges_1[i] == outgoing_edges_2[j] {
+                true => 0.0,
+                false => 1.0 / 2.0
+            };
+            cost_1[i+incoming_edges_1.len()] = new_cost;
+            cost_2[j+incoming_edges_2.len()] = new_cost;
+        }
+    }
+    cost_1.iter().sum::<f32>() + cost_2.iter().sum::<f32>()
 }
 
 fn add_edge_cost<N: PartialEq + Eq + Clone + Debug + Hash>(cost_matrix: &mut Array2<i32>, nodes_1: &Vec<IndexNodePair<N>>, nodes_2: &Vec<IndexNodePair<N>>) {
@@ -90,7 +120,7 @@ fn add_edge_cost<N: PartialEq + Eq + Clone + Debug + Hash>(cost_matrix: &mut Arr
 }
 
 fn calculate_edge_substitution_cost<N: PartialEq + Eq + Clone + Debug + Hash>(node_1: &IndexNodePair<N>, node_2: &IndexNodePair<N>) -> i32 {
-    let edge_cost_matrix = calculate_cost_matrix(&node_1.edges(), &node_2.edges());
+    let edge_cost_matrix = calculate_cost_matrix(&node_1.index_edges(), &node_2.index_edges());
     let star_matrix = munkres_min_cost(&mut edge_cost_matrix.clone());
     calculate_min_cost(&edge_cost_matrix, &star_matrix)
 }
@@ -110,9 +140,25 @@ fn calculate_min_cost(cost_matrix: &Array2<i32>, star_matrix: &Array2<bool>) -> 
 #[cfg(test)]
 mod tests {
     use ndarray::{arr2, Array2};
-    use crate::approximate_edit_distance::{add_edge_cost, calculate_edge_substitution_cost, calculate_min_cost};
+    use crate::approximate_edit_distance::{add_edge_cost, approximate_hed_graph_edit_distance, calculate_edge_substitution_cost, calculate_min_cost};
     use crate::graph_edit_distance::{calculate_cost_matrix, create_indexed_graph, munkres_min_cost};
-    use crate::graph_edit_distance::tests::setup_graph;
+    use crate::graph_edit_distance::tests::{setup_graph, setup_graph_2};
+
+    #[test]
+    fn approximate_hed_test_1() {
+        let (graph1, graph2) = setup_graph();
+        let actual_similarity = approximate_hed_graph_edit_distance(graph1, graph2);
+        let expected_similarity: f32 = 1.0 - (4.0/12.0);
+        assert!(actual_similarity > expected_similarity);
+    }
+
+    #[test]
+    fn approximate_hed_test_2() {
+        let (graph1, graph2) = setup_graph_2();
+        let actual_similarity = approximate_hed_graph_edit_distance(graph1, graph2);
+        let expected_similarity: f32 = 1.0 - (5.0/12.0);
+        assert!(actual_similarity > expected_similarity);
+    }
 
     #[test]
     fn approximate_ged_test() {

@@ -111,3 +111,11 @@ What is the max time one round of consensus can take? Derive a max and put a che
 10-12-2021
 Decided to test the variability of schedules created by applying the same chromosome delays.
 Edit distance is used, bad outcome. Think of other distance.
+
+31-01-2021
+Exact graph edit distance is exponential in the number of nodes and edges. This is too slow for the dependency graphs' sizes. Will use approximation
+of the ged with munkres min cost assignment algorithm.
+
+01-02-2021
+Approximation is also quite slow: 1/2 minutes for one comparison, even with a small test harness. Try different graph structure.
+Online usage is out of the question

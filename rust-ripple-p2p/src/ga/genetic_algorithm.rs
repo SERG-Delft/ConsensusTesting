@@ -15,6 +15,9 @@ use genevo::reinsertion::elitist::ElitistReinserter;
 use genevo::types::fmt::Display;
 use log::debug;
 use petgraph::dot::{Config, Dot};
+use rand::distributions::Uniform;
+use rand::Rng;
+use serde_json::json;
 use crate::collector::RippleMessage;
 use crate::ga::fitness::{ExtendedFitness, FailedConsensusFitness, FitnessCalculation, SchedulerHandler, TimeFitness, ValidatedLedgersFitness};
 use crate::node_state::MutexNodeStates;
@@ -127,6 +130,7 @@ pub struct NonGaSchedulerHandler<T>
     scheduler_receiver: Receiver<T>,
     fitness_values: Vec<T>,
     file: BufWriter<File>,
+    graph_file: BufWriter<File>,
     executions: Vec<Vec<RippleMessage>>
 }
 
@@ -139,7 +143,8 @@ impl<T> NonGaSchedulerHandler<T>
         fitness_values: Vec<T>,
     ) -> Self {
         let file = File::create(Path::new("run.txt")).expect("Opening execution file failed");
-        NonGaSchedulerHandler { scheduler_sender, scheduler_receiver, fitness_values, file: BufWriter::new(file), executions: vec![] }
+        let graph_file = File::create(Path::new("trace_graphs.txt")).expect("Creating trace graph file failed");
+        NonGaSchedulerHandler { scheduler_sender, scheduler_receiver, fitness_values, file: BufWriter::new(file), graph_file: BufWriter::new(graph_file), executions: vec![] }
     }
 
     pub fn run(&mut self, node_states: Arc<MutexNodeStates>) {
@@ -185,9 +190,48 @@ impl<T> NonGaSchedulerHandler<T>
                 Err(_) => {}
             }
         }
-        println!("Starting ged calc");
-        let distance = ged::approximate_edit_distance::approximate_hed_graph_edit_distance(graphs[0].clone(), graphs[1].clone());
-        println!("Finished ged calc: {}", distance);
+        // println!("Starting ged calc");
+        // let distance = ged::approximate_edit_distance::approximate_hed_graph_edit_distance(graphs[0].clone(), graphs[1].clone());
+        // println!("Finished ged calc: {}", distance);
+        std::process::exit(0);
+    }
+
+    pub fn run_trace_graph_creation(&mut self, node_states: Arc<MutexNodeStates>) {
+        let zero_delays = vec![0u32; Parameter::num_genes()];
+        let one_delays = vec![1000u32; Parameter::num_genes()];
+        let range = Uniform::from(0..1000);
+        let random_delays: Vec<u32> = rand::thread_rng().sample_iter(&range).take(Parameter::num_genes()).collect();
+        let delays = vec![zero_delays, one_delays, random_delays];
+
+        self.scheduler_sender.send(DelayMapPhenotype::from(&delays[0]))
+            .expect("Scheduler receiver failed");
+        // Receive fitness from scheduler
+        match self.scheduler_receiver.recv() {
+            Ok(value) => {},
+            Err(_) => {},
+        }
+
+        for i in 0..3 {
+            let cur_delays = delays[i].clone();
+            for j in 0..2 {
+                println!("Starting test {} with delays: {:?}", i*2+j+1, cur_delays);
+                self.scheduler_sender.send(DelayMapPhenotype::from(&cur_delays))
+                    .expect("Scheduler receiver failed");
+                // Receive fitness from scheduler
+                match self.scheduler_receiver.recv() {
+                    Ok(value) => {
+                        self.graph_file.write(format!("{:?}", cur_delays).as_bytes()).unwrap();
+                        self.graph_file.write(b"+\n").unwrap();
+                        let j = serde_json::to_string(&node_states.get_dependency_graph()).unwrap();
+                        self.graph_file.write(j.as_bytes()).unwrap();
+                        self.graph_file.write(b"+\n").unwrap();
+                    }
+                    Err(_) => {}
+                }
+            }
+        }
+        self.graph_file.flush();
+        println!("Finished graph creation, exiting...");
         std::process::exit(0);
     }
 }
@@ -197,7 +241,7 @@ pub fn run_non_ga<T>(scheduler_sender: Sender<DelayMapPhenotype>, scheduler_rece
 {
     let fitness_values: Vec<T> = vec![];
     let mut scheduler_handler = NonGaSchedulerHandler::new(scheduler_sender, scheduler_receiver, fitness_values.clone());
-    thread::spawn(move ||scheduler_handler.run(node_states));
+    thread::spawn(move ||scheduler_handler.run_trace_graph_creation(node_states));
 }
 
 /// Run the genetic algorithm

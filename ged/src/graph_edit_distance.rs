@@ -3,6 +3,7 @@ use std::fmt::{Debug, Display};
 use std::hash::Hash;
 use petgraph::{Direction, Graph};
 use ndarray::{Array2};
+use petgraph::data::DataMap;
 use petgraph::prelude::EdgeRef;
 
 #[allow(unused_variables)]
@@ -103,28 +104,29 @@ pub fn create_indexed_graph<'a, N: Clone + Eq + Debug + Hash, E>(graph1: &'a Gra
     let mut indexed_nodes_2: Vec<IndexNodePair<N>> = vec![];
     let mut edge_set_1: HashSet<IndexEdgePair<N>> = HashSet::new();
     let mut edge_set_2: HashSet<IndexEdgePair<N>> = HashSet::new();
-    fill_nodes_edges(graph1, &mut indexed_nodes_1, &mut edge_set_1);
-    fill_nodes_edges(graph2, &mut indexed_nodes_2, &mut edge_set_2);
+    let indexed_edges_1 = fill_nodes_edges(graph1, &mut indexed_nodes_1);
+    let indexed_edges_2 = fill_nodes_edges(graph2, &mut indexed_nodes_2);
 
-    (indexed_nodes_1, indexed_nodes_2, edge_set_1.into_iter().collect::<Vec<IndexEdgePair<N>>>(), edge_set_2.into_iter().collect::<Vec<IndexEdgePair<N>>>())
+    (indexed_nodes_1, indexed_nodes_2, indexed_edges_1, indexed_edges_2)
 }
 
-pub fn fill_nodes_edges<N: Clone + Eq + Debug + Hash, E>(graph: &Graph<N, E>, indexed_nodes: &mut Vec<IndexNodePair<N>>, edge_set: &mut HashSet<IndexEdgePair<N>>) {
+pub fn fill_nodes_edges<N: Clone + Eq + Debug + Hash, E>(graph: &Graph<N, E>, indexed_nodes: &mut Vec<IndexNodePair<N>>) -> Vec<IndexEdgePair<N>> {
+    let mut edges = vec![];
     for (i, index) in graph.node_indices().enumerate() {
         let mut outgoing_edges = vec![];
         let mut incoming_edges = vec![];
         for edge in graph.edges_directed(index, Direction::Outgoing) {
-            let index_edge = IndexEdgePair::new(graph.node_weight(edge.source()).unwrap().clone(), graph.node_weight(edge.target()).unwrap().clone());
+            let index_edge = graph.node_weight(edge.target()).unwrap().clone();
             outgoing_edges.push(index_edge.clone());
-            edge_set.insert(index_edge);
+            edges.push(IndexEdgePair::new(graph.node_weight(index).unwrap().clone(), index_edge));
         }
         for edge in graph.edges_directed(index, Direction::Incoming) {
-            let index_edge = IndexEdgePair::new(graph.node_weight(edge.source()).unwrap().clone(), graph.node_weight(edge.target()).unwrap().clone());
+            let index_edge = graph.node_weight(edge.source()).unwrap().clone();
             incoming_edges.push(index_edge.clone());
-            edge_set.insert(index_edge);
         }
         indexed_nodes.push(IndexNodePair::new(graph.node_weight(index).unwrap().clone(), incoming_edges, outgoing_edges, i));
     }
+    edges
 }
 
 pub fn calculate_cost_matrix<T: GraphComponent>(elements1: &Vec<T>, elements2: &Vec<T>) -> Array2<i32> {
@@ -350,11 +352,8 @@ impl<N> AStarNode<N>
         let mut new_pending_edges_1 = self.pending_edges_1.clone();
         let matched_edges = self.matched_edges.clone();
         let mut new_matched_edges = vec![];
-        for edge in &v1.edges() {
-            if new_pending_edges_1.contains(edge) {
-                let new_edges_1_index = new_pending_edges_1.iter().position(|edg| *edg == *edge).unwrap();
-                new_matched_edges.push(new_pending_edges_1.remove(new_edges_1_index));
-            }
+        for index in &v1.check_edges(&new_pending_edges_1) {
+            new_matched_edges.push(new_pending_edges_1.remove(*index));
         }
 
         let mut new_matched_nodes = self.matched_nodes.clone();
@@ -365,11 +364,8 @@ impl<N> AStarNode<N>
             let removed_node = new_pending_nodes_2.remove(i);
             let mut new_pending_edges_2 = self.pending_edges_2.clone();
             let mut new_matched_edges_2 = vec![];
-            for edge in &removed_node.edges() {
-                if new_pending_edges_2.contains(edge) {
-                    let removed_edge_index = new_pending_edges_2.iter().position(|edg| *edg == *edge).unwrap();
-                    new_matched_edges_2.push(new_pending_edges_2.remove(removed_edge_index));
-                }
+            for index in &removed_node.check_edges(&new_pending_edges_2) {
+                new_matched_edges_2.push(new_pending_edges_2.remove(*index));
             }
             let child_node = Self::new(
                 [new_matched_nodes.as_slice(), &[self.pending_nodes_2[i].clone()]].concat().to_vec(),
@@ -440,25 +436,47 @@ impl<N> AStarNode<N>
     }
 }
 
-#[derive(PartialEq, Eq, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub struct IndexNodePair<N>
     where N: PartialEq + Eq + Clone + Debug + Hash
 {
-    node: N,
-    incoming_edges: Vec<IndexEdgePair<N>>,
-    outgoing_edges: Vec<IndexEdgePair<N>>,
+    pub node: N,
+    pub incoming_edges: Vec<N>,
+    pub outgoing_edges: Vec<N>,
     pub number_of_edges: i32,
     index: usize,
 }
 
 impl<N> IndexNodePair<N> where N: PartialEq + Eq + Clone + Debug + Hash {
-    pub fn new(node: N, incoming_edges: Vec<IndexEdgePair<N>>, outgoing_edges: Vec<IndexEdgePair<N>>, index: usize) -> Self {
+    pub fn new(node: N, incoming_edges: Vec<N>, outgoing_edges: Vec<N>, index: usize) -> Self {
         let number_of_edges = incoming_edges.len() as i32 + outgoing_edges.len() as i32;
         Self { node, incoming_edges, outgoing_edges, number_of_edges, index }
     }
 
-    pub fn edges(&self) -> Vec<IndexEdgePair<N>>{
+    pub fn edges(&self) -> Vec<N>{
         [self.incoming_edges.as_slice(), self.outgoing_edges.as_slice()].concat().to_vec()
+    }
+
+    pub fn index_edges(&self) -> Vec<IndexEdgePair<N>> {
+        [self.incoming_edges.iter().map(|x| IndexEdgePair::new(x.clone(), self.node.clone())).collect::<Vec<IndexEdgePair<N>>>().as_slice(),
+            self.outgoing_edges.iter().map(|x| IndexEdgePair::new(self.node.clone(), x.clone())).collect::<Vec<IndexEdgePair<N>>>().as_slice()].concat().to_vec()
+    }
+
+    fn check_edges(&self, edges_to_match: &Vec<IndexEdgePair<N>>) -> Vec<usize> {
+        let mut edge_indices = vec![];
+        for edge in &self.outgoing_edges {
+            match edges_to_match.iter().position(|edg| *edg == IndexEdgePair::new(self.node.clone(), edge.clone())) {
+                Some(index) => edge_indices.push(index),
+                None => ()
+            }
+        }
+        for edge in &self.incoming_edges {
+            match edges_to_match.iter().position(|edg| *edg == IndexEdgePair::new(edge.clone(), self.node.clone())) {
+                Some(index) => edge_indices.push(index),
+                None => ()
+            }
+        }
+        edge_indices
     }
 }
 
@@ -469,6 +487,14 @@ impl<N> GraphComponent for IndexNodePair<N> where N: PartialEq + Eq + Clone + De
         self.node.clone()
     }
 }
+
+impl<N> PartialEq for IndexNodePair<N> where N: PartialEq + Eq + Clone + Debug + Hash {
+    fn eq(&self, other: &Self) -> bool {
+        self.node == other.node
+    }
+}
+
+impl<N> Eq for IndexNodePair<N> where N: PartialEq + Eq + Clone + Debug + Hash {}
 
 #[derive(PartialEq, Eq, Clone, Debug, Hash)]
 pub struct IndexEdgePair<N>
@@ -556,10 +582,10 @@ pub mod tests {
         let matched_edges = vec![];
         let edge1 = IndexEdgePair::new("node1", "node2");
         let edge2 = IndexEdgePair::new("node1", "node3");
-        let node1 = IndexNodePair::new("node1", vec![], vec![edge1.clone()], 0);
-        let node2 = IndexNodePair::new("node1", vec![], vec![edge2.clone()], 0);
-        let node3 = IndexNodePair::new("node2", vec![], vec![edge1.clone()], 1);
-        let node4 = IndexNodePair::new("node3", vec![], vec![edge2.clone()], 1);
+        let node1 = IndexNodePair::new("node1", vec![], vec!["node2"], 0);
+        let node2 = IndexNodePair::new("node1", vec![], vec!["node3"], 0);
+        let node3 = IndexNodePair::new("node2", vec!["node1"], vec![], 1);
+        let node4 = IndexNodePair::new("node3", vec!["node1"], vec![], 1);
         let pending_nodes_1 = vec![node1, node3];
         let pending_nodes_2 = vec![node2, node4];
         let mut star_node = AStarNode::new(matched_nodes,
