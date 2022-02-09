@@ -225,7 +225,7 @@ impl<T> NonGaSchedulerHandler<T>
                     Ok(_) => {
                         self.graph_file.write(format!("{:?}", cur_delays).as_bytes()).unwrap();
                         self.graph_file.write(b"+\n").unwrap();
-                        let j = serde_json::to_string(&node_states.get_receive_dependency_graph()).unwrap();
+                        let j = serde_json::to_string(&node_states.get_dependency_graph()).unwrap();
                         self.graph_file.write(j.as_bytes()).unwrap();
                         self.graph_file.write(b"+\n").unwrap();
                     }

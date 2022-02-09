@@ -25,6 +25,7 @@ config/validator*/rippled.cfg
 config/validator*/validators.txt
 rust-ripple-p2p/execution.txt
 rust-ripple-p2p/subscription*.json
+rust-ripple-p2p/trace_graphs.txt
 !documents/results/
 documents/results/*
 !documents/results/TraceComparison1.txt
