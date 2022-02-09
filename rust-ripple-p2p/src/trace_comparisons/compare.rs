@@ -95,7 +95,9 @@ mod graph_comparisons {
         println!("{:?}", distances);
         let mut distances_list = distances.iter().map(|x| ((x.0[0], x.0[1]), *x.1)).collect::<Vec<((i32, i32), f32)>>();
         distances_list.sort_unstable_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
-        println!("{:?}", distances_list);
+        for distance in distances_list.iter() {
+            println!("{:?}", distance);
+        }
         let zero_to_zero_sim = distances_list[0].1;
         let zero_to_one_sim = (distances_list[1].1 + distances_list[2].1 + distances_list[5].1 + distances_list[6].1) / 4.0;
         let zero_to_rand_sim = (distances_list[3].1 + distances_list[4].1 + distances_list[7].1 + distances_list[8].1) / 4.0;

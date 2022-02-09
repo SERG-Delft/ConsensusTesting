@@ -143,7 +143,7 @@ pub struct RippleMessage {
     pub from_node: String,
     pub to_node: String,
     timestamp: DateTime<Utc>,
-    message: RippleMessageObject
+    pub message: RippleMessageObject
 }
 
 impl RippleMessage {
