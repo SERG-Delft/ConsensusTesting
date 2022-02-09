@@ -12,7 +12,6 @@ use crate::client::SubscriptionObject;
 use crate::collector::RippleMessage;
 use crate::deserialization::deserialize;
 use crate::message_handler::{invoke_protocol_message, RippleMessageObject};
-use crate::protos::ripple::TMLedgerInfoType;
 
 type P2PConnections = HashMap<usize, HashMap<usize, PeerChannel>>;
 
@@ -41,11 +40,29 @@ impl Scheduler {
     }
 
     fn execute_event(&self, event: Event) {
-        let rmo: RippleMessageObject = invoke_protocol_message(BigEndian::read_u16(&event.message[4..6]), &event.message[6..]);
+        let mut rmo: RippleMessageObject = invoke_protocol_message(BigEndian::read_u16(&event.message[4..6]), &event.message[6..]);
         println!("[{}->{}] {}", event.from + 1, event.to + 1, rmo);
-        deserialize(&rmo);
-        self.collector_sender.send(RippleMessage::new(format!("Ripple{}", event.from + 1), format!("Ripple{}", event.to + 1), Utc::now(), rmo)).expect("Collector receiver failed");
-        self.p2p_connections.get(&event.to).unwrap().get(&event.from).unwrap().send(event.message);
+        match rmo {
+            RippleMessageObject::TMTransaction(_) => {
+                let bin = deserialize(&mut rmo, event.from, event.to);
+                let res = [event.message[0..6].to_vec(), bin].concat();
+                println!("{:?}", event.message);
+                println!("{:?}", res);
+                // assert!(event.message.eq(&res));
+                self.p2p_connections.get(&event.to).unwrap().get(&event.from).unwrap().send(res);
+            }
+            // RippleMessageObject::TMLedgerData(_) => {
+            //     let bin = deserialize(&mut rmo, event.from, event.to);
+            //     let res = [event.message[0..6].to_vec(), bin].concat();
+            //     println!("{:?}", event.message);
+            //     println!("{:?}", res);
+            //     // assert!(event.message.eq(&res));
+            //     self.p2p_connections.get(&event.to).unwrap().get(&event.from).unwrap().send(res);
+            // }
+            _ => {
+                self.p2p_connections.get(&event.to).unwrap().get(&event.from).unwrap().send(event.message);
+            }
+        }
     }
 
     #[allow(unused)]
