@@ -44,7 +44,6 @@ fn hausdorff_edit_distance<N: PartialEq + Eq + Clone + Debug + Hash>(nodes_1: &V
         distance_2[j] += nodes_2[j].number_of_edges as f32 / 2f32;
     }
     for i in 0..nodes_1.len() {
-        println!("{}", i);
         for j in 0..nodes_2.len() {
             let mut cost_edge: f32 = hausdorff_edit_cost(
                 &nodes_1[i].edges,

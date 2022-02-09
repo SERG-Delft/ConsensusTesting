@@ -101,6 +101,13 @@ impl NodeStates {
         }
     }
 
+    pub fn clear_dependency_graph(&mut self) {
+        self.dependency_graph = petgraph::Graph::new();
+        self.latest_message_sent = HashMap::new();
+        self.latest_messages_received = vec![vec![]; 5];
+        self.unreceived_message_sends = vec![vec![]; 5];
+    }
+
     /// This receive event is dependent on its send event, nothing more
     pub fn add_receive_dependency(&mut self, ripple_message: RippleMessage) {
         let dependency_event = DependencyEvent { ripple_message: ripple_message.clone(), event_type: EventType::Receive };
@@ -189,6 +196,7 @@ impl MutexNodeStates {
 
     pub fn clear_transactions(&self) {
         self.node_states.lock().clear_transactions();
+        self.node_states.lock().clear_dependency_graph();
         self.transactions_cvar.notify_all();
     }
 
