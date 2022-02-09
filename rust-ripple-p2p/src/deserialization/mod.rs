@@ -223,7 +223,7 @@ fn decode_field_code(field_type: &str, field_code: u8) -> String {
 /// ```
 ///
 /// ```
-fn get_type_field_code(blob: &mut BlobIterator) -> (u8, u8) {
+fn get_type_field_code(blob: &mut BlobParser) -> (u8, u8) {
     let first_byte = blob.next_byte();
 
     let low_bits = first_byte & 0b0000_1111;

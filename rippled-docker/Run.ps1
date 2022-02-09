@@ -1,6 +1,6 @@
 & $PSScriptRoot\Down.ps1 @args
 
-& $PSScriptRoot\ConfigCreator.ps1 @args
+#& $PSScriptRoot\ConfigCreator.ps1 @args
 
 # Run in parallel
 if ($args[1] -eq "p") {

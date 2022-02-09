@@ -105,41 +105,54 @@ impl App {
             threads.push(scheduler_thread);
 
             for pair in (0..peer).into_iter().combinations(2).into_iter() {
+
                 let i = pair[0] as usize;
                 let j = pair[1] as usize;
-                let peer_receiver_i = peer_receivers.get_mut(&i).unwrap().remove(&j).unwrap();
-                let peer_sender_i = peer_senders.get_mut(&i).unwrap().remove(&j).unwrap();
-                let peer_receiver_j = peer_receivers.get_mut(&j).unwrap().remove(&i).unwrap();
-                let peer_sender_j = peer_senders.get_mut(&j).unwrap().remove(&i).unwrap();
 
-                let name = format!("ripple{}, ripple{}", i+1, j+1);
-                let address_i = addrs[i].clone();
-                let address_j = addrs[j].clone();
-                // let thread = thread::Builder::new().name(String::from(name.clone())).spawn(move || {
-                let peer = PeerConnection::new(
-                    &name,
-                    address_i,
-                    address_j,
-                    String::from(PRIVATE_KEYS[i]),
-                    String::from(PRIVATE_KEYS[j]),
-                    String::from(PUBLIC_KEYS[i]),
-                    String::from(PUBLIC_KEYS[j])
-                );
-                let (thread1, thread2) = peer.connect(
-                    i,
-                    j,
-                    peer_sender_i,
-                    peer_sender_j,
-                    peer_receiver_i,
-                    peer_receiver_j
-                ).await;
-                tokio_tasks.push(thread1);
-                tokio_tasks.push(thread2);
+                if pair != vec!(0, 5) && pair != vec!(0, 6) && pair != vec!(1, 5) && pair != vec!(1, 6) {
+
+                    // println!("i = {}", i+1);
+                    // println!("j = {}", j+1);
+
+                    let peer_receiver_i = peer_receivers.get_mut(&i).unwrap().remove(&j).unwrap();
+                    let peer_sender_i = peer_senders.get_mut(&i).unwrap().remove(&j).unwrap();
+                    let peer_receiver_j = peer_receivers.get_mut(&j).unwrap().remove(&i).unwrap();
+                    let peer_sender_j = peer_senders.get_mut(&j).unwrap().remove(&i).unwrap();
+
+                    let name = format!("ripple{}, ripple{}", i + 1, j + 1);
+                    let address_i = addrs[i].clone();
+                    let address_j = addrs[j].clone();
+                    // let thread = thread::Builder::new().name(String::from(name.clone())).spawn(move || {
+                    let peer = PeerConnection::new(
+                        &name,
+                        address_i,
+                        address_j,
+                        String::from(PRIVATE_KEYS[i]),
+                        String::from(PRIVATE_KEYS[j]),
+                        String::from(PUBLIC_KEYS[i]),
+                        String::from(PUBLIC_KEYS[j])
+                    );
+                    let (thread1, thread2) = peer.connect(
+                        i,
+                        j,
+                        peer_sender_i,
+                        peer_sender_j,
+                        peer_receiver_i,
+                        peer_receiver_j
+                    ).await;
+                    tokio_tasks.push(thread1);
+                    tokio_tasks.push(thread2);
+                }
             }
         }
         // Connect websocket client to ripples
         for i in 0..self.peers {
-            let _client = Client::new(i, format!("ws://127.0.0.1:600{}", 5+i).as_str(), subscription_tx.clone());
+            if i < 5 {
+                let _client = Client::new(i, format!("ws://127.0.0.1:600{}", 5+i).as_str(), subscription_tx.clone());
+            }
+            else {
+                let _client = Client::new(i, format!("ws://127.0.0.1:60{}", 5+i).as_str(), subscription_tx.clone());
+            }
             // let sender_clone = client.sender_channel.clone();
             // threads.push(thread::spawn(move || {
             //     let mut counter = 0;
