@@ -195,12 +195,14 @@ impl<T> NonGaSchedulerHandler<T>
         std::process::exit(0);
     }
 
+    /// Write trace graphs to file after running a number of test harnesses with certain delays
     pub fn run_trace_graph_creation(&mut self, node_states: Arc<MutexNodeStates>) {
         let zero_delays = vec![0u32; Parameter::num_genes()];
         let one_delays = vec![1000u32; Parameter::num_genes()];
         let range = Uniform::from(0..1000);
-        let random_delays: Vec<u32> = rand::thread_rng().sample_iter(&range).take(Parameter::num_genes()).collect();
-        let delays = vec![zero_delays, one_delays, random_delays];
+        let random_delays_1: Vec<u32> = rand::thread_rng().sample_iter(&range).take(Parameter::num_genes()).collect();
+        let random_delays_2: Vec<u32> = rand::thread_rng().sample_iter(&range).take(Parameter::num_genes()).collect();
+        let delays = vec![zero_delays, one_delays, random_delays_1, random_delays_2];
 
         // Allow five test harnesses to pass to mitigate any startup difficulties in the network
         for i in 0..5 {
@@ -213,10 +215,12 @@ impl<T> NonGaSchedulerHandler<T>
             }
         }
 
-        // Run three different delays twice and write the resulting graphs to the graph_file
-        for i in 0..3 {
+        let number_of_tests_per_chromosome = 5;
+
+        // Run the different delays several times and write the resulting graphs to the graph_file
+        for i in 0..delays.len() {
             let cur_delays = delays[i].clone();
-            for j in 0..2 {
+            for j in 0..number_of_tests_per_chromosome {
                 println!("Starting test {} with delays: {:?}", i*2+j+1, cur_delays);
                 self.scheduler_sender.send(DelayMapPhenotype::from(&cur_delays))
                     .expect("Scheduler receiver failed");

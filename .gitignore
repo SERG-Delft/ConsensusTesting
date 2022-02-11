@@ -29,6 +29,8 @@ rust-ripple-p2p/trace_graphs.txt
 !documents/results/
 documents/results/*
 !documents/results/TraceComparison1.txt
+!documents/results/TraceComparisonReceive1.txt
+!documents/results/TraceComparisonReceiveBig.txt
 
 analysis/venv
 

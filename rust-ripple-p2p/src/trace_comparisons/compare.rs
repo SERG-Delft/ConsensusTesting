@@ -4,9 +4,11 @@ mod graph_comparisons {
     use std::str;
     use std::fs;
     use std::io::{BufRead, BufReader};
+    use std::ops::Range;
     use chrono::MAX_DATETIME;
     use itertools::Itertools;
     use petgraph::Graph;
+    use rand_distr::num_traits::Pow;
     use crate::collector::RippleMessage;
     use crate::message_handler::RippleMessageObject;
     use crate::node_state::{DependencyEvent};
@@ -84,7 +86,10 @@ mod graph_comparisons {
     #[test]
     fn trace_comparison() {
         let graphs = import_graphs("trace_graphs.txt");
-        let graph_pairs = (0..6).into_iter().combinations(2);
+        let number_of_different_delays = 4;
+        let number_of_runs_per_delay = 5;
+        println!("{}", number_of_different_delays);
+        let graph_pairs = (0..graphs.len()).into_iter().combinations(2);
         let mut distances = HashMap::new();
         for graph_pair in graph_pairs.into_iter() {
             let graph1 = graphs[graph_pair[0] as usize].clone();
@@ -93,24 +98,40 @@ mod graph_comparisons {
             distances.insert(graph_pair, distance);
         }
         println!("{:?}", distances);
-        let mut distances_list = distances.iter().map(|x| ((x.0[0], x.0[1]), *x.1)).collect::<Vec<((i32, i32), f32)>>();
+
+        let zero_traces = 0..number_of_runs_per_delay;
+        let one_traces = number_of_runs_per_delay..2*number_of_runs_per_delay;
+        let rand_1_traces = 2*number_of_runs_per_delay..3*number_of_runs_per_delay;
+        let rand_2_traces = 3*number_of_runs_per_delay..4*number_of_runs_per_delay;
+
+        println!("{:?}, {:?}, {:?}, {:?}, {:?}", number_of_runs_per_delay, zero_traces, one_traces, rand_1_traces, rand_2_traces);
+
+        let zero_to_zero_sims = get_similar_similarities(&distances, &zero_traces);
+        let one_to_one_sims = get_similar_similarities(&distances, &one_traces);
+        let rand1_to_rand1_sims = get_similar_similarities(&distances, &rand_1_traces);
+        let rand2_to_rand2_sims = get_similar_similarities(&distances, &rand_2_traces);
+        let zero_to_one_sims = get_different_similarities(&distances, &zero_traces, &one_traces);
+        let zero_to_rand1_sims = get_different_similarities(&distances, &zero_traces, &rand_1_traces);
+        let zero_to_rand2_sims = get_different_similarities(&distances, &zero_traces, &rand_2_traces);
+        let one_to_rand1_sims = get_different_similarities(&distances, &one_traces, &rand_1_traces);
+        let one_to_rand2_sims = get_different_similarities(&distances, &one_traces, &rand_2_traces);
+        let rand1_to_rand2_sims = get_different_similarities(&distances, &rand_1_traces, &rand_2_traces);
+
+        let mut distances_list = distances.iter().map(|x| ((x.0[0], x.0[1]), *x.1)).collect::<Vec<((usize, usize), f32)>>();
         distances_list.sort_unstable_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
         for distance in distances_list.iter() {
             println!("{:?}", distance);
         }
-        let zero_to_zero_sim = distances_list[0].1;
-        let zero_to_one_sim = (distances_list[1].1 + distances_list[2].1 + distances_list[5].1 + distances_list[6].1) / 4.0;
-        let zero_to_rand_sim = (distances_list[3].1 + distances_list[4].1 + distances_list[7].1 + distances_list[8].1) / 4.0;
-        let one_to_one_sim = distances_list[9].1;
-        let one_to_rand_sim = (distances_list[10].1 + distances_list[11].1 + distances_list[12].1 + distances_list[13].1) / 4.0;
-        let rand_to_rand_sim = distances_list[14].1;
-        println!("0 delay -> 0 delay = {}", zero_to_zero_sim);
-        println!("0 delay -> 1 delay = {}", zero_to_one_sim);
-        println!("0 delay -> rand delay = {}", zero_to_rand_sim);
-        println!("1 delay -> 1 delay = {}", one_to_one_sim);
-        println!("1 delay -> rand delay = {}", one_to_rand_sim);
-        println!("rand delay -> rand delay = {}", rand_to_rand_sim);
-
+        println!("0 delay -> 0 delay = {} +- {}", zero_to_zero_sims.iter().map(|x| x.1).sum::<f32>() / zero_to_zero_sims.len() as f32, calculate_std(&zero_to_zero_sims));
+        println!("0 delay -> 1 delay = {} +- {}", zero_to_one_sims.iter().map(|x| x.1).sum::<f32>() / zero_to_one_sims.len() as f32, calculate_std(&zero_to_one_sims));
+        println!("0 delay -> rand1 delay = {} +- {}", zero_to_rand1_sims.iter().map(|x| x.1).sum::<f32>() / zero_to_rand1_sims.len() as f32, calculate_std(&zero_to_rand1_sims));
+        println!("0 delay -> rand2 delay = {} +- {}", zero_to_rand2_sims.iter().map(|x| x.1).sum::<f32>() / zero_to_rand2_sims.len() as f32, calculate_std(&zero_to_rand2_sims));
+        println!("1 delay -> 1 delay = {} +- {}", one_to_one_sims.iter().map(|x| x.1).sum::<f32>() / one_to_one_sims.len() as f32, calculate_std(&one_to_one_sims));
+        println!("1 delay -> rand1 delay = {} +- {}", one_to_rand1_sims.iter().map(|x| x.1).sum::<f32>() / one_to_rand1_sims.len() as f32, calculate_std(&one_to_rand1_sims));
+        println!("1 delay -> rand2 delay = {} +- {}", one_to_rand2_sims.iter().map(|x| x.1).sum::<f32>() / one_to_rand2_sims.len() as f32, calculate_std(&one_to_rand2_sims));
+        println!("rand1 delay -> rand1 delay = {} +- {}", rand1_to_rand1_sims.iter().map(|x| x.1).sum::<f32>() / rand1_to_rand1_sims.len() as f32, calculate_std(&rand1_to_rand1_sims));
+        println!("rand1 delay -> rand2 delay = {} +- {}", rand1_to_rand2_sims.iter().map(|x| x.1).sum::<f32>() / rand1_to_rand2_sims.len() as f32, calculate_std(&rand1_to_rand2_sims));
+        println!("rand2 delay -> rand2 delay = {} +- {}", rand2_to_rand2_sims.iter().map(|x| x.1).sum::<f32>() / rand2_to_rand2_sims.len() as f32, calculate_std(&rand2_to_rand2_sims));
     }
 
     fn import_graphs(filename: &str) -> Vec<(String, Graph<DependencyEvent, ()>)> {
@@ -118,7 +139,7 @@ mod graph_comparisons {
             .expect("Something went wrong opening the file");
         let mut reader = BufReader::new(file);
         let mut graphs = vec![];
-        for i in 0..6 {
+        for i in 0..20 {
             let mut delay_buf = vec![];
             reader.read_until(b'+', &mut delay_buf).expect("Reading until delimiter failed");
             let delay_string = match str::from_utf8(&delay_buf) {
@@ -137,5 +158,33 @@ mod graph_comparisons {
             graphs.push((delay_string.to_string(), graph));
         }
         graphs
+    }
+
+    fn get_similar_similarities(distances: &HashMap<Vec<usize>, f32>, trace_indices: &Range<usize>) -> Vec<(Vec<usize>, f32)> {
+        distances.clone().into_iter()
+            .filter(|x| trace_indices.contains(&x.0[0]) && trace_indices.contains(&x.0[1]))
+            .collect::<Vec<(Vec<usize>, f32)>>()
+    }
+
+    fn get_different_similarities(distances: &HashMap<Vec<usize>, f32>, trace_indices1: &Range<usize>, trace_indices2: &Range<usize>) -> Vec<(Vec<usize>, f32)> {
+        distances.clone().into_iter()
+            .filter(|x| (trace_indices1.contains(&x.0[0]) && trace_indices2.contains(&x.0[1]))
+                || (trace_indices2.contains(&x.0[0]) && trace_indices1.contains(&x.0[1])))
+            .collect::<Vec<(Vec<usize>, f32)>>()
+    }
+
+    fn calculate_std(list: &Vec<(Vec<usize>, f32)>) -> f32 {
+        let mean = list.iter().map(|x| x.1).sum::<f32>() / list.len() as f32;
+        let mut variance: f32 = 0.0;
+        for i in 0..list.len() {
+            variance += (list[i].1 - mean).pow(2);
+        }
+        (variance / list.len() as f32).sqrt()
+    }
+
+    #[test]
+    fn calculate_std_test() {
+        let list = vec![(vec![], -2f32), (vec![], 2f32), (vec![], 2f32), (vec![], -2f32)];
+        assert_eq!(4f32, calculate_std(&list) * calculate_std(&list));
     }
 }
