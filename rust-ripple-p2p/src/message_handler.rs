@@ -1,4 +1,5 @@
 use std::fmt::{Debug, Display, Formatter};
+use std::hash::{Hash, Hasher};
 use crate::protos::ripple::{TMManifest, TMPing, TMCluster, TMEndpoints, TMTransaction, TMGetLedger, TMLedgerData, TMProposeSet, TMStatusChange, TMHaveTransactionSet, TMValidation, TMGetObjectByHash, TMGetShardInfo, TMShardInfo, TMGetPeerShardInfo, TMPeerShardInfo, TMValidatorList};
 use serde_json;
 
@@ -31,7 +32,7 @@ pub fn parse_message<T: protobuf::Message>(payload: &[u8]) -> T {
     return protobuf::Message::parse_from_bytes(&payload).unwrap()
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum RippleMessageObject {
     TMManifest(TMManifest),
     TMPing(TMPing),
@@ -73,6 +74,12 @@ impl RippleMessageObject {
             RippleMessageObject::TMPeerShardInfo(_) => "PeerShardInfo",
             RippleMessageObject::TMValidatorList(_) => "ValidatorList",
         }
+    }
+}
+
+impl Hash for RippleMessageObject {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.message_type().hash(state);
     }
 }
 

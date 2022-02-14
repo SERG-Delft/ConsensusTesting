@@ -98,3 +98,21 @@ StatusChange always contains ledgerseq.
 
 Some issues:
 A delayed message might be sent after the algorithm decides that a phase is finished. Fix: First get all messages from a phase and send them afterwards.
+
+Fitness function:
+Search for different message reorderings directly. Keep track of schedules tried and assign higher fitness to individuals that search more reorderings.
+Potentially use temperature concept of simulated annealing to scale down as search progresses. Higher exploration at the start, higher exploitation at the end.
+
+Trace comparison
+How to encode traces instead of execution.
+- Graph option: Encode schedule as a directed acyclic graph. Vertices are events and edges are a causal dependency from one event to another.
+	Are message send and message receive two separate events? Or only look at the receive events?
+	e_ks = (SEND, i, j) -> Look at last event in i e_l, e_l > e_ks, directed edge between e_l and e_ks
+	e_kr = (RECV, i, j) -> Look at last event in j e_l, e_l > e_kr, directed edge between e_l and e_kr, directed edge between e_ks and e_kr
+
+- Vector clock: Events i > j iff V(i) > V(j), else independent/concurrent
+	Every event carries a vector clock. Use algorithm to determine vector clock values
+	Can then post-run determine causal relation between different events (send, recv)
+
+- Time window: Keep track of events for a certain time window and determine concurrency in that time window
+	Don't know how this works.

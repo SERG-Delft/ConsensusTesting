@@ -15,6 +15,7 @@ mod peer_connection;
 mod test_harness;
 mod node_state;
 mod ga;
+mod trace_comparisons;
 
 type AnyError = Box<dyn std::error::Error + Send + Sync>;
 type AnyResult<T> = Result<T, AnyError>;

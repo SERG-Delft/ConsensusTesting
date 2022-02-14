@@ -18,6 +18,8 @@ pub struct NodeState {
     pub unvalidated_transactions: Vec<String>,
     pub validated_transactions: Vec<String>,
     pub number_of_failed_consensus_rounds: u32,
+    pub unreceived_message_sends: Vec<(RippleMessage, Option<DependencyNode>)>,
+    pub latest_message_received: Option<DependencyNode>,
 }
 
 impl NodeState {
@@ -30,6 +32,8 @@ impl NodeState {
             unvalidated_transactions: vec![],
             validated_transactions: vec![],
             number_of_failed_consensus_rounds: 0,
+            unreceived_message_sends: vec![],
+            latest_message_received: None,
         }
     }
 }
@@ -47,9 +51,6 @@ pub struct NodeStates {
     pub node_states: Vec<NodeState>,
     pub executions: Vec<RippleMessage>,
     pub dependency_graph: Graph<DependencyEvent, ()>,
-    latest_message_sent: HashMap<usize, DependencyNode>,
-    latest_messages_received: Vec<Vec<DependencyNode>>,
-    unreceived_message_sends: Vec<Vec<DependencyNode>>,
 }
 
 impl NodeStates {
@@ -58,9 +59,6 @@ impl NodeStates {
             node_states,
             executions: vec![],
             dependency_graph: petgraph::Graph::new(),
-            latest_message_sent: HashMap::new(),
-            latest_messages_received: vec![vec![]; 5],
-            unreceived_message_sends: vec![vec![]; 5]
         }
     }
 
@@ -101,37 +99,48 @@ impl NodeStates {
         }
     }
 
-    /// This receive event is dependent on its send event, nothing more
-    pub fn add_receive_dependency(&mut self, ripple_message: RippleMessage) {
-        let dependency_event = DependencyEvent { ripple_message: ripple_message.clone(), event_type: EventType::Receive };
-        let node_index = self.dependency_graph.add_node(dependency_event.clone());
-        let dependency_node = DependencyNode { event: dependency_event, index: node_index };
-        self.latest_messages_received[ripple_message.receiver_index()].push(dependency_node);
-        if let Some(pos) = self.unreceived_message_sends[ripple_message.sender_index()]
-            .iter()
-            .position(|x| x.event.ripple_message == ripple_message)
-        {
-            let node = self.unreceived_message_sends[ripple_message.sender_index()].remove(pos);
-            self.dependency_graph.add_edge(node.index, node_index, ());
+    pub fn clear_dependency_graph(&mut self) {
+        self.dependency_graph = petgraph::Graph::new();
+        for i in 0..self.node_states.len() {
+            self.node_states[i].unreceived_message_sends = vec![];
+            self.node_states[i].latest_message_received = None;
         }
     }
 
-    /// This send event is dependent on all messages received in this node prior to this send event
-    /// Subsequently all receive events are cleared as they now have a child
-    /// This send event is also dependent on the previous send event
-    pub fn add_send_dependency(&mut self, ripple_message: RippleMessage) {
-        let dependency_event = DependencyEvent { ripple_message: ripple_message.clone(), event_type: EventType::Send };
+    pub fn add_receive_dependency(&mut self, ripple_message: RippleMessage) {
+        let dependency_event = DependencyEvent { ripple_message: ripple_message.clone() };
         let node_index = self.dependency_graph.add_node(dependency_event.clone());
         let dependency_node = DependencyNode { event: dependency_event, index: node_index };
-        if let Some(node) = self.latest_message_sent.get(&ripple_message.sender_index()) {
-            self.dependency_graph.add_edge(node.index, dependency_node.index, ());
+
+        let mut receiver_node_state = self.node_states[ripple_message.receiver_index()].clone();
+        let mut sender_node_state = self.node_states[ripple_message.sender_index()].clone();
+
+        if let Some(pos) = sender_node_state.unreceived_message_sends
+            .iter()
+            .position(|x| x.0 == ripple_message)
+        {
+            let (_, dependency_node) = sender_node_state.unreceived_message_sends.remove(pos);
+            match dependency_node {
+                None => {}
+                Some(node) => { self.dependency_graph.add_edge(node.index, node_index, ()); }
+            }
         }
-        for node in &self.latest_messages_received[ripple_message.sender_index()] {
-            self.dependency_graph.add_edge(node.index, dependency_node.index, ());
+
+        match receiver_node_state.latest_message_received {
+            None => {}
+            Some(receive_dependency) => { self.dependency_graph.add_edge(receive_dependency.index, node_index, ()); }
         }
-        self.latest_message_sent.insert(ripple_message.sender_index(), dependency_node.clone());
-        self.latest_messages_received[ripple_message.sender_index()].clear();
-        self.unreceived_message_sends[ripple_message.sender_index()].push(dependency_node);
+
+        receiver_node_state.latest_message_received = Some(dependency_node);
+
+        self.node_states[ripple_message.receiver_index()] = receiver_node_state;
+        self.node_states[ripple_message.sender_index()] = sender_node_state;
+    }
+
+    pub fn add_send_dependency(&mut self, ripple_message: RippleMessage) {
+        let mut sender_node_state = self.node_states[ripple_message.sender_index()].clone();
+        sender_node_state.unreceived_message_sends.push((ripple_message.clone(), sender_node_state.latest_message_received.clone()));
+        self.node_states[ripple_message.sender_index()] = sender_node_state;
     }
 }
 
@@ -189,6 +198,7 @@ impl MutexNodeStates {
 
     pub fn clear_transactions(&self) {
         self.node_states.lock().clear_transactions();
+        self.node_states.lock().clear_dependency_graph();
         self.transactions_cvar.notify_all();
     }
 
@@ -277,7 +287,7 @@ impl MutexNodeStates {
     }
 
     pub fn add_send_dependency(&self, ripple_message: RippleMessage) {
-        self.node_states.lock().add_send_dependency(ripple_message);
+        self.node_states.lock().add_send_dependency(ripple_message.clone());
     }
 
     pub fn get_dependency_graph(&self) -> Graph<DependencyEvent, ()> {
@@ -285,26 +295,19 @@ impl MutexNodeStates {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq, Hash, Default)]
 pub struct DependencyEvent {
     pub ripple_message: RippleMessage,
-    pub event_type: EventType,
 }
 
 impl Debug for DependencyEvent {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?} {} {} -> {}\n", self.event_type, self.ripple_message.message_type(), self.ripple_message.from_node, self.ripple_message.to_node)
+        write!(f, "{} {} -> {}\n", self.ripple_message.message_type(), self.ripple_message.from_node, self.ripple_message.to_node)
     }
 }
 
 #[derive(Debug, Clone)]
-struct DependencyNode {
+pub struct DependencyNode {
     pub event: DependencyEvent,
     pub index: NodeIndex,
-}
-
-#[derive(Debug, Clone)]
-pub enum EventType {
-    Send,
-    Receive,
 }
