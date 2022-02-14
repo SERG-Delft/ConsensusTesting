@@ -9,6 +9,7 @@ mod graph_comparisons {
     use itertools::Itertools;
     use petgraph::Graph;
     use rand_distr::num_traits::Pow;
+    use ged::approximate_edit_distance::DistanceScoring;
     use crate::collector::RippleMessage;
     use crate::message_handler::RippleMessageObject;
     use crate::node_state::{DependencyEvent};
@@ -32,8 +33,8 @@ mod graph_comparisons {
         let message3 = graph2.add_node(event_3);
         let message4 = graph2.add_node(event_4);
         graph2.extend_with_edges(&[(message1, message2), (message3, message4)]);
-        let actual_similarity = ged::approximate_edit_distance::approximate_hed_graph_edit_distance(graph1, graph2);
-        let expected_similarity = 1.0 - (2.0 / 12.0);
+        let actual_similarity = ged::approximate_edit_distance::approximate_hed_graph_edit_distance(graph1, graph2, DistanceScoring::Normalized);
+        let expected_similarity = 1.0 - (2.0 / 8.0);
         assert_eq!(actual_similarity, expected_similarity);
     }
 
@@ -44,7 +45,7 @@ mod graph_comparisons {
         let message1 = graph1.add_node(event_1.clone());
         let mut graph2: Graph<DependencyEvent, ()> = Graph::new();
         let message1 = graph2.add_node(event_1);
-        let actual_similarity = ged::approximate_edit_distance::approximate_hed_graph_edit_distance(graph1, graph2);
+        let actual_similarity = ged::approximate_edit_distance::approximate_hed_graph_edit_distance(graph1, graph2, DistanceScoring::Normalized);
         let expected_similarity = 1.0;
         assert_eq!(actual_similarity, expected_similarity);
     }
@@ -61,7 +62,7 @@ mod graph_comparisons {
         let message1 = graph2.add_node(event_1);
         let message2 = graph2.add_node(event_2);
         graph2.extend_with_edges(&[(message1, message2)]);
-        let actual_similarity = ged::approximate_edit_distance::approximate_hed_graph_edit_distance(graph1, graph2);
+        let actual_similarity = ged::approximate_edit_distance::approximate_hed_graph_edit_distance(graph1, graph2, DistanceScoring::Normalized);
         let expected_similarity = 1.0;
         assert_eq!(actual_similarity, expected_similarity);
     }
@@ -78,8 +79,8 @@ mod graph_comparisons {
         let message1 = graph2.add_node(event_1);
         let message2 = graph2.add_node(event_2);
         graph2.extend_with_edges(&[(message2, message1)]);
-        let actual_similarity = ged::approximate_edit_distance::approximate_hed_graph_edit_distance(graph1, graph2);
-        let expected_similarity = 1.0 - (1.0 / 6.0);
+        let actual_similarity = ged::approximate_edit_distance::approximate_hed_graph_edit_distance(graph1, graph2, DistanceScoring::Normalized);
+        let expected_similarity = 1.0 - (1.0 / 4.0);
         assert_eq!(actual_similarity, expected_similarity);
     }
 
@@ -94,7 +95,7 @@ mod graph_comparisons {
         for graph_pair in graph_pairs.into_iter() {
             let graph1 = graphs[graph_pair[0] as usize].clone();
             let graph2 = graphs[graph_pair[1] as usize].clone();
-            let distance = ged::approximate_edit_distance::approximate_hed_graph_edit_distance(graph1.1, graph2.1);
+            let distance = ged::approximate_edit_distance::approximate_hed_graph_edit_distance(graph1.1, graph2.1, DistanceScoring::Normalized);
             distances.insert(graph_pair, distance);
         }
         println!("{:?}", distances);

@@ -19,7 +19,7 @@ pub fn approximate_aed_graph_edit_distance<N, E>(graph1: Graph<N, E, petgraph::D
     calculate_min_cost(&node_matrix_cost, &star_matrix)
 }
 
-pub fn approximate_hed_graph_edit_distance<N, E>(graph1: Graph<N, E, petgraph::Directed>, graph2: Graph<N, E, petgraph::Directed>) -> f32
+pub fn approximate_hed_graph_edit_distance<N, E>(graph1: Graph<N, E, petgraph::Directed>, graph2: Graph<N, E, petgraph::Directed>, scoring: DistanceScoring) -> f32
     where N: PartialEq + Eq + Clone + Debug + Hash, E: PartialEq + Eq + Clone
 {
     let (indexed_nodes_1, indexed_nodes_2, _indexed_edges_1, _indexed_edges_2) = create_indexed_graph(&graph1, &graph2);
@@ -27,10 +27,17 @@ pub fn approximate_hed_graph_edit_distance<N, E>(graph1: Graph<N, E, petgraph::D
              indexed_nodes_1.iter().map(|x| x.number_of_edges).sum::<i32>() / 2,
              indexed_nodes_2.len(), indexed_nodes_2.iter().map(|x| x.number_of_edges).sum::<i32>() / 2);
     let hed = hausdorff_edit_distance(&indexed_nodes_1, &indexed_nodes_2);
-    let max_hed: f32 = ((indexed_nodes_1.len() as i32 + indexed_nodes_1.iter().map(|x| x.number_of_edges).sum::<i32>() / 2
-        + indexed_nodes_2.len() as i32 + indexed_nodes_2.iter().map(|x| x.number_of_edges).sum::<i32>() / 2) as i32) as f32;
-    println!("{}, {}", hed, max_hed);
-    1.0 - (hed / max_hed)
+    match scoring {
+        DistanceScoring::Absolute => hed,
+        DistanceScoring::Normalized => {
+            let max_nodes = indexed_nodes_1.len().max(indexed_nodes_2.len()) as i32;
+            let max_hed: f32 = (max_nodes + indexed_nodes_1.iter().map(|x| x.number_of_edges).sum::<i32>() / 2
+                + indexed_nodes_2.iter().map(|x| x.number_of_edges).sum::<i32>() / 2) as f32;
+            println!("{}, {}", hed, max_hed);
+            1.0 - (hed / max_hed)
+        }
+    }
+
 }
 
 fn hausdorff_edit_distance<N: PartialEq + Eq + Clone + Debug + Hash>(nodes_1: &Vec<IndexNodePair<N>>, nodes_2: &Vec<IndexNodePair<N>>) -> f32
@@ -121,26 +128,31 @@ fn calculate_min_cost(cost_matrix: &Array2<i32>, star_matrix: &Array2<bool>) -> 
     min_cost
 }
 
+pub enum DistanceScoring {
+    Absolute,
+    Normalized,
+}
+
 #[cfg(test)]
 mod tests {
     use ndarray::{arr2, Array2};
-    use crate::approximate_edit_distance::{add_edge_cost, approximate_hed_graph_edit_distance, calculate_edge_substitution_cost, calculate_min_cost};
+    use crate::approximate_edit_distance::{add_edge_cost, approximate_hed_graph_edit_distance, calculate_edge_substitution_cost, calculate_min_cost, DistanceScoring};
     use crate::graph_edit_distance::{calculate_cost_matrix, create_indexed_graph, munkres_min_cost};
     use crate::graph_edit_distance::tests::{setup_graph, setup_graph_2};
 
     #[test]
     fn approximate_hed_test_1() {
         let (graph1, graph2) = setup_graph();
-        let actual_similarity = approximate_hed_graph_edit_distance(graph1, graph2);
-        let expected_similarity: f32 = 1.0 - (4.0/12.0);
-        assert!(actual_similarity > expected_similarity);
+        let actual_similarity = approximate_hed_graph_edit_distance(graph1, graph2, DistanceScoring::Normalized);
+        let expected_similarity: f32 = 1.0 - (4.0/8.0);
+        assert!(actual_similarity >= expected_similarity);
     }
 
     #[test]
     fn approximate_hed_test_2() {
         let (graph1, graph2) = setup_graph_2();
-        let actual_similarity = approximate_hed_graph_edit_distance(graph1, graph2);
-        let expected_similarity: f32 = 1.0 - (5.0/12.0);
+        let actual_similarity = approximate_hed_graph_edit_distance(graph1, graph2, DistanceScoring::Normalized);
+        let expected_similarity: f32 = 1.0 - (5.0/8.0);
         assert!(actual_similarity > expected_similarity);
     }
 
