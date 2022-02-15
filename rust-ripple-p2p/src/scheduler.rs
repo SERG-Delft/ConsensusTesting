@@ -8,9 +8,11 @@ use parking_lot::{Mutex, Condvar};
 use std::thread;
 use std::time::Duration;
 use byteorder::{BigEndian, ByteOrder};
+use genevo::genetic::Phenotype;
 use websocket::Message;
 use crate::client::{SubscriptionObject};
 use crate::collector::RippleMessage;
+use crate::ga::fitness::ExtendedFitness;
 use crate::ga::genetic_algorithm::{CurrentFitness, DelayMapPhenotype, MessageType};
 use crate::message_handler::{parse_protocol_message, RippleMessageObject};
 use crate::node_state::{MutexNodeStates};
@@ -68,9 +70,10 @@ impl Scheduler {
         let node_states_clone_2 = self.node_states.clone();
         let node_states_clone_3 = self.node_states.clone();
         let node_states_clone_4 = self.node_states.clone();
+        let node_states_clone_5 = self.node_states.clone();
         // thread::spawn(move || Self::listen_to_collector(collector_receiver, latest_validated_ledger_clone));
         thread::spawn(move || Self::listen_to_peers(run_clone_2, current_delays_clone, node_states_clone_4, receiver, event_schedule_sender));
-        thread::spawn(move || Self::listen_to_ga(current_delays_clone_2, ga_receiver));
+        thread::spawn(move || Self::listen_to_ga(current_delays_clone_2, ga_receiver, node_states_clone_5));
         thread::spawn(move || Self::update_current_round(node_states_clone, current_round_clone));
         thread::spawn(move || Self::update_latest_validated_ledger(node_states_clone_3, latest_validated_ledger_clone));
         thread::spawn(move || Self::harness_controller(ga_sender, client_senders, latest_validated_ledger_clone_2, current_round_clone_2, run_clone, node_states_clone_2));
@@ -181,10 +184,11 @@ impl Scheduler {
     // }
 
     /// Listen to the genetic algorithm for new individuals to test
-    fn listen_to_ga(current_delays: Arc<Mutex<DelayMapPhenotype>>, ga_receiver: STDReceiver<DelayMapPhenotype>) {
+    fn listen_to_ga(current_delays: Arc<Mutex<DelayMapPhenotype>>, ga_receiver: STDReceiver<DelayMapPhenotype>, node_states: Arc<MutexNodeStates>) {
         loop {
             match ga_receiver.recv() {
                 Ok(new_delays) => {
+                    node_states.set_current_delays(new_delays.genes());
                     *current_delays.lock() = new_delays;
                     debug!("New delays received");
                 },

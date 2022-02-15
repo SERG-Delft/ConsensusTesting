@@ -1,12 +1,12 @@
 #![allow(dead_code)]
 
-use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use parking_lot::{Mutex, Condvar};
 use petgraph::Graph;
 use petgraph::prelude::NodeIndex;
 use crate::client::ValidatedLedger;
 use crate::collector::RippleMessage;
+use crate::ga::genetic_algorithm::DelaysGenotype;
 
 /// Contains the state for a particular node at a particular time
 #[derive(Clone, Debug)]
@@ -51,6 +51,7 @@ pub struct NodeStates {
     pub node_states: Vec<NodeState>,
     pub executions: Vec<RippleMessage>,
     pub dependency_graph: Graph<DependencyEvent, ()>,
+    pub current_delays: DelaysGenotype,
 }
 
 impl NodeStates {
@@ -59,6 +60,7 @@ impl NodeStates {
             node_states,
             executions: vec![],
             dependency_graph: petgraph::Graph::new(),
+            current_delays: vec![],
         }
     }
 
@@ -141,6 +143,10 @@ impl NodeStates {
         let mut sender_node_state = self.node_states[ripple_message.sender_index()].clone();
         sender_node_state.unreceived_message_sends.push((ripple_message.clone(), sender_node_state.latest_message_received.clone()));
         self.node_states[ripple_message.sender_index()] = sender_node_state;
+    }
+
+    pub fn set_current_delays(&mut self, delays: DelaysGenotype) {
+        self.current_delays = delays;
     }
 }
 
@@ -292,6 +298,14 @@ impl MutexNodeStates {
 
     pub fn get_dependency_graph(&self) -> Graph<DependencyEvent, ()> {
         self.node_states.lock().dependency_graph.clone()
+    }
+
+    pub fn set_current_delays(&self, delays: DelaysGenotype) {
+        self.node_states.lock().set_current_delays(delays);
+    }
+
+    pub fn get_current_delays(&self) -> DelaysGenotype {
+        self.node_states.lock().current_delays.clone()
     }
 }
 

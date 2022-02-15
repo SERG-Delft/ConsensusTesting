@@ -9,11 +9,13 @@ use itertools::Itertools;
 use super::{EmptyResult};
 use crate::client::{Client};
 use crate::collector::{Collector};
+use crate::ga::fitness::ExtendedFitness;
 use crate::ga::genetic_algorithm;
 use crate::ga::genetic_algorithm::CurrentFitness;
 use crate::peer_connection::PeerConnection;
 use crate::scheduler::{PeerChannel, Scheduler};
 use crate::node_state::{MutexNodeStates, NodeState, NodeStates};
+use crate::trace_comparisons::{run_fitness_comparison, run_trace_graph_creation};
 
 
 const _NODE_PRIVATE_KEY: &str = "e55dc8f3741ac9668dbe858409e5d64f5ce88380f7228eccfe82b92b2c7848ba";
@@ -102,7 +104,8 @@ impl App {
 
             // Start the GA
             // thread::spawn(||genetic_algorithm::run(ga_scheduler_sender, scheduler_ga_receiver));
-            thread::spawn(||genetic_algorithm::run_non_ga(ga_scheduler_sender, scheduler_ga_receiver, mutex_node_states_clone_2));
+            // thread::spawn(|| run_trace_graph_creation(ga_scheduler_sender, scheduler_ga_receiver, mutex_node_states_clone_2));
+            thread::spawn(|| run_fitness_comparison(ga_scheduler_sender, scheduler_ga_receiver, mutex_node_states_clone_2));
 
             // For every combination (exclusive) of peers, create the necessary senders and receivers
             for pair in (0..peer).into_iter().combinations(2).into_iter() {

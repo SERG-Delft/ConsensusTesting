@@ -18,15 +18,15 @@ use petgraph::dot::{Config, Dot};
 use rand::distributions::Uniform;
 use rand::Rng;
 use crate::collector::RippleMessage;
-use crate::ga::fitness::{ExtendedFitness, FailedConsensusFitness, FitnessCalculation, SchedulerHandler, TimeFitness, ValidatedLedgersFitness};
+use crate::ga::fitness::{ComparedFitnessFunctions, ExtendedFitness, FailedConsensusFitness, FitnessCalculation, SchedulerHandler, TimeFitness, ValidatedLedgersFitness};
 use crate::node_state::MutexNodeStates;
 use super::mutation::GaussianMutator;
 
-pub type CurrentFitness = TimeFitness;
+pub type CurrentFitness = ComparedFitnessFunctions;
 
 /// Parameters for the GA
 #[derive(Debug)]
-struct Parameter {
+pub struct Parameter {
     population_size: usize,
     generation_limit: u64,
     num_individuals_per_parents: usize,
@@ -39,7 +39,7 @@ struct Parameter {
 }
 
 impl Parameter {
-    fn num_genes() -> usize {
+    pub(crate) fn num_genes() -> usize {
         NUM_NODES * (NUM_NODES-1) * MessageType::VALUES.len()
     }
 }
@@ -121,135 +121,6 @@ impl Phenotype<DelaysGenotype> for DelayMapPhenotype {
 
 // The genotype
 pub(crate) type DelaysGenotype = Vec<u32>;
-
-pub struct NonGaSchedulerHandler<T>
-    where T: ExtendedFitness
-{
-    scheduler_sender: Sender<DelayMapPhenotype>,
-    scheduler_receiver: Receiver<T>,
-    fitness_values: Vec<T>,
-    file: BufWriter<File>,
-    graph_file: BufWriter<File>,
-    executions: Vec<Vec<RippleMessage>>
-}
-
-impl<T> NonGaSchedulerHandler<T>
-    where T: ExtendedFitness
-{
-    pub fn new(
-        scheduler_sender: Sender<DelayMapPhenotype>,
-        scheduler_receiver: Receiver<T>,
-        fitness_values: Vec<T>,
-    ) -> Self {
-        let file = File::create(Path::new("run.txt")).expect("Opening execution file failed");
-        let graph_file = File::create(Path::new("trace_graphs.txt")).expect("Creating trace graph file failed");
-        NonGaSchedulerHandler { scheduler_sender, scheduler_receiver, fitness_values, file: BufWriter::new(file), graph_file: BufWriter::new(graph_file), executions: vec![] }
-    }
-
-    pub fn run(&mut self, node_states: Arc<MutexNodeStates>) {
-        let params = Parameter::default();
-        let initial_population: Population<DelaysGenotype> = build_population()
-            .with_genome_builder(ValueEncodedGenomeBuilder::new(Parameter::num_genes(), params.min_delay, params.max_delay))
-            .of_size(50)
-            .uniform_at_random();
-        println!("{:?}", initial_population);
-
-        let delays_genotype = vec![0u32; Parameter::num_genes()];
-
-        let mut graphs = vec![];
-        self.scheduler_sender.send(DelayMapPhenotype::from(delays_genotype.as_ref()))
-            .expect("Scheduler receiver failed");
-        // Receive fitness from scheduler
-        match self.scheduler_receiver.recv() {
-            Ok(value) => {},
-            Err(_) => {},
-        }
-
-        for i in 0..2 {
-            // let delays_genotype = initial_population.individuals()[i].clone();
-            println!("Starting test {}", i);
-            debug!("delay genome before send: {:?}", delays_genotype);
-            self.scheduler_sender.send(DelayMapPhenotype::from(delays_genotype.as_ref()))
-                .expect("Scheduler receiver failed");
-            // Receive fitness from scheduler
-            match self.scheduler_receiver.recv() {
-                Ok(value) => {
-                    debug!("Received fitness of {:?} for genome: {:?}", value, delays_genotype);
-                    self.executions.push(node_states.get_executions());
-                    node_states.clear_executions();
-                    self.fitness_values.push(value);
-                    self.file.write_all(self.fitness_values[i].to_string().as_bytes()).unwrap();
-                    for message in &self.executions[i] {
-                        self.file.write_all(message.clone().simple_str().as_bytes()).unwrap();
-                    }
-                    graphs.push(node_states.get_dependency_graph());
-                    self.file.write("\n".as_bytes()).unwrap();
-                    self.file.write(format!("{:?}", Dot::with_config(&node_states.get_dependency_graph(), &[Config::EdgeNoLabel])).as_bytes()).unwrap();
-                }
-                Err(_) => {}
-            }
-        }
-        // println!("Starting ged calc");
-        // let distance = ged::approximate_edit_distance::approximate_hed_graph_edit_distance(graphs[0].clone(), graphs[1].clone());
-        // println!("Finished ged calc: {}", distance);
-        std::process::exit(0);
-    }
-
-    /// Write trace graphs to file after running a number of test harnesses with certain delays
-    pub fn run_trace_graph_creation(&mut self, node_states: Arc<MutexNodeStates>) {
-        let zero_delays = vec![0u32; Parameter::num_genes()];
-        let one_delays = vec![1000u32; Parameter::num_genes()];
-        let range = Uniform::from(0..1000);
-        let random_delays_1: Vec<u32> = rand::thread_rng().sample_iter(&range).take(Parameter::num_genes()).collect();
-        let random_delays_2: Vec<u32> = rand::thread_rng().sample_iter(&range).take(Parameter::num_genes()).collect();
-        let delays = vec![zero_delays, one_delays, random_delays_1, random_delays_2];
-
-        // Allow five test harnesses to pass to mitigate any startup difficulties in the network
-        for i in 0..5 {
-            self.scheduler_sender.send(DelayMapPhenotype::from(&delays[0]))
-                .expect("Scheduler receiver failed");
-            // Receive fitness from scheduler
-            match self.scheduler_receiver.recv() {
-                Ok(_) => {},
-                Err(_) => {},
-            }
-        }
-
-        let number_of_tests_per_chromosome = 5;
-
-        // Run the different delays several times and write the resulting graphs to the graph_file
-        for i in 0..delays.len() {
-            let cur_delays = delays[i].clone();
-            for j in 0..number_of_tests_per_chromosome {
-                println!("Starting test {} with delays: {:?}", i*2+j+1, cur_delays);
-                self.scheduler_sender.send(DelayMapPhenotype::from(&cur_delays))
-                    .expect("Scheduler receiver failed");
-                // Receive fitness from scheduler
-                match self.scheduler_receiver.recv() {
-                    Ok(_) => {
-                        self.graph_file.write(format!("{:?}", cur_delays).as_bytes()).unwrap();
-                        self.graph_file.write(b"+\n").unwrap();
-                        let j = serde_json::to_string(&node_states.get_dependency_graph()).unwrap();
-                        self.graph_file.write(j.as_bytes()).unwrap();
-                        self.graph_file.write(b"+\n").unwrap();
-                    }
-                    Err(_) => {}
-                }
-            }
-        }
-        self.graph_file.flush().unwrap();
-        println!("Finished graph creation, exiting...");
-        std::process::exit(0);
-    }
-}
-
-pub fn run_non_ga<T>(scheduler_sender: Sender<DelayMapPhenotype>, scheduler_receiver: Receiver<T>, node_states: Arc<MutexNodeStates>)
-    where T: ExtendedFitness + 'static
-{
-    let fitness_values: Vec<T> = vec![];
-    let mut scheduler_handler = NonGaSchedulerHandler::new(scheduler_sender, scheduler_receiver, fitness_values.clone());
-    thread::spawn(move ||scheduler_handler.run_trace_graph_creation(node_states));
-}
 
 /// Run the genetic algorithm
 pub fn run<T>(scheduler_sender: Sender<DelayMapPhenotype>, scheduler_receiver: Receiver<T>)
