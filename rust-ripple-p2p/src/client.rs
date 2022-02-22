@@ -454,7 +454,7 @@ impl StateAccounting {
         match state {
             State::Connected => Self::diff_individual(&accounting_before.connected, &accounting_after.connected),
             State::Disconnected => Self::diff_individual(&accounting_before.connected, &accounting_after.connected),
-            State::Full => Self::diff_individual(&accounting_before.full, &accounting_after.full),
+            State::_Full => Self::diff_individual(&accounting_before.full, &accounting_after.full),
             State::Syncing => Self::diff_individual(&accounting_before.syncing, &accounting_after.syncing),
             State::Tracking => Self::diff_individual(&accounting_before.tracking, &accounting_after.tracking),
         }

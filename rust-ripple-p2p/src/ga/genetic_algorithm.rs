@@ -10,7 +10,6 @@ use itertools::{chain};
 use genevo::prelude::{build_population, GenerationLimit, Population, SimResult, simulate, Simulation, SimulationBuilder};
 use genevo::reinsertion::elitist::ElitistReinserter;
 use genevo::types::fmt::Display;
-use crate::ga::fitness::compared_fitness_functions::ComparedFitnessFunctions;
 use crate::ga::fitness::state_accounting_fitness::StateAccountFitness;
 use crate::ga::fitness::{ExtendedFitness, FitnessCalculation, SchedulerHandler};
 use super::mutation::GaussianMutator;

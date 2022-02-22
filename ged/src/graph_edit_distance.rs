@@ -441,14 +441,14 @@ pub struct IndexNodePair<N>
     pub outgoing_edges: Vec<N>,
     pub edges: Vec<(N, N)>,
     pub number_of_edges: i32,
-    index: usize,
+    _index: usize,
 }
 
 impl<N> IndexNodePair<N> where N: PartialEq + Eq + Clone + Debug + Hash {
     pub fn new(node: N, incoming_edges: Vec<N>, outgoing_edges: Vec<N>, index: usize) -> Self {
         let edges = [incoming_edges.iter().map(|x| (x.clone(), node.clone())).collect::<Vec<(N, N)>>().as_slice(), outgoing_edges.iter().map(|x| (node.clone(), x.clone())).collect::<Vec<(N, N)>>().as_slice()].concat().to_vec();
         let number_of_edges = edges.len() as i32;
-        Self { node, incoming_edges, outgoing_edges, edges, number_of_edges, index }
+        Self { node, incoming_edges, outgoing_edges, edges, number_of_edges, _index: index }
     }
 
     pub fn edges(&self) -> Vec<(N, N)> {

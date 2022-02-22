@@ -3,7 +3,6 @@ use std::sync::Arc;
 use genevo::genetic::{AsScalar, Fitness};
 use crate::client::{Client, ServerStateObject, State, StateAccounting};
 use crate::ga::fitness::ExtendedFitness;
-use crate::ga::genetic_algorithm::Parameter;
 use crate::node_state::MutexNodeStates;
 use crate::test_harness::TestHarness;
 
@@ -92,5 +91,77 @@ impl ExtendedFitness for StateAccountFitness {
 impl AsScalar for StateAccountFitness {
     fn as_scalar(&self) -> f64 {
         self.not_full_duration as f64
+    }
+}
+
+
+#[cfg(test)]
+mod state_accounting_fitness_tests {
+    use crate::client::{ServerStateObject, StateAccounting, StateDetails};
+    use crate::ga::fitness::state_accounting_fitness::StateAccountFitness;
+
+    #[test]
+    fn test_fitness_calculation_1() {
+        let mut before_server_state1 = ServerStateObject::default();
+        before_server_state1.state_accounting = create_state_accounting_1();
+        let mut before_server_state2 = ServerStateObject::default();
+        before_server_state2.state_accounting = create_state_accounting_3();
+        let mut after_server_state1 = ServerStateObject::default();
+        after_server_state1.state_accounting = create_state_accounting_2();
+        let mut after_server_state2 = ServerStateObject::default();
+        after_server_state2.state_accounting = create_state_accounting_1();
+        let before_server_states = vec![before_server_state1, before_server_state2];
+        let after_server_states = vec![after_server_state1, after_server_state2];
+        let result = StateAccountFitness::calculate_fitness(before_server_states, after_server_states);
+        assert_eq!((result.not_full_duration, result.not_full_transitions), (7, 4));
+    }
+
+    #[test]
+    fn test_fitness_calculation_2() {
+        let mut before_server_state1 = ServerStateObject::default();
+        before_server_state1.state_accounting = create_state_accounting_3();
+        let mut after_server_state1 = ServerStateObject::default();
+        after_server_state1.state_accounting = create_state_accounting_3();
+        let before_server_states = vec![before_server_state1];
+        let after_server_states = vec![after_server_state1];
+        let result = StateAccountFitness::calculate_fitness(before_server_states, after_server_states);
+        assert_eq!((result.not_full_duration, result.not_full_transitions), (0, 0));
+    }
+
+    fn create_state_accounting_1() -> StateAccounting {
+        StateAccounting {
+            connected: Some(create_state_details("2", 1)),
+            disconnected: Some(create_state_details("3", 2)),
+            full: Some(create_state_details("4", 3)),
+            syncing: Some(create_state_details("0", 0)),
+            tracking: Some(create_state_details("0", 0)),
+        }
+    }
+
+    fn create_state_accounting_2() -> StateAccounting {
+        StateAccounting {
+            connected: Some(create_state_details("3", 2)),
+            disconnected: Some(create_state_details("3", 2)),
+            full: Some(create_state_details("4", 3)),
+            syncing: Some(create_state_details("1", 0)),
+            tracking: Some(create_state_details("0", 0)),
+        }
+    }
+
+    fn create_state_accounting_3() -> StateAccounting {
+        StateAccounting {
+            connected: Some(create_state_details("0", 0)),
+            disconnected: Some(create_state_details("0", 0)),
+            full: Some(create_state_details("0", 0)),
+            syncing: Some(create_state_details("0", 0)),
+            tracking: Some(create_state_details("0", 0)),
+        }
+    }
+
+    fn create_state_details(duration: &str, transitions: u32) -> StateDetails {
+        StateDetails {
+            duration_us: duration.parse().unwrap(),
+            transitions
+        }
     }
 }
