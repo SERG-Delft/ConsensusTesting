@@ -12,9 +12,10 @@ use genevo::reinsertion::elitist::ElitistReinserter;
 use genevo::types::fmt::Display;
 use crate::ga::fitness::state_accounting_fitness::StateAccountFitness;
 use crate::ga::fitness::{ExtendedFitness, FitnessCalculation, SchedulerHandler};
+use crate::ga::fitness::compared_fitness_functions::ComparedFitnessFunctions;
 use super::mutation::GaussianMutator;
 
-pub type CurrentFitness = StateAccountFitness;
+pub type CurrentFitness = ComparedFitnessFunctions;
 
 /// Parameters for the GA
 #[allow(unused)]
