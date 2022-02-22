@@ -12,7 +12,6 @@ if ($args[1] -eq "p") {
 			--net ripple-net `
 			-p ${peer_port}:51235 -p ${ws_port}:6005 `
 			--mount type=bind,source=$using:pwd/../config/validator_$_,target="/.config/ripple" `
-# 			--mount type=bind,source=$using:pwd/../db/validator_$_,target="/var/lib/rippled/db" `
 			--mount type=bind,source=$using:pwd/../logs/validator_$_,target="/var/log/rippled" `
 			mvanmeerten/rippled-boost-cmake
 	}
@@ -25,7 +24,6 @@ if ($args[1] -eq "p") {
 			--net ripple-net `
 			-p ${peer_port}:51235 -p ${ws_port}:6005 `
 			--mount type=bind,source=${pwd}/../config/validator_${i},target="/.config/ripple" `
-# 			--mount type=bind,source=${pwd}/../db/validator_${i},target="/var/lib/rippled/db" `
 			--mount type=bind,source=${pwd}/../logs/validator_${i},target="/var/log/rippled" `
 			mvanmeerten/rippled-boost-cmake
 	}
