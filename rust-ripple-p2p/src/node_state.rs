@@ -4,7 +4,7 @@ use std::fmt::{Debug, Formatter};
 use parking_lot::{Mutex, Condvar};
 use petgraph::Graph;
 use petgraph::prelude::NodeIndex;
-use crate::client::ValidatedLedger;
+use crate::client::{PeerServerStateObject, ServerStateObject, ValidatedLedger};
 use crate::collector::RippleMessage;
 use crate::ga::genetic_algorithm::DelaysGenotype;
 
@@ -20,6 +20,7 @@ pub struct NodeState {
     pub number_of_failed_consensus_rounds: u32,
     pub unreceived_message_sends: Vec<(RippleMessage, Option<DependencyNode>)>,
     pub latest_message_received: Option<DependencyNode>,
+    pub server_state: ServerStateObject,
 }
 
 impl NodeState {
@@ -34,6 +35,7 @@ impl NodeState {
             number_of_failed_consensus_rounds: 0,
             unreceived_message_sends: vec![],
             latest_message_received: None,
+            server_state: ServerStateObject::default(),
         }
     }
 }
@@ -48,19 +50,24 @@ pub enum ConsensusPhase {
 /// Combine individual node states for aggregate functions
 #[derive(Clone, Debug)]
 pub struct NodeStates {
+    pub number_of_nodes: usize,
     pub node_states: Vec<NodeState>,
     pub executions: Vec<RippleMessage>,
     pub dependency_graph: Graph<DependencyEvent, ()>,
     pub current_delays: DelaysGenotype,
+    pub server_state_updates: Vec<bool>,
 }
 
 impl NodeStates {
     pub fn new(node_states: Vec<NodeState>) -> Self {
+        let number_of_nodes = node_states.len();
         NodeStates {
+            number_of_nodes,
             node_states,
             executions: vec![],
             dependency_graph: petgraph::Graph::new(),
             current_delays: vec![],
+            server_state_updates: vec![false; number_of_nodes],
         }
     }
 
@@ -148,6 +155,21 @@ impl NodeStates {
     pub fn set_current_delays(&mut self, delays: DelaysGenotype) {
         self.current_delays = delays;
     }
+
+    /// Returns true when the server states for all nodes have been updated
+    pub fn set_server_state(&mut self, server_state: PeerServerStateObject) -> bool {
+        self.server_state_updates[server_state.peer as usize] = true;
+        self.node_states[server_state.peer as usize].server_state = server_state.server_state_object;
+        if self.server_state_updates.iter().all(|x| *x) {
+            self.server_state_updates = vec![false; self.node_states.len()];
+            return true;
+        }
+        false
+    }
+
+    pub fn get_server_state(&self, peer: usize) -> ServerStateObject {
+        self.node_states[peer].server_state.clone()
+    }
 }
 
 /// Wrap NodeStates in a Mutex with Condvars for convenient access in the rest of the program.
@@ -155,21 +177,25 @@ impl NodeStates {
 /// This struct should always be used to access and modify node_state data
 #[derive(Debug)]
 pub struct MutexNodeStates {
+    pub number_of_nodes: usize,
     pub node_states: Mutex<NodeStates>,
     pub round_cvar: Condvar,
     pub consensus_phase_cvar: Condvar,
     pub validated_ledger_cvar: Condvar,
     pub transactions_cvar: Condvar,
+    pub server_state_cvar: Condvar,
 }
 
 impl MutexNodeStates {
     pub fn new(node_states: NodeStates) -> Self {
         MutexNodeStates {
+            number_of_nodes: node_states.node_states.len(),
             node_states: Mutex::new(node_states),
             round_cvar: Condvar::new(),
             consensus_phase_cvar: Condvar::new(),
             validated_ledger_cvar: Condvar::new(),
             transactions_cvar: Condvar::new(),
+            server_state_cvar: Condvar::new(),
         }
     }
 
@@ -186,12 +212,11 @@ impl MutexNodeStates {
             self.set_current_round(peer, old_round + 1);
             if current_phase != ConsensusPhase::Accepted {
                 self.node_states.lock().node_states[peer].number_of_failed_consensus_rounds += 1;
-                println!("Failed consensus round");
+                println!("Failed consensus round: establish -> open");
             }
-        }
-        else if new_phase == ConsensusPhase::Establish && current_phase != ConsensusPhase::Open {
+        } else if new_phase == ConsensusPhase::Establish && current_phase != ConsensusPhase::Open {
             self.node_states.lock().node_states[peer].number_of_failed_consensus_rounds += 1;
-            println!("Failed consensus round");
+            println!("Failed consensus round: accepted -> establish");
         }
         self.node_states.lock().node_states[peer].consensus_phase = new_phase;
         self.consensus_phase_cvar.notify_all();
@@ -306,6 +331,16 @@ impl MutexNodeStates {
 
     pub fn get_current_delays(&self) -> DelaysGenotype {
         self.node_states.lock().current_delays.clone()
+    }
+
+    pub fn set_server_state(&self, server_state: PeerServerStateObject) {
+        if self.node_states.lock().set_server_state(server_state) {
+            self.server_state_cvar.notify_all();
+        }
+    }
+
+    pub fn get_server_state(&self, peer: usize) -> ServerStateObject {
+        self.node_states.lock().get_server_state(peer)
     }
 }
 

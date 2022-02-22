@@ -4,17 +4,16 @@ use std::path::Path;
 use std::sync::Arc;
 use std::sync::mpsc::{Sender, Receiver};
 use std::thread;
-use chrono::Duration;
 use rand::distributions::Uniform;
 use rand::Rng;
-use crate::collector::RippleMessage;
-use crate::ga::fitness::{ExtendedFitness, FailedConsensusFitness, TimeFitness, ValidatedLedgersFitness};
+use crate::ga::fitness::ExtendedFitness;
 use crate::ga::genetic_algorithm::{CurrentFitness, DelayMapPhenotype, Parameter};
 use crate::node_state::MutexNodeStates;
 
 mod compare;
 mod compare_fitness;
 
+#[allow(unused)]
 pub struct TraceGraphSchedulerHandler<T>
     where T: ExtendedFitness
 {
@@ -23,6 +22,7 @@ pub struct TraceGraphSchedulerHandler<T>
     graph_file: BufWriter<File>,
 }
 
+#[allow(unused)]
 impl<T> TraceGraphSchedulerHandler<T>
     where T: ExtendedFitness
 {
@@ -102,11 +102,11 @@ impl FitnessComparisonSchedulerHandler {
         }
     }
 
-    pub fn fitness_comparison(&mut self, node_states: Arc<MutexNodeStates>) {
+    pub fn fitness_comparison(&mut self) {
         let mut delays: Vec<Vec<u32>> = vec![];
         let range: Uniform<u32> = Uniform::from(0..1000);
-        let number_of_tests = 50;
-        let number_of_tests_per_chromosome = 1;
+        let number_of_tests = 100;
+        let number_of_tests_per_chromosome = 5;
         for _ in 0..number_of_tests {
             delays.push(rand::thread_rng().sample_iter(&range).take(Parameter::num_genes()).collect());
         }
@@ -121,14 +121,15 @@ impl FitnessComparisonSchedulerHandler {
         for i in 0..delays.len() {
             let cur_delays = delays[i].clone();
             for j in 0..number_of_tests_per_chromosome {
-                println!("Starting test {} with delays: {:?}", i*2+j+1, cur_delays);
+                println!("Starting test {} with delays: {:?}", i*number_of_tests_per_chromosome+j+1, cur_delays);
                 self.scheduler_sender.send(DelayMapPhenotype::from(&cur_delays)).expect("Scheduler receiver failed");
                 // Receive fitness from scheduler
                 match self.scheduler_receiver.recv() {
                     Ok(fitness) => {
                         self.fitness_file.write(format!("{:?}", cur_delays).as_bytes()).unwrap();
                         self.fitness_file.write(b"+\n").unwrap();
-                        self.fitness_file.write(format!("{}", fitness).as_bytes()).unwrap();
+                        let j = serde_json::to_string(&fitness).unwrap();
+                        self.fitness_file.write(j.as_bytes()).unwrap();
                         self.fitness_file.write(b"+\n").unwrap();
                     }
                     Err(_) => {}
@@ -141,6 +142,7 @@ impl FitnessComparisonSchedulerHandler {
     }
 }
 
+#[allow(unused)]
 pub fn run_trace_graph_creation<T>(scheduler_sender: Sender<DelayMapPhenotype>, scheduler_receiver: Receiver<T>, node_states: Arc<MutexNodeStates>)
     where T: ExtendedFitness + 'static
 {
@@ -148,7 +150,8 @@ pub fn run_trace_graph_creation<T>(scheduler_sender: Sender<DelayMapPhenotype>, 
     thread::spawn(move ||scheduler_handler.trace_graph_creation(node_states));
 }
 
-pub fn run_fitness_comparison(scheduler_sender: Sender<DelayMapPhenotype>, scheduler_receiver: Receiver<CurrentFitness>, node_states: Arc<MutexNodeStates>) {
+#[allow(unused)]
+pub fn run_fitness_comparison(scheduler_sender: Sender<DelayMapPhenotype>, scheduler_receiver: Receiver<CurrentFitness>) {
     let mut scheduler_handler = FitnessComparisonSchedulerHandler::new(scheduler_sender, scheduler_receiver);
-    thread::spawn(move ||scheduler_handler.fitness_comparison(node_states));
+    thread::spawn(move ||scheduler_handler.fitness_comparison());
 }

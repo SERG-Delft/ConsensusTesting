@@ -1,7 +1,4 @@
 use std::collections::HashMap;
-use std::fs::File;
-use std::io::{BufWriter, Write};
-use std::path::Path;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, RwLock};
 use std::thread;
@@ -13,18 +10,15 @@ use itertools::{chain};
 use genevo::prelude::{build_population, GenerationLimit, Population, SimResult, simulate, Simulation, SimulationBuilder};
 use genevo::reinsertion::elitist::ElitistReinserter;
 use genevo::types::fmt::Display;
-use log::debug;
-use petgraph::dot::{Config, Dot};
-use rand::distributions::Uniform;
-use rand::Rng;
-use crate::collector::RippleMessage;
-use crate::ga::fitness::{ComparedFitnessFunctions, ExtendedFitness, FailedConsensusFitness, FitnessCalculation, SchedulerHandler, TimeFitness, ValidatedLedgersFitness};
-use crate::node_state::MutexNodeStates;
+use crate::ga::fitness::compared_fitness_functions::ComparedFitnessFunctions;
+use crate::ga::fitness::state_accounting_fitness::StateAccountFitness;
+use crate::ga::fitness::{ExtendedFitness, FitnessCalculation, SchedulerHandler};
 use super::mutation::GaussianMutator;
 
-pub type CurrentFitness = ComparedFitnessFunctions;
+pub type CurrentFitness = StateAccountFitness;
 
 /// Parameters for the GA
+#[allow(unused)]
 #[derive(Debug)]
 pub struct Parameter {
     population_size: usize,
@@ -123,6 +117,7 @@ impl Phenotype<DelaysGenotype> for DelayMapPhenotype {
 pub(crate) type DelaysGenotype = Vec<u32>;
 
 /// Run the genetic algorithm
+#[allow(unused)]
 pub fn run<T>(scheduler_sender: Sender<DelayMapPhenotype>, scheduler_receiver: Receiver<T>)
     where T: ExtendedFitness + 'static
 {

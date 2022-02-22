@@ -6,7 +6,7 @@ use std::path::Path;
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, Sender};
 use serde_json::json;
-use crate::client::{ConsensusChange, PeerSubscriptionObject, SubscriptionObject};
+use crate::client::{ConsensusChange, PeerServerStateObject, PeerSubscriptionObject, SubscriptionObject};
 use crate::message_handler::RippleMessageObject;
 use chrono::{DateTime, MAX_DATETIME, Utc};
 use itertools::Itertools;
@@ -21,6 +21,7 @@ use crate::protos::ripple::TMTransaction;
 pub struct Collector {
     ripple_message_receiver: Receiver<Box<RippleMessage>>,
     subscription_receiver: Receiver<PeerSubscriptionObject>,
+    server_state_receiver: Receiver<PeerServerStateObject>,
     control_receiver: Receiver<String>,
     _scheduler_sender: Sender<SubscriptionObject>,
     execution_file: BufWriter<File>,
@@ -33,6 +34,7 @@ impl Collector {
         number_of_nodes: u16,
         ripple_message_receiver: Receiver<Box<RippleMessage>>,
         subscription_receiver: Receiver<PeerSubscriptionObject>,
+        server_state_receiver: Receiver<PeerServerStateObject>,
         control_receiver: Receiver<String>,
         scheduler_sender: Sender<SubscriptionObject>,
         node_states: Arc<MutexNodeStates>,
@@ -47,6 +49,7 @@ impl Collector {
         Collector {
             ripple_message_receiver,
             subscription_receiver,
+            server_state_receiver,
             control_receiver,
             _scheduler_sender: scheduler_sender,
             execution_file: BufWriter::new(execution_file),
@@ -112,6 +115,12 @@ impl Collector {
                 },
                 _ => {}
             }
+            match self.server_state_receiver.try_recv() {
+                Ok(server_state_object) => {
+                    self.node_states.set_server_state(server_state_object)
+                }
+                _ => {}
+            }
         }
     }
 
@@ -163,6 +172,7 @@ impl RippleMessage {
         self.to_node.as_str().chars().next_back().unwrap().to_digit(10).unwrap() as usize - 1
     }
 
+    #[allow(unused)]
     pub fn simple_str(&self) -> String {
         let message = self.message.to_string();
         let message_type = message.split(" ").collect_vec()[0];

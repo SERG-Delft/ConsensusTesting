@@ -55,12 +55,12 @@ impl TestHarness<'static> {
     }
 
     // Schedule transactions in struct
-    pub fn schedule_transactions(self, node_states: Arc<MutexNodeStates>) {
+    pub fn schedule_transactions(&self, node_states: Arc<MutexNodeStates>) {
         node_states.clear_transactions();
         let number_of_transactions = self.transactions.len();
-        for transaction in self.transactions {
+        for transaction in &self.transactions {
             let client_index = transaction.client_index.clone();
-            Self::schedule_transaction(transaction, self.client_senders[client_index].clone());
+            Self::schedule_transaction(transaction.clone(), self.client_senders[client_index].clone());
         }
         // Wait for all transactions to have been validated
         while node_states.get_min_validated_transactions() < number_of_transactions {
@@ -85,7 +85,7 @@ impl TestHarness<'static> {
 }
 
 /// A transaction coupled with its delay and client
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Eq, PartialEq, Debug, Clone)]
 pub struct TransactionTimed {
     transaction: Transaction,
     delay: Duration,
