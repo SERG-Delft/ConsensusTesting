@@ -14,13 +14,7 @@ To run the network, follow the steps below.
 `git clone https://github.com/SERG-Delft/ConsensusTesting`
 2. Change directory to rippled-docker `cd ConsensusTesting/rippled-docker`
 3. Create the docker network ripple-net `docker network create ripple-net`
-
-##### Without proxy
-3. Run the powershell script `.\Run.ps1 [n (1-5)] [1 for connected network without proxy]` \
-`.\Run.ps1 5 1` will run a private network with 5 nodes connected and without proxy
-
-##### With proxy
-3. `.\Run.ps1 5 [p to start/stop the containers in parallel]` will run a private network with 5 nodes connected by the proxy
+   1. `.\Run.ps1 5 [p to start/stop the containers in parallel]` will run a private network with 5 nodes connected by the proxy
 4. Change directory to rust-ripple-p2p `cd ../rust-ripple-p2p`
 5. Run the proxy
     - PowerShell: `$Env:RUST_LOG="error";$Env:OPENSSL_DIR="[path/to/openssl/dir]"; cargo run [n (1-5)]`
