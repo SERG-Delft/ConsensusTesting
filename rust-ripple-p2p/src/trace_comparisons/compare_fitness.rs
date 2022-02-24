@@ -2,13 +2,33 @@
 mod fitness_comparisons {
     use std::fs;
     use std::io::{BufRead, BufReader};
+    use genevo::genetic::AsScalar;
+    use ndarray::{Array, ShapeBuilder};
+    use ndarray_stats::CorrelationExt;
     use crate::ga::fitness::compared_fitness_functions::ComparedFitnessFunctions;
 
     #[test]
     fn calculate_correlation() {
         let fitness_values = import_fitness_values("fitness_values.txt");
-        println!("{:?}", fitness_values);
+
+        let delays_fitness = fitness_values.iter().map(|x| x.1.delay_fitness.as_scalar()).collect::<Vec<f64>>();
+        let time_fitness = fitness_values.iter().map(|x| x.1.time_fitness.as_scalar()).collect::<Vec<f64>>();
+        let validated_ledgers_fitness = fitness_values.iter().map(|x| x.1.validated_ledgers_fitness.as_scalar()).collect::<Vec<f64>>();
+        let failed_consensus_fitness = fitness_values.iter().map(|x| x.1.failed_consensus_fitness.as_scalar()).collect::<Vec<f64>>();
+        let state_accounting_fitness = fitness_values.iter().map(|x| x.1.state_accounting_fitness.as_scalar()).collect::<Vec<f64>>();
+
+        println!("{:?}", delays_fitness);
+        println!("{:?}", time_fitness);
+        println!("{:?}", validated_ledgers_fitness);
+        println!("{:?}", failed_consensus_fitness);
+        println!("{:?}", state_accounting_fitness);
+
+        let a = Array::from_shape_vec((5, 500).strides((500, 1)), [delays_fitness, time_fitness, validated_ledgers_fitness, failed_consensus_fitness, state_accounting_fitness].concat()).unwrap();
+        println!("{:?}, {:?}", a.ncols(), a.nrows());
+        println!("{:?}, {:?}", a.columns().to_string(), a.rows().to_string());
+        let correlation = a.pearson_correlation().unwrap();
         assert_eq!(fitness_values.len(), 500);
+        println!("{:?}", correlation);
     }
 
     fn import_fitness_values(filename: &str) -> Vec<(String, ComparedFitnessFunctions)> {

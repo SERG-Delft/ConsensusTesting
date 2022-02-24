@@ -7,7 +7,7 @@ use crate::test_harness::TestHarness;
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct ValidatedLedgersFitness {
-    value: u32
+    pub value: u32
 }
 
 impl ValidatedLedgersFitness {

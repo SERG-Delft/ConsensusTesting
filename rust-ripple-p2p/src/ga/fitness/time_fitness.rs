@@ -10,7 +10,7 @@ use crate::test_harness::TestHarness;
 /// Duration in ms from start of test case to validated ledger with all transactions
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct TimeFitness {
-    value: TimeDuration
+    pub value: TimeDuration
 }
 
 impl TimeFitness {

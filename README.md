@@ -29,3 +29,12 @@ If the output of the script is similar to the image below, the network is valiat
 If the output is similar to the image below, the node is either not yet synced to the network correctly or the network is not running correctly. The first ledger should be validated after ~5 seconds.
 ![image](https://user-images.githubusercontent.com/9784016/137471932-06099354-987c-4532-9e8a-5c8beca98eec.png)
 
+## Code Guide
+
+Most of the code can be found in the [rust-ripple-p2p](https://github.com/SERG-Delft/ConsensusTesting/tree/master/rust-ripple-p2p) folder. The application is started in main.rs and enters app.rs from there.
+In app.rs the p2p connections to the nodes are made. Code for the handshake and individual message passing can be found in peer_connection.rs.
+Other components that are started in app.rs are the scheduler, the genetic algorithm, the collector and the clients. See the [README](rust-ripple-p2p/src/README.md) in rust-ripple-p2p for a more detailed explanation of the code.
+
+#### Graph Edit Distance
+The code for calculation of the Graph Edit Distance can be found in the [ged](ged) folder. The [HED](https://www.sciencedirect.com/science/article/abs/pii/S003132031400274X) algorithm used in the comparison of trace graphs is located in [approximate_edit_distance.rs](ged/src/approximate_edit_distance.rs) in the function `approximate_hed_graph_edit_distance`.
+Note that the other algorithms are not used and might not work correctly.

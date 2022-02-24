@@ -155,34 +155,6 @@ impl Scheduler {
         }
     }
 
-    /// Listen to messages from the collector
-    /// Responsible for determining stability and latest validated ledger of the network
-    // fn listen_to_collector(
-    //     collector_receiver: STDReceiver<SubscriptionObject>,
-    //     latest_validated_ledger: Arc<(Mutex<u32>, Condvar)>,
-    // )
-    // {
-    //     let mut local_latest_validated_ledger = 0;
-    //     let (ledger_lock, ledger_cvar) = &*latest_validated_ledger;
-    //     loop {
-    //         match collector_receiver.recv() {
-    //             Ok(subscription_object) => {
-    //                 match subscription_object {
-    //                     SubscriptionObject::ValidatedLedger(ledger) => {
-    //                         if local_latest_validated_ledger < ledger.ledger_index {
-    //                             *ledger_lock.lock() = ledger.ledger_index;
-    //                             ledger_cvar.notify_all();
-    //                             local_latest_validated_ledger = ledger.ledger_index;
-    //                         }
-    //                     }
-    //                     _ => {}
-    //                 }
-    //             }
-    //             Err(_) => {}
-    //         }
-    //     }
-    // }
-
     /// Listen to the genetic algorithm for new individuals to test
     fn listen_to_ga(current_delays: Arc<Mutex<DelayMapPhenotype>>, ga_receiver: STDReceiver<DelayMapPhenotype>, node_states: Arc<MutexNodeStates>) {
         loop {

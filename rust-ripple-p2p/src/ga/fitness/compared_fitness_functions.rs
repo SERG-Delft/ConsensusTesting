@@ -13,11 +13,11 @@ use crate::test_harness::TestHarness;
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct ComparedFitnessFunctions {
-    failed_consensus_fitness: FailedConsensusFitness,
-    validated_ledgers_fitness: ValidatedLedgersFitness,
-    time_fitness: TimeFitness,
-    delay_fitness: DelayFitness,
-    state_accounting_fitness: StateAccountFitness,
+    pub failed_consensus_fitness: FailedConsensusFitness,
+    pub validated_ledgers_fitness: ValidatedLedgersFitness,
+    pub time_fitness: TimeFitness,
+    pub delay_fitness: DelayFitness,
+    pub state_accounting_fitness: StateAccountFitness,
 }
 
 impl ComparedFitnessFunctions {

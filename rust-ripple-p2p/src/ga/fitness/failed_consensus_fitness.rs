@@ -7,7 +7,7 @@ use crate::test_harness::TestHarness;
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct FailedConsensusFitness {
-    value: u32
+    pub value: u32
 }
 
 impl FailedConsensusFitness {
