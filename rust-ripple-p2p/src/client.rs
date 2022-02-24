@@ -1,7 +1,7 @@
 use websocket::{ClientBuilder, OwnedMessage, Message};
 use std::sync::mpsc::{channel, Sender};
 use std::thread;
-use serde_json::json;
+use serde_json::{json, Value};
 use serde::{Serialize, Deserialize};
 use std::thread::JoinHandle;
 use log::*;
@@ -19,7 +19,7 @@ pub struct Client<'a> {
 }
 
 impl Client<'static> {
-    pub fn new(peer: u16, connection: &str, subscription_collector_sender: Sender<PeerSubscriptionObject>) -> Self {
+    pub fn new(peer: u16, connection: &str, subscription_collector_sender: Sender<PeerSubscriptionObject>, server_state_collector_sender: Sender<PeerServerStateObject>) -> Self {
         let client = ClientBuilder::new(connection)
             .unwrap()
             .connect_insecure()
@@ -69,17 +69,29 @@ impl Client<'static> {
                 };
                 match message {
                     OwnedMessage::Text(text) => {
-                        match serde_json::from_str::<SubscriptionObject>(text.as_str()) {
-                            Ok(subscription_object) => {
-                                subscription_collector_sender.send(PeerSubscriptionObject::new(peer, subscription_object)).unwrap()
-                            },
-                            Err(_) => {
-                                if text.as_str().contains("Test harness") {
-                                    debug!("{}", text.as_str());
-                                } else {
-                                    warn!("Could not parse: {}", text)
+                        match serde_json::from_str(text.as_str()) {
+                            Ok(v) => {
+                                let value: Value = v;
+                                match value["id"].as_str() {
+                                    Some("server_state") => {
+                                        match serde_json::from_value::<ServerStateObject>(value["result"]["state"].clone()) {
+                                            Ok(server_state_object) => {
+                                                server_state_collector_sender.send(PeerServerStateObject::new(peer, server_state_object)).unwrap();
+                                            },
+                                            Err(_) => { println!("Could not parse peer{} server_state object: {}", peer, text); }
+                                        }
+                                    }
+                                    Some("Test harness") => debug!("peer{} Test harness: {}", peer, text.as_str()),
+                                    None => match serde_json::from_value::<SubscriptionObject>(value) {
+                                        Ok(subscription_object) => {
+                                            subscription_collector_sender.send(PeerSubscriptionObject::new(peer, subscription_object)).unwrap();
+                                        },
+                                        Err(_) => { warn!("Could not parse peer{} subscription object: {}", peer, text); }
+                                    },
+                                    _ => {}
                                 }
-                            }
+                            },
+                            _ => { debug!("Unknown client message from peer: {}", peer) }
                         }
                     },
                     _ => debug!("Receive Loop: {:?}", message)
@@ -88,7 +100,7 @@ impl Client<'static> {
         });
 
         // Start subscriptions
-        Client::subscribe(&tx, format!("Ripple{} subscription", peer).as_str(), vec!["consensus", "ledger", "validations", "peer_status", "transactions_proposed", "server"]);
+        Client::subscribe(&tx, "subscription", vec!["consensus", "ledger", "validations", "peer_status", "transactions_proposed", "server"]);
 
         Client {
             peer,
@@ -188,6 +200,15 @@ impl Client<'static> {
             "id": id,
             "command": "subscribe",
             "streams": streams
+        });
+        tx.send(Message::text(json.to_string())).unwrap();
+    }
+
+    #[allow(unused)]
+    pub fn server_state(tx: &Sender<Message>) {
+        let json = json!({
+            "id": "server_state",
+            "command": "server_state"
         });
         tx.send(Message::text(json.to_string())).unwrap();
     }
@@ -392,6 +413,130 @@ pub struct TransactionSubscription {
     pub validated: bool,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct Ledger {
+    base_fee: u32,
+    close_time: u32,
+    hash: String,
+    reserve_base: u32,
+    reserve_inc: u32,
+    seq: u32,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct LastClose {
+    converge_time: u32,
+    proposers: u32,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct StateDetails {
+    pub duration_us: String,
+    pub transitions: u32,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct StateAccounting {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub connected: Option<StateDetails>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub disconnected: Option<StateDetails>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub full: Option<StateDetails>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub syncing: Option<StateDetails>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tracking: Option<StateDetails>,
+}
+
+impl StateAccounting {
+    pub fn diff(state: &State, accounting_before: &StateAccounting, accounting_after: &StateAccounting) -> (u32, u32) {
+        match state {
+            State::Connected => Self::diff_individual(&accounting_before.connected, &accounting_after.connected),
+            State::Disconnected => Self::diff_individual(&accounting_before.connected, &accounting_after.connected),
+            State::_Full => Self::diff_individual(&accounting_before.full, &accounting_after.full),
+            State::Syncing => Self::diff_individual(&accounting_before.syncing, &accounting_after.syncing),
+            State::Tracking => Self::diff_individual(&accounting_before.tracking, &accounting_after.tracking),
+        }
+    }
+
+    pub fn diff_individual(detail_before: &Option<StateDetails>, detail_after: &Option<StateDetails>) -> (u32, u32) {
+        match detail_after {
+            Some(after) => match detail_before {
+                Some(before) => (after.duration_us.parse::<u32>().unwrap() - before.duration_us.parse::<u32>().unwrap(), after.transitions - before.transitions),
+                None => (after.duration_us.parse::<u32>().unwrap(), after.transitions)
+            }
+            None => (0, 0)
+        }
+    }
+}
+
+pub enum State {
+    Connected,
+    Disconnected,
+    _Full,
+    Syncing,
+    Tracking,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+struct Load {
+    job_types: Vec<Job>,
+    threads: u32,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+struct Job {
+    job_type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    avg_time: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    peak_time: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    per_second: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    in_progress: Option<u32>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct ServerStateObject {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    amendment_blocked: Option<bool>,
+    build_version: String,
+    complete_ledgers: String,
+    closed_ledger: Option<Ledger>,
+    io_latency_ms: u32,
+    jq_trans_overflow: String,
+    last_close: LastClose,
+    load: Load,
+    load_base: u32,
+    load_factor: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    load_factor_fee_escalation: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    load_factor_fee_queue: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    load_factor_fee_reference: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    load_factor_server: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    peer_disconnects: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    peer_disconnects_resources: Option<String>,
+    peers: u32,
+    pubkey_node: String,
+    pubkey_validator: String,
+    server_state: String,
+    server_state_duration_us: String,
+    pub state_accounting: StateAccounting,
+    time: String,
+    uptime: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    validated_ledger: Option<Ledger>,
+    validation_quorum: u32,
+    validator_list_expires: u32,
+}
+
 /// A subscription object coupled to a peer.
 pub struct PeerSubscriptionObject {
     pub peer: u16,
@@ -401,5 +546,17 @@ pub struct PeerSubscriptionObject {
 impl PeerSubscriptionObject {
     fn new(peer: u16, subscription_object: SubscriptionObject) -> Self {
         PeerSubscriptionObject { peer, subscription_object }
+    }
+}
+
+/// A server info object coupled to a peer
+pub struct PeerServerStateObject {
+    pub peer: u16,
+    pub server_state_object: ServerStateObject
+}
+
+impl PeerServerStateObject {
+    fn new(peer: u16, server_state_object: ServerStateObject) -> Self {
+        PeerServerStateObject{ peer, server_state_object }
     }
 }

@@ -37,7 +37,6 @@ pub fn approximate_hed_graph_edit_distance<N, E>(graph1: Graph<N, E, petgraph::D
             1.0 - (hed / max_hed)
         }
     }
-
 }
 
 fn hausdorff_edit_distance<N: PartialEq + Eq + Clone + Debug + Hash>(nodes_1: &Vec<IndexNodePair<N>>, nodes_2: &Vec<IndexNodePair<N>>) -> f32

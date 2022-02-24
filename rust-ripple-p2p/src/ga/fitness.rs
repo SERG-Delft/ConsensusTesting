@@ -1,13 +1,19 @@
 #![allow(dead_code)]
+
+pub(crate) mod compared_fitness_functions;
+mod failed_consensus_fitness;
+mod validated_ledgers_fitness;
+mod time_fitness;
+mod delay_fitness;
+pub(crate) mod state_accounting_fitness;
+
 use std::collections::HashMap;
-use std::ops::{Add, Div, Sub};
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, RwLock};
 use std::thread;
-use std::time::{Duration as TimeDuration};
-use chrono::Duration;
 use genevo::genetic::{AsScalar, Fitness, FitnessFunction};
-use std::fmt::{Display, Formatter};
+use std::fmt::{Display};
+use std::time::{Duration as TimeDuration};
 use log::debug;
 use crate::ga::genetic_algorithm::{DelayMapPhenotype, DelaysGenotype};
 use crate::node_state::MutexNodeStates;
@@ -19,185 +25,8 @@ pub trait ExtendedFitness: Fitness + AsScalar + Clone + Send + Sync + Display {
     fn highest_possible_fitness() -> Self;
 
     fn lowest_possible_fitness() -> Self;
-}
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
-pub struct FailedConsensusFitness {
-    value: u32
-}
-
-impl FailedConsensusFitness {
-    pub fn new(value: u32) -> Self {
-        Self { value }
-    }
-
-    pub fn run_harness(test_harness: TestHarness<'static>, node_states: Arc<MutexNodeStates>) -> Self {
-        node_states.clear_number_of_failed_consensus_rounds();
-        test_harness.schedule_transactions(node_states.clone());
-        Self::new(node_states.get_total_number_of_failed_consensus_rounds())
-    }
-}
-
-impl Fitness for FailedConsensusFitness {
-    fn zero() -> Self {
-        Self { value: 0 }
-    }
-
-    fn abs_diff(&self, other: &Self) -> Self {
-        let value = self.value.abs_diff(&other.value);
-        Self { value }
-    }
-}
-
-impl Display for FailedConsensusFitness {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Fitness value: {}\n", self.value)
-    }
-}
-
-impl ExtendedFitness for FailedConsensusFitness {
-    fn average(a: &[Self]) -> Self {
-        let mut sum = 0u32;
-        for fitness in a {
-            sum = sum.add(fitness.value);
-        }
-        Self { value: sum.div(a.len() as u32) }
-    }
-
-    fn highest_possible_fitness() -> Self {
-        Self { value: 100 }
-    }
-
-    fn lowest_possible_fitness() -> Self {
-        Self { value: 0 }
-    }
-}
-
-impl AsScalar for FailedConsensusFitness {
-    fn as_scalar(&self) -> f64 {
-        self.value as f64
-    }
-}
-
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
-pub struct ValidatedLedgersFitness {
-    value: u32
-}
-
-impl ValidatedLedgersFitness {
-    pub fn new(ledgers: u32) -> Self {
-        ValidatedLedgersFitness { value: ledgers }
-    }
-
-    pub fn run_harness(test_harness: TestHarness<'static>, node_states: Arc<MutexNodeStates>) -> Self {
-        let start = node_states.node_states.lock().min_validated_ledger();
-        test_harness.schedule_transactions(node_states.clone());
-        Self::new(node_states.node_states.lock().min_validated_ledger() - start)
-    }
-}
-
-impl Fitness for ValidatedLedgersFitness {
-    fn zero() -> Self {
-        Self { value: 0 }
-    }
-
-    fn abs_diff(&self, other: &Self) -> Self {
-        let value = self.value.abs_diff(&other.value);
-        Self { value }
-    }
-}
-
-impl Display for ValidatedLedgersFitness {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Fitness value: {}\n", self.value)
-    }
-}
-
-impl ExtendedFitness for ValidatedLedgersFitness {
-    fn average(a: &[Self]) -> Self {
-        let mut sum = 0u32;
-        for fitness in a {
-            sum = sum.add(fitness.value);
-        }
-        Self { value: sum.div(a.len() as u32) }
-    }
-
-    fn highest_possible_fitness() -> Self {
-        Self { value: 60 }
-    }
-
-    fn lowest_possible_fitness() -> Self {
-        Self { value: 0 }
-    }
-}
-
-impl AsScalar for ValidatedLedgersFitness {
-    fn as_scalar(&self) -> f64 {
-        self.value as f64
-    }
-}
-
-/// Duration in ms from start of test case to validated ledger with all transactions
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
-pub struct TimeFitness {
-    value: Duration
-}
-
-impl TimeFitness {
-    pub fn new(duration: Duration) -> Self {
-        TimeFitness { value: duration }
-    }
-
-    pub fn run_harness(test_harness: TestHarness<'static>, node_states: Arc<MutexNodeStates>) -> Self {
-        let start = chrono::Utc::now();
-        test_harness.schedule_transactions(node_states);
-        Self::new(chrono::Utc::now().signed_duration_since(start))
-    }
-}
-
-impl Fitness for TimeFitness {
-    fn zero() -> Self {
-        TimeFitness { value: Duration::zero() }
-    }
-
-    fn abs_diff(&self, other: &Self) -> Self {
-        let time: Duration = if self.value.sub(other.value) >= Duration::zero() {
-            self.value.sub(other.value)
-        } else {
-            other.value.sub(self.value)
-        };
-        TimeFitness { value: time }
-    }
-}
-
-impl Display for TimeFitness {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Fitness value: {}\n", self.value)
-    }
-}
-
-impl ExtendedFitness for TimeFitness {
-    fn average(a: &[Self]) -> Self {
-        let mut sum = Self::zero().value;
-        for fitness in a {
-            sum = sum.add(fitness.value);
-        }
-        TimeFitness { value: sum.div(a.len() as i32) }
-    }
-
-    fn highest_possible_fitness() -> Self {
-        TimeFitness { value: Duration::seconds(60) }
-    }
-
-    fn lowest_possible_fitness() -> Self {
-        TimeFitness { value: Duration::seconds(2) }
-    }
-}
-
-impl AsScalar for TimeFitness {
-    fn as_scalar(&self) -> f64 {
-        self.value.num_milliseconds() as f64
-    }
+    fn run_harness(test_harness: TestHarness<'static>, node_states: Arc<MutexNodeStates>) -> Self;
 }
 
 /// Fitness function communicates with scheduler handler for calculating and storing fitness of solutions.

@@ -42,9 +42,9 @@ mod graph_comparisons {
     fn trace_comparison_test2() {
         let mut graph1: Graph<DependencyEvent, ()> = Graph::new();
         let event_1 = DependencyEvent{ ripple_message: *RippleMessage::new("0".to_string(), "1".to_string(), MAX_DATETIME, RippleMessageObject::TMTransaction(TMTransaction::default())) };
-        let message1 = graph1.add_node(event_1.clone());
+        let _ = graph1.add_node(event_1.clone());
         let mut graph2: Graph<DependencyEvent, ()> = Graph::new();
-        let message1 = graph2.add_node(event_1);
+        let _ = graph2.add_node(event_1);
         let actual_similarity = ged::approximate_edit_distance::approximate_hed_graph_edit_distance(graph1, graph2, DistanceScoring::Normalized);
         let expected_similarity = 1.0;
         assert_eq!(actual_similarity, expected_similarity);

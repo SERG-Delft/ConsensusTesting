@@ -8,7 +8,6 @@ mod app;
 mod protos;
 mod message_handler;
 mod client;
-mod crypto;
 mod collector;
 mod scheduler;
 mod peer_connection;

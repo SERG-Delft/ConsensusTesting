@@ -1,3 +1,4 @@
+#![allow(unused_imports)]
 use std::collections::HashMap;
 use std::net::{SocketAddr, Ipv4Addr, IpAddr};
 use std::sync::Arc;
@@ -9,11 +10,13 @@ use itertools::Itertools;
 use super::{EmptyResult};
 use crate::client::{Client};
 use crate::collector::{Collector};
+use crate::ga::fitness::ExtendedFitness;
 use crate::ga::genetic_algorithm;
 use crate::ga::genetic_algorithm::CurrentFitness;
 use crate::peer_connection::PeerConnection;
 use crate::scheduler::{PeerChannel, Scheduler};
 use crate::node_state::{MutexNodeStates, NodeState, NodeStates};
+use crate::trace_comparisons::{run_fitness_comparison, run_trace_graph_creation};
 
 
 const _NODE_PRIVATE_KEY: &str = "e55dc8f3741ac9668dbe858409e5d64f5ce88380f7228eccfe82b92b2c7848ba";
@@ -67,6 +70,7 @@ impl App {
         let (collector_tx, collector_rx) = std::sync::mpsc::channel();
         let (_control_tx, control_rx) = std::sync::mpsc::channel();
         let (subscription_tx, subscription_rx) = std::sync::mpsc::channel();
+        let (server_state_tx, server_state_rx) = std::sync::mpsc::channel();
         let (collector_state_tx, scheduler_state_rx) = std::sync::mpsc::channel();
         let peer = self.peers.clone();
 
@@ -75,18 +79,17 @@ impl App {
         let node_states = NodeStates::new(node_state_vec);
         let mutex_node_states = Arc::new(MutexNodeStates::new(node_states));
         let mutex_node_states_clone = mutex_node_states.clone();
-        let mutex_node_states_clone_2 = mutex_node_states.clone();
 
         // Start the collector which writes output to files and collects information on nodes
         let collector_task = thread::spawn(move || {
-            Collector::new(peer, collector_rx, subscription_rx, control_rx, collector_state_tx, mutex_node_states_clone).start();
+            Collector::new(peer, collector_rx, subscription_rx, server_state_rx, control_rx, collector_state_tx, mutex_node_states_clone).start();
         });
         threads.push(collector_task);
 
         // Create a client for each peer, which subscribes (among others) to certain streams
         let mut clients = vec![];
         for i in 0..self.peers {
-            clients.push(Client::new(i, format!("ws://127.0.0.1:600{}", 5+i).as_str(), subscription_tx.clone()));
+            clients.push(Client::new(i, format!("ws://127.0.0.1:600{}", 5+i).as_str(), subscription_tx.clone(), server_state_tx.clone()));
         }
         let client_senders = clients.iter().map(|client| client.sender_channel.clone()).collect_vec();
 
@@ -101,8 +104,9 @@ impl App {
             let (scheduler_ga_sender, scheduler_ga_receiver) = std::sync::mpsc::channel::<CurrentFitness>();
 
             // Start the GA
-            // thread::spawn(||genetic_algorithm::run(ga_scheduler_sender, scheduler_ga_receiver));
-            thread::spawn(||genetic_algorithm::run_non_ga(ga_scheduler_sender, scheduler_ga_receiver, mutex_node_states_clone_2));
+            thread::spawn(||genetic_algorithm::run(ga_scheduler_sender, scheduler_ga_receiver));
+            // thread::spawn(|| run_trace_graph_creation(ga_scheduler_sender, scheduler_ga_receiver, mutex_node_states_clone_2));
+            // thread::spawn(|| run_fitness_comparison(ga_scheduler_sender, scheduler_ga_receiver));
 
             // For every combination (exclusive) of peers, create the necessary senders and receivers
             for pair in (0..peer).into_iter().combinations(2).into_iter() {
