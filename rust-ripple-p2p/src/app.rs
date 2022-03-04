@@ -10,6 +10,7 @@ use itertools::Itertools;
 use super::{EmptyResult};
 use crate::client::{Client};
 use crate::collector::{Collector};
+use crate::ga::crossover::NoCrossoverOperator;
 use crate::ga::fitness::ExtendedFitness;
 use crate::ga::genetic_algorithm;
 use crate::ga::genetic_algorithm::CurrentFitness;
@@ -104,7 +105,8 @@ impl App {
             let (scheduler_ga_sender, scheduler_ga_receiver) = std::sync::mpsc::channel::<CurrentFitness>();
 
             // Start the GA
-            thread::spawn(||genetic_algorithm::run(ga_scheduler_sender, scheduler_ga_receiver));
+            thread::spawn(||genetic_algorithm::run_mu_lambda(1, 1, ga_scheduler_sender, scheduler_ga_receiver, NoCrossoverOperator{}));
+            // thread::spawn(||genetic_algorithm::run(ga_scheduler_sender, scheduler_ga_receiver));
             // thread::spawn(|| run_trace_graph_creation(ga_scheduler_sender, scheduler_ga_receiver, mutex_node_states_clone_2));
             // thread::spawn(|| run_fitness_comparison(ga_scheduler_sender, scheduler_ga_receiver));
 

@@ -2,7 +2,7 @@ use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 use genevo::genetic::{AsScalar, Fitness};
 use crate::ga::fitness::ExtendedFitness;
-use crate::ga::genetic_algorithm::Parameter;
+use crate::ga::genetic_algorithm::{num_genes, Parameter};
 use crate::node_state::MutexNodeStates;
 use crate::test_harness::TestHarness;
 
@@ -44,7 +44,7 @@ impl ExtendedFitness for DelayFitness {
     }
 
     fn lowest_possible_fitness() -> Self {
-        Self { value: (Parameter::num_genes() * 1000) as u32 }
+        Self { value: (num_genes() * 1000) as u32 }
     }
 
     fn run_harness(test_harness: TestHarness<'static>, node_states: Arc<MutexNodeStates>) -> Self {
