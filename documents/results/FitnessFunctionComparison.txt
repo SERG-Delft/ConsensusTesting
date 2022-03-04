@@ -1,0 +1,11 @@
+Fitness function comparison results
+[delays_fitness, time_fitness, validated_ledgers_fitness]
+Failed consensus fitness and state accounting fitness are all 0 so are not included
+
+[[1.000000000000001, 0.05035512909019429, -0.02888365272765821],
+ [0.05035512909019429, 1.0, 0.8198091059241733],
+ [-0.02888365272765821, 0.8198091059241733, 1.0000000000000009]]
+
+From the results, it is clear that the time untill end of test case, and number of validated ledgers until end of test case are closely correlated.
+The delays fitness is not correlated at all and seems a great second fitness function to use.
+

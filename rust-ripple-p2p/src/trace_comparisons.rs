@@ -7,7 +7,7 @@ use std::thread;
 use rand::distributions::Uniform;
 use rand::Rng;
 use crate::ga::fitness::ExtendedFitness;
-use crate::ga::genetic_algorithm::{CurrentFitness, DelayMapPhenotype, Parameter};
+use crate::ga::genetic_algorithm::{CurrentFitness, DelayMapPhenotype, num_genes, Parameter};
 use crate::node_state::MutexNodeStates;
 
 mod compare;
@@ -41,11 +41,11 @@ impl<T> TraceGraphSchedulerHandler<T>
 
     /// Write trace graphs to file after running a number of test harnesses with certain delays
     pub fn trace_graph_creation(&mut self, node_states: Arc<MutexNodeStates>) {
-        let zero_delays = vec![0u32; Parameter::num_genes()];
-        let one_delays = vec![1000u32; Parameter::num_genes()];
+        let zero_delays = vec![0u32; num_genes()];
+        let one_delays = vec![1000u32; num_genes()];
         let range = Uniform::from(0..1000);
-        let random_delays_1: Vec<u32> = rand::thread_rng().sample_iter(&range).take(Parameter::num_genes()).collect();
-        let random_delays_2: Vec<u32> = rand::thread_rng().sample_iter(&range).take(Parameter::num_genes()).collect();
+        let random_delays_1: Vec<u32> = rand::thread_rng().sample_iter(&range).take(num_genes()).collect();
+        let random_delays_2: Vec<u32> = rand::thread_rng().sample_iter(&range).take(num_genes()).collect();
         let delays = vec![zero_delays, one_delays, random_delays_1, random_delays_2];
 
         // Allow five test harnesses to pass to mitigate any startup difficulties in the network
@@ -108,11 +108,11 @@ impl FitnessComparisonSchedulerHandler {
         let number_of_tests = 100;
         let number_of_tests_per_chromosome = 5;
         for _ in 0..number_of_tests {
-            delays.push(rand::thread_rng().sample_iter(&range).take(Parameter::num_genes()).collect());
+            delays.push(rand::thread_rng().sample_iter(&range).take(num_genes()).collect());
         }
 
         // Allow five test harnesses to pass to mitigate any startup difficulties in the network
-        let zero_delays = vec![0u32; Parameter::num_genes()];
+        let zero_delays = vec![0u32; num_genes()];
         for _ in 0..5 {
             self.scheduler_sender.send(DelayMapPhenotype::from(&zero_delays)).expect("Scheduler receiver failed");
             self.scheduler_receiver.recv().expect("Scheduler sender failed");

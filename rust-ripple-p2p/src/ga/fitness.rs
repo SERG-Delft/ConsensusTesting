@@ -1,10 +1,10 @@
 #![allow(dead_code)]
 
 pub(crate) mod compared_fitness_functions;
-mod failed_consensus_fitness;
-mod validated_ledgers_fitness;
-mod time_fitness;
-mod delay_fitness;
+pub(crate) mod failed_consensus_fitness;
+pub(crate) mod validated_ledgers_fitness;
+pub(crate) mod time_fitness;
+pub(crate) mod delay_fitness;
 pub(crate) mod state_accounting_fitness;
 
 use std::collections::HashMap;
@@ -74,6 +74,10 @@ impl<T> FitnessFunction<DelaysGenotype, T> for FitnessCalculation<T>
     }
 }
 
+pub trait SchedulerHandlerTrait {
+    fn run(self);
+}
+
 /// Scheduler handler is in charge of communicating new schedules to the scheduler
 /// Fitness functions send to this handler to request fitness values for untested solutions
 /// Calculated fitness values are stored in the fitness_values map and fitness functions will first check there
@@ -97,8 +101,12 @@ impl<T> SchedulerHandler<T>
     ) -> Self {
         SchedulerHandler { scheduler_sender, scheduler_receiver, fitness_receiver, fitness_values }
     }
+}
 
-    pub fn run(self) {
+impl<T> SchedulerHandlerTrait for SchedulerHandler<T>
+    where T: ExtendedFitness
+{
+    fn run(self) {
         let mut current_delays_genotype = DelaysGenotype::default();
         loop {
             // Receive a new individual to test from a fitness function
