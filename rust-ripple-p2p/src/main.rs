@@ -1,8 +1,9 @@
 extern crate futures;
 
-use std::env;
+use std::{env};
 use log::*;
 use env_logger;
+use crate::powershell::start_docker_containers;
 
 mod app;
 mod protos;
@@ -15,6 +16,7 @@ mod test_harness;
 mod node_state;
 mod ga;
 mod trace_comparisons;
+mod powershell;
 
 type AnyError = Box<dyn std::error::Error + Send + Sync>;
 type AnyResult<T> = Result<T, AnyError>;
@@ -33,6 +35,15 @@ fn main() {
     } else { false };
 
     env_logger::Builder::new().parse_default_env().init();
+
+    match start_docker_containers(n) {
+        Ok(output) => {
+            println!("{}", output);
+        }
+        Err(e) => {
+            println!("Error: {}", e);
+        }
+    }
 
     let app = app::App::new(n, only_subscribe);
 

@@ -19,7 +19,6 @@ use crate::scheduler::{PeerChannel, Scheduler};
 use crate::node_state::{MutexNodeStates, NodeState, NodeStates};
 use crate::trace_comparisons::{run_fitness_comparison, run_trace_graph_creation};
 
-
 const _NODE_PRIVATE_KEY: &str = "e55dc8f3741ac9668dbe858409e5d64f5ce88380f7228eccfe82b92b2c7848ba";
 const _NODE_PUBLIC_KEY_BASE58: &str = "n9KAa2zVWjPHgfzsE3iZ8HAbzJtPrnoh4H2M2HgE7dfqtvyEb1KJ";
 // Account and its keys to send transaction to

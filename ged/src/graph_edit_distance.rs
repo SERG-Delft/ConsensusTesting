@@ -444,6 +444,7 @@ pub struct IndexNodePair<N>
     _index: usize,
 }
 
+#[allow(unused)]
 impl<N> IndexNodePair<N> where N: PartialEq + Eq + Clone + Debug + Hash {
     pub fn new(node: N, incoming_edges: Vec<N>, outgoing_edges: Vec<N>, index: usize) -> Self {
         let edges = [incoming_edges.iter().map(|x| (x.clone(), node.clone())).collect::<Vec<(N, N)>>().as_slice(), outgoing_edges.iter().map(|x| (node.clone(), x.clone())).collect::<Vec<(N, N)>>().as_slice()].concat().to_vec();

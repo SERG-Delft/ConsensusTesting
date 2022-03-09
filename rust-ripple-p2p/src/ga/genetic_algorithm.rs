@@ -10,10 +10,10 @@ use genevo::operator::prelude::{MaximizeSelector, MultiPointCrossBreeder, Roulet
 use genevo::operator::{CrossoverOp, SelectionOp};
 use genevo::population::ValueEncodedGenomeBuilder;
 use itertools::{chain};
-use genevo::prelude::{build_population, Fitness, GenerationLimit, Genotype, Population, SimResult, simulate, Simulation, SimulationBuilder};
+use genevo::prelude::{build_population, GenerationLimit, Population, SimResult, simulate, Simulation, SimulationBuilder};
 use genevo::reinsertion::elitist::ElitistReinserter;
-use genevo::types::fmt::Display;
 use crate::ga::crossover::NoCrossoverOperator;
+#[allow(unused_imports)]
 use crate::ga::fitness::state_accounting_fitness::StateAccountFitness;
 use crate::ga::fitness::{ExtendedFitness, FitnessCalculation, SchedulerHandler, SchedulerHandlerTrait};
 use crate::ga::fitness::compared_fitness_functions::ComparedFitnessFunctions;
@@ -44,6 +44,7 @@ pub struct Parameter<S, C, T> where S: SelectionOp<DelaysGenotype, T>, C: Crosso
     stupid_type_system: PhantomData<T>,
 }
 
+#[allow(unused)]
 impl<S, C> Parameter<S, C, CurrentFitness> where S: SelectionOp<DelaysGenotype, CurrentFitness>, C: CrossoverOp<DelaysGenotype> {
     pub fn new(population_size: usize,
                generation_limit: u64,
@@ -206,7 +207,7 @@ pub fn run<T>(scheduler_sender: Sender<DelayMapPhenotype>, scheduler_receiver: R
 pub fn run_mu_lambda<T, C>(mu: usize, lambda: usize, scheduler_sender: Sender<DelayMapPhenotype>, scheduler_receiver: Receiver<T>, crossover_operator: C)
     where T: ExtendedFitness + Debug + 'static, C: CrossoverOp<DelaysGenotype> + Sync
 {
-    let params = mu_lambda(mu, lambda, None, 5, 0.05, NoCrossoverOperator{});
+    let params = mu_lambda(mu, lambda, None, 50, 0.05, NoCrossoverOperator{});
     // Create initial population of size lambda, uniformly distributed over the range of possible values
 
     let (fitness_sender, fitness_receiver) = channel();
@@ -231,7 +232,6 @@ pub fn run_ga<S, C, T, H>(fitness_values: Arc<RwLock<HashMap<DelaysGenotype, T>>
     let ga = genetic_algorithm()
         .with_evaluation(fitness_calculation.clone())
         .with_selection(params.selection_operator.clone())
-        // Multi-point crossover
         .with_crossover(params.crossover_operator.clone())
         .with_mutation(GaussianMutator::new(params.mutation_rate, 0.1 * (params.max_delay as f64)))
         // reinsertion_ratio is only used if offspring_has_precedence to determine the number of offspring to choose

@@ -7,7 +7,7 @@ use std::thread;
 use rand::distributions::Uniform;
 use rand::Rng;
 use crate::ga::fitness::ExtendedFitness;
-use crate::ga::genetic_algorithm::{CurrentFitness, DelayMapPhenotype, num_genes, Parameter};
+use crate::ga::genetic_algorithm::{CurrentFitness, DelayMapPhenotype, num_genes};
 use crate::node_state::MutexNodeStates;
 
 mod compare;

@@ -14,7 +14,7 @@ impl GeneticOperator for NoCrossoverOperator {
 impl<G> CrossoverOp<G> for NoCrossoverOperator
     where G: Genotype
 {
-    fn crossover<R>(&self, parents: Parents<G>, rng: &mut R) -> Children<G> where R: Rng + Sized {
+    fn crossover<R>(&self, parents: Parents<G>, _rng: &mut R) -> Children<G> where R: Rng + Sized {
         parents
     }
 }
