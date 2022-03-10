@@ -46,6 +46,7 @@ ged = { path = "../ged" }
 ndarray-stats = "0.5.0"
 ndarray = "0.15.4"
 lazy_static = "1.4.0"
+jql = "3.0.4"
 
 [patch.crates-io]
 genevo = { path = "../genevo"}
