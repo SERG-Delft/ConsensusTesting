@@ -1400,6 +1400,7 @@ dependencies = [
  "hex",
  "httparse",
  "itertools",
+ "lazy_static",
  "log 0.4.14",
  "native-tls",
  "ndarray",

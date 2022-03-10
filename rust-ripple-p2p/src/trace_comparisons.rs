@@ -142,6 +142,37 @@ impl FitnessComparisonSchedulerHandler {
     }
 }
 
+pub struct NoDelaySchedulerHandler {
+    scheduler_sender: Sender<DelayMapPhenotype>,
+    scheduler_receiver: Receiver<CurrentFitness>,
+    number_of_tests: usize,
+}
+
+impl NoDelaySchedulerHandler {
+    pub fn new(
+        scheduler_sender: Sender<DelayMapPhenotype>,
+        scheduler_receiver: Receiver<CurrentFitness>,
+        number_of_tests: usize,
+    ) -> Self
+    {
+        NoDelaySchedulerHandler {
+            scheduler_sender,
+            scheduler_receiver,
+            number_of_tests,
+        }
+    }
+
+    pub fn run(&mut self) {
+        let delays: Vec<u32> = vec![0; num_genes()];
+        for _ in 0..self.number_of_tests {
+            self.scheduler_sender.send(DelayMapPhenotype::from(&delays)).expect("Scheduler receiver failed");
+            self.scheduler_receiver.recv().expect("Scheduler sender failed");
+        }
+        println!("Finished run. exiting...");
+        std::process::exit(0);
+    }
+}
+
 #[allow(unused)]
 pub fn run_trace_graph_creation<T>(scheduler_sender: Sender<DelayMapPhenotype>, scheduler_receiver: Receiver<T>, node_states: Arc<MutexNodeStates>)
     where T: ExtendedFitness + 'static
@@ -154,4 +185,10 @@ pub fn run_trace_graph_creation<T>(scheduler_sender: Sender<DelayMapPhenotype>, 
 pub fn run_fitness_comparison(scheduler_sender: Sender<DelayMapPhenotype>, scheduler_receiver: Receiver<CurrentFitness>) {
     let mut scheduler_handler = FitnessComparisonSchedulerHandler::new(scheduler_sender, scheduler_receiver);
     thread::spawn(move ||scheduler_handler.fitness_comparison());
+}
+
+#[allow(unused)]
+pub fn run_no_delays(scheduler_sender: Sender<DelayMapPhenotype>, scheduler_receiver: Receiver<CurrentFitness>, number_of_generations: usize) {
+    let mut scheduler_handler = NoDelaySchedulerHandler::new(scheduler_sender, scheduler_receiver, number_of_generations);
+    thread::spawn(move ||scheduler_handler.run());
 }

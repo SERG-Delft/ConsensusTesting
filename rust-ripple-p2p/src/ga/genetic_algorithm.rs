@@ -17,12 +17,13 @@ use crate::ga::crossover::NoCrossoverOperator;
 use crate::ga::fitness::state_accounting_fitness::StateAccountFitness;
 use crate::ga::fitness::{ExtendedFitness, FitnessCalculation, SchedulerHandler, SchedulerHandlerTrait};
 use crate::ga::fitness::compared_fitness_functions::ComparedFitnessFunctions;
+use crate::NUM_NODES;
 use super::mutation::GaussianMutator;
 
 pub type CurrentFitness = ComparedFitnessFunctions;
 
 pub(crate) fn num_genes() -> usize {
-    NUM_NODES * (NUM_NODES-1) * MessageType::VALUES.len()
+    *NUM_NODES * (*NUM_NODES-1) * MessageType::VALUES.len()
 }
 
 /// Parameters for the GA
@@ -86,14 +87,14 @@ impl<T> Default for Parameter<RouletteWheelSelector, MultiPointCrossBreeder, T>
             generation_limit: 5,
             num_individuals_per_parents: 2,
             selection_ratio: 0.7,
-            num_crossover_points: num_genes() / (NUM_NODES * (NUM_NODES - 1)),
+            num_crossover_points: num_genes() / (*NUM_NODES * (*NUM_NODES - 1)),
             mutation_rate: 0.05,
             reinsertion_ratio: 0.7,
             min_delay: 0,
             max_delay: 1000,
             num_genes: num_genes(),
             selection_operator: RouletteWheelSelector::new(0.7, 2),
-            crossover_operator: MultiPointCrossBreeder::new(num_genes() / (NUM_NODES * (NUM_NODES - 1))),
+            crossover_operator: MultiPointCrossBreeder::new(num_genes() / (*NUM_NODES * (*NUM_NODES - 1))),
             stupid_type_system: PhantomData
         }
     }
@@ -112,7 +113,7 @@ fn mu_lambda<T, C>(mu: usize, lambda: usize, genes: Option<usize>, generation_li
         generation_limit,
         num_individuals_per_parents: 1,
         selection_ratio,
-        num_crossover_points: num_genes / (NUM_NODES * (NUM_NODES - 1)),
+        num_crossover_points: num_genes / (*NUM_NODES * (*NUM_NODES - 1)),
         mutation_rate,
         reinsertion_ratio: 1.0,
         min_delay: 0,
@@ -125,7 +126,6 @@ fn mu_lambda<T, C>(mu: usize, lambda: usize, genes: Option<usize>, generation_li
 }
 
 // TODO: Get this info from main (global constant?)
-const NUM_NODES: usize = 5;
 
 /// The message types that will be subject to delay
 #[derive(Debug, Eq, PartialEq, Hash, Clone, Copy)]
@@ -152,12 +152,12 @@ pub struct DelayMapPhenotype {
 
 impl DelayMapPhenotype {
     pub fn from(genes: &DelaysGenotype) -> Self {
-        let index_factor_1 = MessageType::VALUES.len() * (NUM_NODES-1);
+        let index_factor_1 = MessageType::VALUES.len() * (*NUM_NODES-1);
         let index_factor_2 = MessageType::VALUES.len();
         let mut from_node = HashMap::new();
-        for i in 0..NUM_NODES {
+        for i in 0..*NUM_NODES {
             let mut to_node = HashMap::new();
-            for (j, node) in chain(0..i, i+1..NUM_NODES).enumerate() {
+            for (j, node) in chain(0..i, i+1..*NUM_NODES).enumerate() {
                 let mut message_type = HashMap::new();
                 for (k, message) in MessageType::VALUES.iter().enumerate() {
                     message_type.insert(*message, genes[index_factor_1 * i + index_factor_2 * j + k]);
@@ -216,6 +216,14 @@ pub fn run_mu_lambda<T, C>(mu: usize, lambda: usize, scheduler_sender: Sender<De
     let fitness_calculation = FitnessCalculation { fitness_values: fitness_values.clone(), sender: fitness_sender };
 
     run_ga(fitness_values, scheduler_handler, fitness_calculation, params);
+}
+
+#[allow(unused)]
+pub fn run_no_ga(number_of_tests: usize) {
+    let zero_delay = vec![0; num_genes()];
+    for i in 0..number_of_tests {
+
+    }
 }
 
 pub fn run_ga<S, C, T, H>(fitness_values: Arc<RwLock<HashMap<DelaysGenotype, T>>>, scheduler_handler: H, fitness_calculation: FitnessCalculation<T>, params: Parameter<S, C, T>)

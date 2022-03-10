@@ -5,20 +5,21 @@ This repository contains the code for testing Ripple's consensus algorithm.
 ### Requirements
 [Docker](https://docs.docker.com/get-started/) \
 [Rust](https://www.rust-lang.org/learn/get-started) \
-[PowerShell](https://docs.microsoft.com/en-us/powershell/scripting/install/installing-powershell-on-windows?view=powershell-7.1) (Should be installed by default on Windows) \
+[PowerShell 7](https://docs.microsoft.com/en-us/powershell/scripting/install/installing-powershell-on-windows?view=powershell-7.1) (Make sure to add to path, test this by `pwsh` in cmd) \
 [OpenSSL](https://www.openssl.org/source/)  (1.0.1 - 1.1.1)
 
 ### Run the network
 To run the network, follow the steps below.
 1. Clone this repository
 `git clone https://github.com/SERG-Delft/ConsensusTesting`
-2. Change directory to rippled-docker `cd ConsensusTesting/rippled-docker`
 3. Create the docker network ripple-net `docker network create ripple-net`
-   1. `.\Run.ps1 5 [p to start/stop the containers in parallel]` will run a private network with 5 nodes connected by the proxy
 4. Change directory to rust-ripple-p2p `cd ../rust-ripple-p2p`
 5. Run the proxy
     - PowerShell: `$Env:RUST_LOG="error";$Env:OPENSSL_DIR="[path/to/openssl/dir]"; cargo run [n (1-5)]`
-    - Other: `RUST_LOG=trace;OPENSSL_DIR=[path/to/openssl/dir] cargo run [n (1-5)]`
+    - Other: `RUST_LOG=error;OPENSSL_DIR=[path/to/openssl/dir] cargo run [n (1-5)]`
+
+## Mac
+Coming soon
 
 ### Is the network validating ledgers?
 If the network is running as expected, it should be validating ledgers. \

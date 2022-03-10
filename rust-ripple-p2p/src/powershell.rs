@@ -3,15 +3,25 @@ use std::process::{Child, Command, Output as ProcessOutput, Stdio};
 use std::time::Duration;
 use std::io::Write;
 
-pub fn start_docker_containers(peers: u16) -> PsResult<PsOutput> {
-    let proc_output = run_docker_script(format!("Invoke-Expression \"& C:\\Users\\Martijn.vanMeerten\\workspace\\studie\\Thesis\\ConsensusTesting\\rippled-docker\\Run.ps1 {} p\"", peers).as_str())?;
-    thread::sleep(Duration::from_secs(1));
+pub fn start_docker_containers(peers: u16, unls: Vec<Vec<u16>>) -> PsResult<PsOutput> {
+    let unls = parse_vec_to_ps_array(unls);
+    let proc_output = run_docker_script(format!("Invoke-Expression \"& C:\\Users\\Martijn.vanMeerten\\workspace\\studie\\Thesis\\ConsensusTesting\\rippled-docker\\Run.ps1 {} p {}\"", peers, unls).as_str())?;
+    thread::sleep(Duration::from_millis(1000));
     let output = PsOutput::from(proc_output);
     if output.success {
         Ok(output)
     } else {
         Err(PsError::Powershell(output))
     }
+}
+
+fn parse_vec_to_ps_array(unls: Vec<Vec<u16>>) -> String {
+    let mut result = "@".to_string();
+    result += &format!("{:?}", unls);
+    result = result.replace("[", "(");
+    result = result.replace("]", ")");
+    println!("UNLs: {}", result);
+    result
 }
 
 fn run_docker_script(script: &str) -> PsResult<ProcessOutput> {

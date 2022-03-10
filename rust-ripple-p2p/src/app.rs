@@ -13,11 +13,11 @@ use crate::collector::{Collector};
 use crate::ga::crossover::NoCrossoverOperator;
 use crate::ga::fitness::ExtendedFitness;
 use crate::ga::genetic_algorithm;
-use crate::ga::genetic_algorithm::CurrentFitness;
+use crate::ga::genetic_algorithm::{CurrentFitness, run};
 use crate::peer_connection::PeerConnection;
 use crate::scheduler::{PeerChannel, Scheduler};
 use crate::node_state::{MutexNodeStates, NodeState, NodeStates};
-use crate::trace_comparisons::{run_fitness_comparison, run_trace_graph_creation};
+use crate::trace_comparisons::{run_fitness_comparison, run_no_delays, run_trace_graph_creation};
 
 const _NODE_PRIVATE_KEY: &str = "e55dc8f3741ac9668dbe858409e5d64f5ce88380f7228eccfe82b92b2c7848ba";
 const _NODE_PUBLIC_KEY_BASE58: &str = "n9KAa2zVWjPHgfzsE3iZ8HAbzJtPrnoh4H2M2HgE7dfqtvyEb1KJ";
@@ -36,17 +36,21 @@ const _GENESIS_ADDRESS: &str = "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh";
 const _AMOUNT: u32 = 2u32.pow(31);
 
 // Peer identities
-const PRIVATE_KEYS: [&'static str; 5] = ["ssiNcpPcuBEwAyranF3wLt9UgefZv",
+const PRIVATE_KEYS: [&'static str; 7] = ["ssiNcpPcuBEwAyranF3wLt9UgefZv",
                                        "ssen1bRpA3ig9PPD7NwPVkxLcvgBW",
                                        "shXDCbJnfKbKze177MWPduTXQ5wsv",
                                        "snwB8RcbpEwzgJFUeAoSPDaXbtHDx",
-                                       "saakCgDucD2q31GYHYdEbZLWJxVir"];
+                                       "saakCgDucD2q31GYHYdEbZLWJxVir",
+    "shqPaZTko6C6Ea5VDgdpJxk7J9Xf3",
+    "shYmmj5LxqmQvVSqLAyjCiDwuBkE5"];
 
-const PUBLIC_KEYS: [&'static str; 5] = ["n9MY9K6YBuPJm7mYFtQYYYSetRTAnR1SnGaQ3uTdcppQYkdQ6SnD",
+const PUBLIC_KEYS: [&'static str; 7] = ["n9MY9K6YBuPJm7mYFtQYYYSetRTAnR1SnGaQ3uTdcppQYkdQ6SnD",
                                       "n9MUM9gZ5HLCJY35ebgMCVpSbPm1ftAxdbyiq5ZzZR2rUWMvoc9H",
                                       "n9Ljh4A9A6PzhEFi7YLFG5du1tVx7E5wA2c9roZNZ6uMnJgezR7q",
                                       "n9MVitj842zxST7LLnNBiVhLEbQ7pgmvLZqDwMv5enpgAHxYyD3M",
-                                      "n9J8Mp1mrT8ovunq3hoZzan2uacr9iM3o7Wsx3BctbPiTwNmwi9s"];
+                                      "n9J8Mp1mrT8ovunq3hoZzan2uacr9iM3o7Wsx3BctbPiTwNmwi9s",
+                                        "n9McWD1tdv6Sd1QeWRf6PU3B8KXcRaS1TfMJ8j5FN4eyV9XcvgvB",
+                                        "n9MGe1ynZYn7fUHupuXRq7kNUjnNYk4RkpfKLL2B5zSRPWFer2xV"];
 
 pub struct App {
     peers: u16,
@@ -89,7 +93,7 @@ impl App {
         // Create a client for each peer, which subscribes (among others) to certain streams
         let mut clients = vec![];
         for i in 0..self.peers {
-            clients.push(Client::new(i, format!("ws://127.0.0.1:600{}", 5+i).as_str(), subscription_tx.clone(), server_state_tx.clone()));
+            clients.push(Client::new(i, format!("ws://127.0.0.1:{}", 6005+i).as_str(), subscription_tx.clone(), server_state_tx.clone()));
         }
         let client_senders = clients.iter().map(|client| client.sender_channel.clone()).collect_vec();
 
@@ -104,10 +108,11 @@ impl App {
             let (scheduler_ga_sender, scheduler_ga_receiver) = std::sync::mpsc::channel::<CurrentFitness>();
 
             // Start the GA
-            thread::spawn(||genetic_algorithm::run_mu_lambda(1, 1, ga_scheduler_sender, scheduler_ga_receiver, NoCrossoverOperator{}));
+            // thread::spawn(||genetic_algorithm::run_mu_lambda(1, 1, ga_scheduler_sender, scheduler_ga_receiver, NoCrossoverOperator{}));
             // thread::spawn(||genetic_algorithm::run(ga_scheduler_sender, scheduler_ga_receiver));
             // thread::spawn(|| run_trace_graph_creation(ga_scheduler_sender, scheduler_ga_receiver, mutex_node_states_clone_2));
             // thread::spawn(|| run_fitness_comparison(ga_scheduler_sender, scheduler_ga_receiver));
+            thread::spawn(|| run_no_delays(ga_scheduler_sender, scheduler_ga_receiver, 20));
 
             // For every combination (exclusive) of peers, create the necessary senders and receivers
             for pair in (0..peer).into_iter().combinations(2).into_iter() {

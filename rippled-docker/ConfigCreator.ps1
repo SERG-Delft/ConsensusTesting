@@ -1,4 +1,5 @@
 $n = $args[0]
+$unls = $args[2]
 $path = "..\config"
 $dbpath = "..\db"
 $logpath = "..\logs"
@@ -29,6 +30,12 @@ For ($i=0; $i -lt $n; $i++) {
 
   # validators.txt
   $own_pub_key = $validator_public_keys[$i]
-  $validator_contents = (-join("[validators]`n", ($validator_public_keys[0..($i)] -ne $own_pub_key | Out-String), ($validator_public_keys[($i)..($n-1)] -ne $own_pub_key | Out-String)))
+  $validator_contents = "[validators]`n"
+  Foreach ($node in $unls[$i])  {
+    if ($node -ne $i) {
+      $validator_contents = (-join($validator_contents, $validator_public_keys[$node], "`n"))
+    }
+  }
+  # $validator_contents = (-join("[validators]`n", ($validator_public_keys[0..($i)] -ne $own_pub_key | Out-String), ($validator_public_keys[($i)..($n-1)] -ne $own_pub_key | Out-String)))
   $validator_contents | Out-File -Encoding ascii -FilePath (-join($path, "\validator_" , ($i+1), "\validators.txt"))
 }
