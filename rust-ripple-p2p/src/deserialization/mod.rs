@@ -5,11 +5,14 @@ use std::io::Read;
 use protobuf::Message;
 
 use crate::deserialization::blob_parser::BlobParser;
+use crate::deserialization::transaction::FieldTuple;
+use crate::deserialization::transaction::ValueType::{AccountID, Amount, Blob, Hash256, UInt16, UInt32, UInt64, Vector256};
 use crate::message_handler::RippleMessageObject;
 use crate::protos::ripple::{TMLedgerInfoType, TMLedgerNode};
 
 mod blob_parser;
 mod types;
+mod transaction;
 
 pub fn deserialize(message: &mut RippleMessageObject, from: usize, to: usize) -> Vec<u8> {
     match message {
@@ -104,7 +107,7 @@ fn parse_ledger_node_from_wire(node: &mut TMLedgerNode) {
         }
         4 => { // wireTypeTransactionWithMeta
             // println!("- Hash: {}", Hash256::parse(&mut BlobIterator::new(blob.last_n_bytes(32))));
-            println!("- More unparsed data available! format unknow...")
+            println!("- More unparsed data available! format unknown...")
         }
         _ => { panic!("unknown wire type") }
     }
@@ -116,6 +119,8 @@ fn parse_canonical_binary_format(blob: &mut [u8], from: usize, to: usize) {
 }
 
 fn parse_canonical_binary_format_with_iterator(mut blob: BlobParser, from: usize, to: usize) {
+    let mut fields_list = Vec::new();
+
     while blob.has_next() {
         let (type_code, field_code) = type_field_code(&mut blob);
         let field_type = decode_type_code(type_code);
@@ -123,39 +128,47 @@ fn parse_canonical_binary_format_with_iterator(mut blob: BlobParser, from: usize
         match field_type {
             "UInt16" => {
                 let field = blob.read_uint16();
-                println!("- {}: {}", type_name, field)
+                fields_list.push(FieldTuple {field_name: "UInt16".parse().unwrap(), value: (UInt16(field)) });
+                // println!("- {}: {}", type_name, field)
             }
             "UInt32" => {
                 let field = blob.read_uint32();
-                println!("- {}: {}", type_name, field);
+                // println!("- {}: {}", type_name, field);
                 if type_name == "Flags" && from == 0 {
                     // if type_name == "Sequence" {
                     field.value[3] = 1;
                 }
+                fields_list.push(FieldTuple {field_name: "UInt32".parse().unwrap(), value: (UInt32(field)) });
             }
             "UInt64" => {
                 let field = blob.read_uint64();
-                println!("- {}: {}", type_name, field)
+                fields_list.push(FieldTuple {field_name: "UInt16".parse().unwrap(), value: (UInt64(field)) });
+                // println!("- {}: {}", type_name, field)
             }
             "Hash256" => {
                 let field = blob.read_hash256();
-                println!("- {}: {}", type_name, field)
+                fields_list.push(FieldTuple {field_name: "Hash256".parse().unwrap(), value: (Hash256(field)) });
+                // println!("- {}: {}", type_name, field)
             }
             "Amount" => {
                 let field = blob.read_amount();
-                println!("- {}: {}", type_name, field)
+                fields_list.push(FieldTuple {field_name: "Amount".parse().unwrap(), value: (Amount(field)) });
+                // println!("- {}: {}", type_name, field)
             }
             "Blob" => {
                 let field = blob.read_blob();
-                println!("- {}: {}", type_name, field)
+                fields_list.push(FieldTuple {field_name: "Blob".parse().unwrap(), value: (Blob(field)) });
+                // println!("- {}: {}", type_name, field)
             }
             "AccountID" => {
                 let field = blob.read_account_id();
-                println!("- {}: {}", type_name, field)
+                fields_list.push(FieldTuple {field_name: "AccountID".parse().unwrap(), value: (AccountID(field)) });
+                // println!("- {}: {}", type_name, field)
             }
             "Vector256" => {
                 let field = blob.read_vector256();
-                println!("- {}: {}", type_name, field)
+                fields_list.push(FieldTuple {field_name: "Vector256".parse().unwrap(), value: (Vector256(field)) });
+                // println!("- {}: {}", type_name, field)
             }
             _ => { panic!("unknown field type {}...", field_type) }
         }
@@ -284,7 +297,7 @@ pub fn read_from_file() -> HashMap<FieldType, FieldInformation> {
 #[derive(PartialEq, Eq, Hash)]
 pub struct FieldType {
     pub nth: u8,
-    pub type_field: String,
+    pub type_field: String
 }
 
 impl FieldType {
