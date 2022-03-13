@@ -16,6 +16,7 @@ For ($i=1; $i -le $n; $i++) {
   # empty db folder
   $db_folder = (-join($dbpath, "\validator_", $i))
   if (Test-Path $db_folder) {
+    Write-Output "Cleaning db folder"
     Remove-Item (-join($db_folder, "\*")) -Exclude .gitkeep -Recurse
   } else {
     New-Item $db_folder -ItemType Directory

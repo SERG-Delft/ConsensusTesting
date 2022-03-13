@@ -45,14 +45,13 @@ fn main() {
     let correct_unls: Vec<Vec<u16>> = get_full_unls(n);
 
     let bug_unls: Vec<Vec<u16>> = vec![
-        vec![0, 1, 2, 3, 4],
-        vec![0, 1, 2, 3, 4],
-        vec![0, 1, 2, 3, 4],
+        vec![0, 1, 2, 3, 4, 5],
+        vec![0, 1, 2, 3, 4, 5],
+        vec![0, 1, 2, 3, 4, 5],
+        vec![0, 1, 2, 3, 4, 5],
         vec![0, 1, 2, 3, 4, 5, 6],
-        vec![2, 3, 4, 5, 6],
-        vec![2, 3, 4, 5, 6],
-        vec![2, 3, 4, 5, 6],
-        vec![2, 3, 4, 5, 6]
+        vec![0, 1, 2, 3, 4, 5, 6],
+        vec![4, 5, 6]
     ];
 
     match start_docker_containers(n, correct_unls) {
