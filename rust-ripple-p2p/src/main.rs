@@ -18,6 +18,7 @@ mod node_state;
 mod ga;
 mod trace_comparisons;
 mod powershell;
+mod deserialization;
 
 type AnyError = Box<dyn std::error::Error + Send + Sync>;
 type AnyResult<T> = Result<T, AnyError>;
@@ -41,7 +42,9 @@ fn main() {
 
     env_logger::Builder::new().parse_default_env().init();
 
-    let unls: Vec<Vec<u16>> = vec![
+    let correct_unls: Vec<Vec<u16>> = get_full_unls(n);
+
+    let bug_unls: Vec<Vec<u16>> = vec![
         vec![0, 1, 2, 3, 4],
         vec![0, 1, 2, 3, 4],
         vec![0, 1, 2, 3, 4],
@@ -49,10 +52,10 @@ fn main() {
         vec![2, 3, 4, 5, 6],
         vec![2, 3, 4, 5, 6],
         vec![2, 3, 4, 5, 6],
-            vec![2, 3, 4, 5, 6]
+        vec![2, 3, 4, 5, 6]
     ];
 
-    match start_docker_containers(n, unls) {
+    match start_docker_containers(n, correct_unls) {
         Ok(output) => {
             println!("{}", output);
         }
@@ -74,4 +77,8 @@ fn main() {
 pub fn get_num_nodes() -> usize {
     let args: Vec<String> = env::args().collect();
     (&args[1]).parse::<usize>().unwrap()
+}
+
+pub fn get_full_unls(num_nodes: u16) -> Vec<Vec<u16>> {
+    vec![(0..num_nodes).collect(); num_nodes as usize]
 }

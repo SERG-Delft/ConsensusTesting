@@ -14,9 +14,19 @@ $cluster_seeds = @()
 For ($i=1; $i -le $n; $i++) {
   $cluster_seeds += $cluster_seed_file.nodes[$i-1].validation_seed
   # empty db folder
-  Remove-Item (-join($dbpath, "\validator_", $i, "\*")) -Exclude .gitkeep -Recurse
+  $db_folder = (-join($dbpath, "\validator_", $i))
+  if (Test-Path $db_folder) {
+    Remove-Item (-join($db_folder, "\*")) -Exclude .gitkeep -Recurse
+  } else {
+    New-Item $db_folder -ItemType Directory
+  }
   # empty log folder
-  Remove-Item (-join($logpath, "\validator_", $i, "\*")) -Exclude .gitkeep -Recurse
+  $log_folder = (-join($logpath, "\validator_", $i))
+  if (Test-Path $log_folder) {
+    Remove-Item (-join($log_folder, "\*")) -Exclude .gitkeep -Recurse
+  } else {
+    New-Item $log_folder -ItemType Directory
+  }
 }
 
 $rippled_cfg_base = Get-Content -path (-join($path, "\rippled.cfg"))

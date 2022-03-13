@@ -1,11 +1,11 @@
-use std::convert::{TryFrom, TryInto};
+use std::convert::{TryFrom};
 use std::fmt;
 use std::fmt::Formatter;
 
 use crate::deserialization::blob_iterator::BlobIterator;
 
 pub struct Hash256 {
-    hash: [u8; 32],
+    pub hash: [u8; 32],
 }
 
 impl Hash256 {

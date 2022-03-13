@@ -5,19 +5,20 @@ use std::io::Read;
 use types::*;
 
 use crate::deserialization::blob_iterator::BlobIterator;
-use crate::message_handler::RippleMessageObject;
-use crate::protos::ripple::{TMLedgerData, TMLedgerInfoType, TMLedgerNode, TMTransaction, TMValidation};
+use crate::message_handler::{ParsedValidation, RippleMessageObject};
+use crate::protos::ripple::{TMLedgerInfoType, TMLedgerNode};
 
 mod blob_iterator;
 mod types;
 
+#[allow(unused)]
 pub fn deserialize(message: &RippleMessageObject) {
     match message {
         RippleMessageObject::TMTransaction(transaction) => {
-            parse_canonical_binary_format(transaction.get_rawTransaction())
+            parse_canonical_binary_format(transaction.get_rawTransaction());
         }
         RippleMessageObject::TMValidation(validation) => {
-            parse_canonical_binary_format(validation.get_validation())
+            parse_canonical_binary_format(validation.get_validation());
         }
         RippleMessageObject::TMLedgerData(ledger_data) => {
             let parse = match ledger_data.get_field_type() {
@@ -30,6 +31,54 @@ pub fn deserialize(message: &RippleMessageObject) {
         }
         _ => {}
     }
+}
+
+pub fn deserialize_validation(blob: &[u8]) -> ParsedValidation {
+    let mut parsed_validation = ParsedValidation::default();
+    let deserialization_result = parse_canonical_binary_format(blob);
+    for field in deserialization_result {
+        match field.type_name.as_str() {
+            "Cookie" => parsed_validation.cookie = match field.field {
+                SerializationField::U64(value) => value.value,
+                _ => 0
+            },
+            "hash" => parsed_validation.hash = match field.field {
+                SerializationField::H256(value) => format!("{:x?}", value.hash),
+                _ => "".to_string()
+            },
+            "ConsensusHash" => parsed_validation.consensus_hash = match field.field {
+                SerializationField::H256(value) => format!("{:x?}", value.hash),
+                _ => "".to_string()
+            },
+            "ValidatedHash" => parsed_validation.validated_hash = match field.field {
+                SerializationField::H256(value) => format!("{:x?}", value.hash),
+                _ => "".to_string()
+            },
+            "SigningPubKey" => parsed_validation.signing_pub_key = match field.field {
+                SerializationField::Blob(value) => value,
+                _ => "".to_string()
+            },
+            "Signature" => parsed_validation.signature = match field.field {
+                SerializationField::Blob(value) => value,
+                _ => "".to_string()
+            },
+            "Flags" => parsed_validation.flags = match field.field {
+                SerializationField::U32(value) => value.value,
+                _ => 0
+            },
+            "LedgerSequence" => parsed_validation.ledger_sequence = match field.field {
+                SerializationField::U32(value) => value.value,
+                _ => 0
+            },
+            "SigningTime" => parsed_validation.signing_time = match field.field {
+                SerializationField::U32(value) => value.value,
+                _ => 0
+            },
+            _ => {}
+        }
+    }
+    // println!("{:?}", parsed_validation);
+    parsed_validation
 }
 
 fn parse_ledger_base_nodes(nodes: &[TMLedgerNode]) {
@@ -83,11 +132,11 @@ fn parse_ledger_node_from_wire(node: &TMLedgerNode) {
     let mut blob_iterator = BlobIterator::new(node.get_nodedata());
     match blob_iterator.last_byte() {
         0 => { // wireTypeTransaction
-            parse_canonical_binary_format_with_iterator(blob_iterator)
+            parse_canonical_binary_format_with_iterator(blob_iterator);
         }
         1 => { // wireTypeAccountState
             println!("- Hash: {}", Hash256::parse(&mut BlobIterator::new(blob_iterator.last_n_bytes(32))));
-            parse_canonical_binary_format_with_iterator(blob_iterator)
+            parse_canonical_binary_format_with_iterator(blob_iterator);
         }
         2 => { // wireTypeInner
             panic!("not implemented")
@@ -107,12 +156,14 @@ fn parse_ledger_node_from_wire(node: &TMLedgerNode) {
     }
 }
 
-fn parse_canonical_binary_format(blob: &[u8]) {
-    let mut iterator = BlobIterator::new(blob);
+fn parse_canonical_binary_format(blob: &[u8]) -> Vec<SerializationTypeValue> {
+    let iterator = BlobIterator::new(blob);
     parse_canonical_binary_format_with_iterator(iterator)
 }
 
-fn parse_canonical_binary_format_with_iterator(mut blob_iterator: BlobIterator) {
+fn parse_canonical_binary_format_with_iterator(mut blob_iterator: BlobIterator) -> Vec<SerializationTypeValue> {
+    let mut contents = vec![];
+    // println!("New validation");
     while blob_iterator.has_next() {
         let res = get_type_field_code(&mut blob_iterator);
         let field_type = decode_type_code(res.0);
@@ -120,39 +171,48 @@ fn parse_canonical_binary_format_with_iterator(mut blob_iterator: BlobIterator) 
         match field_type {
             "UInt16" => {
                 let field = UInt16::parse(&mut blob_iterator);
-                println!("- {}: {}", type_name, field)
+                // println!("- {}: {}", type_name, field);
+                contents.push(SerializationTypeValue { field: SerializationField::U16(field), type_name });
             }
             "UInt32" => {
                 let field = UInt32::parse(&mut blob_iterator);
-                println!("- {}: {}", type_name, field)
+                // println!("- {}: {}", type_name, field);
+                contents.push(SerializationTypeValue { field: SerializationField::U32(field), type_name });
             }
             "UInt64" => {
                 let field = UInt64::parse(&mut blob_iterator);
-                println!("- {}: {}", type_name, field)
+                // println!("- {}: {}", type_name, field);
+                contents.push(SerializationTypeValue { field: SerializationField::U64(field), type_name });
             }
             "Hash256" => {
                 let field = Hash256::parse(&mut blob_iterator);
-                println!("- {}: {}", type_name, field)
+                // println!("- {}: {}", type_name, field);
+                contents.push(SerializationTypeValue { field: SerializationField::H256(field), type_name });
             }
             "Amount" => {
                 let field = Amount::parse(&mut blob_iterator);
-                println!("- {}: {}", type_name, field)
+                // println!("- {}: {}", type_name, field);
+                contents.push(SerializationTypeValue { field: SerializationField::Amount(field), type_name });
             }
             "Blob" => {
                 let field = Blob::parse(&mut blob_iterator);
-                println!("- {}: {}", type_name, field)
+                // println!("- {}: {}", type_name, field);
+                contents.push(SerializationTypeValue { field: SerializationField::Blob(format!("{:x?}", field.blob)), type_name });
             }
             "AccountID" => {
                 let field = AccountID::parse(&mut blob_iterator);
-                println!("- {}: {}", type_name, field)
+                // println!("- {}: {}", type_name, field);
+                contents.push(SerializationTypeValue { field: SerializationField::AccountId(field), type_name });
             }
             "Vector256" => {
                 let field = Vector256::parse(&mut blob_iterator);
-                println!("- {}: {}", type_name, field)
+                // println!("- {}: {}", type_name, field);
+                contents.push(SerializationTypeValue { field: SerializationField::Vec256(format!("{:X?}", field.blob)), type_name });
             }
             _ => { panic!("unknown field type {}...", field_type) }
         }
     }
+    contents
 }
 
 fn decode_type_code(type_code: u8) -> &'static str {
@@ -265,6 +325,7 @@ pub struct FieldType {
 }
 
 impl FieldType {
+    #[allow(unused)]
     pub fn new(nth: u8, type_field: String) -> Self {
         FieldType { nth, type_field }
     }
@@ -278,6 +339,7 @@ pub struct FieldInformation {
 }
 
 impl FieldInformation {
+    #[allow(unused)]
     pub fn new(field_name: String, is_vl_encoded: bool, is_serialized: bool, is_signing_field: bool) -> Self {
         FieldInformation { field_name, is_vl_encoded, is_serialized, is_signing_field }
     }

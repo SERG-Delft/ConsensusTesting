@@ -5,7 +5,7 @@ use std::fmt::Formatter;
 use crate::deserialization::blob_iterator::BlobIterator;
 
 pub struct UInt32 {
-    value: u32,
+    pub value: u32,
 }
 
 impl UInt32 {

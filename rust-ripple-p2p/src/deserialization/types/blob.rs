@@ -1,11 +1,10 @@
-use std::convert::{TryFrom, TryInto};
 use std::fmt;
 use std::fmt::Formatter;
 
 use crate::deserialization::blob_iterator::BlobIterator;
 
 pub struct Blob<'a> {
-    blob: &'a [u8],
+    pub blob: &'a [u8],
 }
 
 impl<'b> Blob<'b> {

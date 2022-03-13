@@ -5,7 +5,7 @@ use std::fmt::Formatter;
 use crate::deserialization::blob_iterator::BlobIterator;
 
 pub struct Amount {
-    amount: u64,
+    pub amount: u64,
 }
 
 impl Amount {

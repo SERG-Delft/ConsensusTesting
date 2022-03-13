@@ -2,12 +2,13 @@ pub struct BlobIterator<'a> {
     blob: &'a [u8],
 }
 
-impl<'b> BlobIterator<'b> {
+#[allow(unused)]
+impl<'a> BlobIterator<'a> {
     pub fn len(&self) -> usize {
         self.blob.len()
     }
 
-    pub fn new(blob: &'b [u8]) -> Self {
+    pub fn new(blob: &'a [u8]) -> Self {
         BlobIterator { blob }
     }
 

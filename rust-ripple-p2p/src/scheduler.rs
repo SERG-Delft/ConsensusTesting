@@ -97,6 +97,10 @@ impl Scheduler {
                 _ => {}
             }
         }
+        // match rmo {
+        //     RippleMessageObject::TMValidation(validation) => println!("{}", validation.validated_hash),
+        //     _ => {}
+        // }
         self.p2p_connections.get(&event.to).unwrap().get(&event.from).unwrap().send(event.message);
     }
 

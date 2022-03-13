@@ -2,6 +2,7 @@ use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
 use crate::protos::ripple::{TMManifest, TMPing, TMCluster, TMEndpoints, TMTransaction, TMGetLedger, TMLedgerData, TMProposeSet, TMStatusChange, TMHaveTransactionSet, TMValidation, TMGetObjectByHash, TMGetShardInfo, TMShardInfo, TMGetPeerShardInfo, TMPeerShardInfo, TMValidatorList};
 use serde_json;
+use crate::deserialization::{deserialize_validation};
 
 /// Deserialize message
 pub fn parse_protocol_message(message_type: u16, payload: &[u8]) -> RippleMessageObject {
@@ -96,7 +97,9 @@ impl Display for RippleMessageObject {
             RippleMessageObject::TMProposeSet(propose_set) => ("ProposeSet", serde_json::to_string(propose_set).unwrap()),
             RippleMessageObject::TMStatusChange(status_change) => ("StatusChange", serde_json::to_string(status_change).unwrap()),
             RippleMessageObject::TMHaveTransactionSet(have_transaction_set) => ("HaveTransactionSet", serde_json::to_string(have_transaction_set).unwrap()),
-            RippleMessageObject::TMValidation(validation) => ("Validation", serde_json::to_string(validation).unwrap()),
+            RippleMessageObject::TMValidation(validation) => {
+                ("Validation", serde_json::to_string(&ParsedValidation::new(validation)).unwrap())
+            },
             RippleMessageObject::TMGetObjectByHash(get_object_by_hash) => ("GetObjectByHash", serde_json::to_string(get_object_by_hash).unwrap()),
             RippleMessageObject::TMGetShardInfo(get_shard_info) => ("GetShardInfo", serde_json::to_string(get_shard_info).unwrap()),
             RippleMessageObject::TMShardInfo(shard_info) => ("ShardInfo", serde_json::to_string(shard_info).unwrap()),
@@ -105,5 +108,24 @@ impl Display for RippleMessageObject {
             RippleMessageObject::TMValidatorList(validator_list) => ("ValidatorList", serde_json::to_string(validator_list).unwrap()),
         };
         write!(f, "{}: {}", name, string)
+    }
+}
+
+#[derive(Default, serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq)]
+pub struct ParsedValidation {
+    pub ledger_sequence: u32,
+    pub validated_hash: String,
+    pub hash: String,
+    pub consensus_hash: String,
+    pub cookie: u64,
+    pub signing_pub_key: String,
+    pub signature: String,
+    pub flags: u32,
+    pub signing_time: u32,
+}
+
+impl ParsedValidation {
+    pub fn new(validation: &TMValidation) -> Self {
+        deserialize_validation(validation.get_validation().clone())
     }
 }

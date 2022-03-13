@@ -165,18 +165,18 @@ impl RippleMessage {
     }
 
     pub fn sender_index(&self) -> usize {
-        self.from_node.as_str().chars().next_back().unwrap().to_digit(10).unwrap() as usize - 1
+        self.from_node.as_str().split_at(6).1.parse::<usize>().unwrap() - 1
     }
 
     pub fn receiver_index(&self) -> usize {
-        self.to_node.as_str().chars().next_back().unwrap().to_digit(10).unwrap() as usize - 1
+        self.to_node.as_str().split_at(6).1.parse::<usize>().unwrap() - 1
     }
 
     #[allow(unused)]
     pub fn simple_str(&self) -> String {
         let message = self.message.to_string();
         let message_type = message.split(" ").collect_vec()[0];
-        format!("{}{}{}\n", self.from_node.as_str().chars().next_back().unwrap(), self.to_node.as_str().chars().next_back().unwrap(), message_type[0..message_type.len() - 1].to_string())
+        format!("{}{}{}\n", self.from_node.as_str().split_at(6).1, self.to_node.as_str().split_at(6).1, message_type[0..message_type.len() - 1].to_string())
     }
 }
 
