@@ -54,7 +54,7 @@ fn main() {
         vec![4, 5, 6]
     ];
 
-    match start_docker_containers(n, correct_unls) {
+    match start_docker_containers(n, bug_unls) {
         Ok(output) => {
             println!("{}", output);
         }

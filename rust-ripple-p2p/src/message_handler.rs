@@ -98,8 +98,8 @@ impl Display for RippleMessageObject {
             RippleMessageObject::TMStatusChange(status_change) => ("StatusChange", serde_json::to_string(status_change).unwrap()),
             RippleMessageObject::TMHaveTransactionSet(have_transaction_set) => ("HaveTransactionSet", serde_json::to_string(have_transaction_set).unwrap()),
             RippleMessageObject::TMValidation(validation) => {
-                // ("Validation", serde_json::to_string(&ParsedValidation::new(validation)).unwrap())
-                ("Validation", serde_json::to_string(validation).unwrap())
+                ("Validation", serde_json::to_string(&ParsedValidation::new(validation)).unwrap())
+                // ("Validation", serde_json::to_string(validation).unwrap())
             },
             RippleMessageObject::TMGetObjectByHash(get_object_by_hash) => ("GetObjectByHash", serde_json::to_string(get_object_by_hash).unwrap()),
             RippleMessageObject::TMGetShardInfo(get_shard_info) => ("GetShardInfo", serde_json::to_string(get_shard_info).unwrap()),

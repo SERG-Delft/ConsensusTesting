@@ -1,11 +1,3 @@
-# Generated with version 0.0.14
-
-#[validator_list_sites]
-#https://vl.devnet.rippletest.net
-
-#[validator_list_keys]
-#EDDF2F53DFEC79358F7BE76BC884AC31048CFF6E2A00C628EAE06DB7750A247B12
-
 # Validators in order from 1 - 15
 [validators]
 n9MY9K6YBuPJm7mYFtQYYYSetRTAnR1SnGaQ3uTdcppQYkdQ6SnD

@@ -5,7 +5,8 @@ $dbpath = "..\db"
 $logpath = "..\logs"
 
 $validator_path = -join($path, "\validators.txt")
-$validator_public_keys = Get-Content -path $validator_path -Tail $n
+$validator_public_keys = Get-Content -path $validator_path | Select -Skip 2
+Write-Output $validator_public_keys
 
 $cluster_seed_path = -join($path, "\cluster_seeds.json")
 $cluster_seed_file = (Get-Content -path $cluster_seed_path | ConvertFrom-Json)
@@ -16,7 +17,6 @@ For ($i=1; $i -le $n; $i++) {
   # empty db folder
   $db_folder = (-join($dbpath, "\validator_", $i))
   if (Test-Path $db_folder) {
-    Write-Output "Cleaning db folder"
     Remove-Item (-join($db_folder, "\*")) -Exclude .gitkeep -Recurse
   } else {
     New-Item $db_folder -ItemType Directory
