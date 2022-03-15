@@ -164,7 +164,8 @@ impl NoDelaySchedulerHandler {
 
     pub fn run(&mut self) {
         let delays: Vec<u32> = vec![0; num_genes()];
-        for _ in 0..self.number_of_tests {
+        for i in 0..self.number_of_tests {
+            println!("Starting test {}", i);
             self.scheduler_sender.send(DelayMapPhenotype::from(&delays)).expect("Scheduler receiver failed");
             self.scheduler_receiver.recv().expect("Scheduler sender failed");
         }
@@ -188,7 +189,7 @@ pub fn run_fitness_comparison(scheduler_sender: Sender<DelayMapPhenotype>, sched
 }
 
 #[allow(unused)]
-pub fn run_no_delays(scheduler_sender: Sender<DelayMapPhenotype>, scheduler_receiver: Receiver<CurrentFitness>, number_of_generations: usize) {
-    let mut scheduler_handler = NoDelaySchedulerHandler::new(scheduler_sender, scheduler_receiver, number_of_generations);
+pub fn run_no_delays(scheduler_sender: Sender<DelayMapPhenotype>, scheduler_receiver: Receiver<CurrentFitness>, number_of_tests: usize) {
+    let mut scheduler_handler = NoDelaySchedulerHandler::new(scheduler_sender, scheduler_receiver, number_of_tests);
     thread::spawn(move ||scheduler_handler.run());
 }
