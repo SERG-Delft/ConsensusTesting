@@ -8,14 +8,14 @@ pub use uint64::UInt64;
 pub use uint8::UInt8;
 pub use vector256::Vector256;
 
+mod accountid;
 mod amount;
-mod uint8;
+mod blob;
+mod hash256;
 mod uint16;
 mod uint32;
 mod uint64;
-mod hash256;
-mod blob;
-mod accountid;
+mod uint8;
 mod vector256;
 
 pub struct SerializationTypeValue {

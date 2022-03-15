@@ -10,6 +10,7 @@ use itertools::Itertools;
 use super::{EmptyResult};
 use crate::client::{Client};
 use crate::collector::{Collector};
+use crate::container_manager::NodeKeys;
 use crate::ga::crossover::NoCrossoverOperator;
 use crate::ga::fitness::ExtendedFitness;
 use crate::ga::genetic_algorithm;
@@ -35,51 +36,15 @@ const _GENESIS_ADDRESS: &str = "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh";
 
 const _AMOUNT: u32 = 2u32.pow(31);
 
-// Peer identities
-const PRIVATE_KEYS: [&'static str; 15] = [
-    "ssiNcpPcuBEwAyranF3wLt9UgefZv",
-    "ssen1bRpA3ig9PPD7NwPVkxLcvgBW",
-    "shXDCbJnfKbKze177MWPduTXQ5wsv",
-    "snwB8RcbpEwzgJFUeAoSPDaXbtHDx",
-    "saakCgDucD2q31GYHYdEbZLWJxVir",
-    "shqPaZTko6C6Ea5VDgdpJxk7J9Xf3",
-    "shYmmj5LxqmQvVSqLAyjCiDwuBkE5",
-    "snLabmAfFvnJ8PcYWSdRcns4fJWMc",
-    "sngePXWcDdwopEPU2HHkHoXJXn1PW",
-    "sh9EBTve63hAUZnXhYDQgHRYnqdE8",
-    "ssDF641vLntAV8urgVVwDo6m9qCmb",
-    "sny8Ebz8p3RgiSSuhAa2TxaokxA6C",
-    "snGD8A1pZAb1BxMop4nNykyZMAQ5W",
-    "snWJd8tHPHWSCabfrhbzNis7o1fMr",
-    "snXqd27qg5QbtmiqpdKdWtqWYZDSy",
-];
-
-const PUBLIC_KEYS: [&'static str; 15] = [
-    "n9MY9K6YBuPJm7mYFtQYYYSetRTAnR1SnGaQ3uTdcppQYkdQ6SnD",
-    "n9MUM9gZ5HLCJY35ebgMCVpSbPm1ftAxdbyiq5ZzZR2rUWMvoc9H",
-    "n9Ljh4A9A6PzhEFi7YLFG5du1tVx7E5wA2c9roZNZ6uMnJgezR7q",
-    "n9MVitj842zxST7LLnNBiVhLEbQ7pgmvLZqDwMv5enpgAHxYyD3M",
-    "n9J8Mp1mrT8ovunq3hoZzan2uacr9iM3o7Wsx3BctbPiTwNmwi9s",
-    "n9McWD1tdv6Sd1QeWRf6PU3B8KXcRaS1TfMJ8j5FN4eyV9XcvgvB",
-    "n9MGe1ynZYn7fUHupuXRq7kNUjnNYk4RkpfKLL2B5zSRPWFer2xV",
-    "n9Jj6yWTn5mBNRqh17UZk8ghpoWhuUMQZnNDxHkz9GwDpraCsEmP",
-    "n9KhfmVPycNVrykBstMXnMQdUVXSrGtTEUQY6aDRxPrFtiyQtW2o",
-    "n9Lpjz7fAeYZC4TydjzZVyqwxJmqW3ZjhY23Ye4Dau2v9BS7ZrFx",
-    "n9MX6agGBqHhhPZFXDdowTvni7WEcv9N1veubDd2Gbq6mLbFuAo6",
-    "n9LELFPycwQTYeaZH57DMy1nfbxDKvMJ8DSLc8SCD3arY3QYv61v",
-    "n9LSwt2WGESmXn7g6dEXTcFQKpPbT9rxcCCNHEumnmvNzMRmddRc",
-    "n9K58DvGf6xAhmtrr6uqXcZg4bpQ3N96KwHPPNoV9zaXmSHLdrUZ",
-    "n94PmXAKrpdEZhH9cejbiB9xprEouGKYRXtVMaD8TeuWojF67Ux6",
-];
-
 pub struct App {
     peers: u16,
-    only_subscribe: bool
+    only_subscribe: bool,
+    node_keys: Vec<NodeKeys>
 }
 
 impl App {
-    pub fn new(peers: u16, only_subscribe: bool) -> Self {
-        App { peers, only_subscribe }
+    pub fn new(peers: u16, only_subscribe: bool, node_keys: Vec<NodeKeys>) -> Self {
+        App { peers, only_subscribe, node_keys }
     }
 
     /// Start proxy
@@ -132,7 +97,7 @@ impl App {
             // thread::spawn(||genetic_algorithm::run(ga_scheduler_sender, scheduler_ga_receiver));
             // thread::spawn(|| run_trace_graph_creation(ga_scheduler_sender, scheduler_ga_receiver, mutex_node_states_clone_2));
             // thread::spawn(|| run_fitness_comparison(ga_scheduler_sender, scheduler_ga_receiver));
-            thread::spawn(|| run_no_delays(ga_scheduler_sender, scheduler_ga_receiver, 20));
+            threads.push(thread::spawn(|| run_no_delays(ga_scheduler_sender, scheduler_ga_receiver, 20)));
 
             // For every combination (exclusive) of peers, create the necessary senders and receivers
             for pair in (0..peer).into_iter().combinations(2).into_iter() {
@@ -173,10 +138,10 @@ impl App {
                     &name,
                     address_i,
                     address_j,
-                    String::from(PRIVATE_KEYS[i]),
-                    String::from(PRIVATE_KEYS[j]),
-                    String::from(PUBLIC_KEYS[i]),
-                    String::from(PUBLIC_KEYS[j])
+                    self.node_keys[i].validation_seed.clone(),
+                    self.node_keys[j].validation_seed.clone(),
+                    self.node_keys[i].validation_public_key.clone(),
+                    self.node_keys[j].validation_public_key.clone()
                 );
                 let (thread1, thread2) = peer.connect(
                     i,

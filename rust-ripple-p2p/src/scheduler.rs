@@ -71,7 +71,6 @@ impl Scheduler {
         let node_states_clone_3 = self.node_states.clone();
         let node_states_clone_4 = self.node_states.clone();
         let node_states_clone_5 = self.node_states.clone();
-        // thread::spawn(move || Self::listen_to_collector(collector_receiver, latest_validated_ledger_clone));
         thread::spawn(move || Self::listen_to_peers(run_clone_2, current_delays_clone, node_states_clone_4, receiver, event_schedule_sender));
         thread::spawn(move || Self::listen_to_ga(current_delays_clone_2, ga_receiver, node_states_clone_5));
         thread::spawn(move || Self::update_current_round(node_states_clone, current_round_clone));

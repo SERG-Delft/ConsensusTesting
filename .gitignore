@@ -21,8 +21,7 @@ db/proxy/*
 db/validator*/*
 logs/proxy/*
 logs/validator*/*
-config/validator*/rippled.cfg
-config/validator*/validators.txt
+config/validator*/*
 rust-ripple-p2p/execution.txt
 rust-ripple-p2p/subscription*.json
 rust-ripple-p2p/trace_graphs.txt

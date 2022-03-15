@@ -4,7 +4,7 @@ use std::{env};
 use log::*;
 use env_logger;
 use lazy_static::lazy_static;
-use crate::powershell::start_docker_containers;
+use crate::container_manager::start_docker_containers;
 
 mod app;
 mod protos;
@@ -17,8 +17,8 @@ mod test_harness;
 mod node_state;
 mod ga;
 mod trace_comparisons;
-mod powershell;
 mod deserialization;
+mod container_manager;
 
 type AnyError = Box<dyn std::error::Error + Send + Sync>;
 type AnyResult<T> = Result<T, AnyError>;
@@ -32,7 +32,7 @@ fn main() {
     let runtime = tokio::runtime::Runtime::new().unwrap();
 
     let args: Vec<String> = env::args().collect();
-    let n: u16 = (&args[1]).parse().unwrap();
+    let n: usize = (&args[1]).parse().unwrap();
     let only_subscribe = if &args.len() > &2 {
         match (&args[2]).parse::<u16>() {
             Ok(_) => true,
@@ -42,9 +42,9 @@ fn main() {
 
     env_logger::Builder::new().parse_default_env().init();
 
-    let correct_unls: Vec<Vec<u16>> = get_full_unls(n);
+    let correct_unls: Vec<Vec<usize>> = get_full_unls(n);
 
-    let bug_unls: Vec<Vec<u16>> = vec![
+    let bug_unls: Vec<Vec<usize>> = vec![
         vec![0, 1, 2, 3, 4, 5],
         vec![0, 1, 2, 3, 4, 5],
         vec![0, 1, 2, 3, 4, 5],
@@ -54,16 +54,9 @@ fn main() {
         vec![4, 5, 6]
     ];
 
-    match start_docker_containers(n, bug_unls) {
-        Ok(output) => {
-            println!("{}", output);
-        }
-        Err(e) => {
-            println!("Error: {}", e);
-        }
-    }
+    let node_keys = start_docker_containers(n, correct_unls);
 
-    let app = app::App::new(n, only_subscribe);
+    let app = app::App::new(n as u16, only_subscribe, node_keys);
 
     if let Err(error) = runtime.block_on(app.start()) {
         error!("Error: {}", error);
@@ -78,6 +71,6 @@ pub fn get_num_nodes() -> usize {
     (&args[1]).parse::<usize>().unwrap()
 }
 
-pub fn get_full_unls(num_nodes: u16) -> Vec<Vec<u16>> {
-    vec![(0..num_nodes).collect(); num_nodes as usize]
+pub fn get_full_unls(num_nodes: usize) -> Vec<Vec<usize>> {
+    vec![(0..num_nodes).collect(); num_nodes]
 }
