@@ -16,11 +16,13 @@ use crate::ga::crossover::NoCrossoverOperator;
 #[allow(unused_imports)]
 use crate::ga::fitness::state_accounting_fitness::StateAccountFitness;
 use crate::ga::fitness::{ExtendedFitness, FitnessCalculation, SchedulerHandler, SchedulerHandlerTrait};
+#[allow(unused_imports)]
 use crate::ga::fitness::compared_fitness_functions::ComparedFitnessFunctions;
+use crate::ga::fitness::time_fitness::TimeFitness;
 use crate::NUM_NODES;
 use super::mutation::GaussianMutator;
 
-pub type CurrentFitness = ComparedFitnessFunctions;
+pub type CurrentFitness = TimeFitness;
 
 pub(crate) fn num_genes() -> usize {
     *NUM_NODES * (*NUM_NODES-1) * MessageType::VALUES.len()

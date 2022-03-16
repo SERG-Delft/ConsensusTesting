@@ -50,11 +50,11 @@ impl ExtendedFitness for TimeFitness {
     }
 
     fn highest_possible_fitness() -> Self {
-        TimeFitness { value: TimeDuration::from_secs(0) }
+        TimeFitness { value: TimeDuration::from_secs(60) }
     }
 
     fn lowest_possible_fitness() -> Self {
-        TimeFitness { value: TimeDuration::from_secs(60) }
+        TimeFitness { value: TimeDuration::from_secs(0) }
     }
 
     fn run_harness(test_harness: TestHarness<'static>, node_states: Arc<MutexNodeStates>) -> Self {

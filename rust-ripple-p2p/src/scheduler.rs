@@ -10,7 +10,6 @@ use std::time::Duration;
 use byteorder::{BigEndian, ByteOrder};
 use genevo::genetic::Phenotype;
 use websocket::Message;
-use crate::client::{SubscriptionObject};
 use crate::collector::RippleMessage;
 use crate::ga::fitness::ExtendedFitness;
 use crate::ga::genetic_algorithm::{CurrentFitness, DelayMapPhenotype, MessageType};
@@ -51,7 +50,6 @@ impl Scheduler {
     /// Starts peer and collector listening threads and listens to the scheduler for executing messages after delay
     pub fn start(self,
                  receiver: TokioReceiver<Event>,
-                 _collector_receiver: STDReceiver<SubscriptionObject>,
                  ga_sender: STDSender<CurrentFitness>,
                  ga_receiver: STDReceiver<DelayMapPhenotype>,
                  client_senders: Vec<STDSender<Message<'static>>>

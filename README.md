@@ -5,7 +5,6 @@ This repository contains the code for testing Ripple's consensus algorithm.
 ### Requirements
 [Docker](https://docs.docker.com/get-started/) \
 [Rust](https://www.rust-lang.org/learn/get-started) \
-[PowerShell 7](https://docs.microsoft.com/en-us/powershell/scripting/install/installing-powershell-on-windows?view=powershell-7.1) (Make sure to add to path, test this by `pwsh` in cmd) \
 [OpenSSL](https://www.openssl.org/source/)  (1.0.1 - 1.1.1)
 
 ### Run the network
@@ -15,8 +14,8 @@ To run the network, follow the steps below.
 3. Create the docker network ripple-net `docker network create ripple-net`
 4. Change directory to rust-ripple-p2p `cd ../rust-ripple-p2p`
 5. Run the proxy
-    - PowerShell: `$Env:RUST_LOG="error";$Env:OPENSSL_DIR="[path/to/openssl/dir]"; cargo run [n (1-5)]`
-    - Other: `RUST_LOG=error;OPENSSL_DIR=[path/to/openssl/dir] cargo run [n (1-5)]`
+    - PowerShell: `$Env:RUST_LOG="error";$Env:OPENSSL_DIR="[path/to/openssl/dir]"; cargo run [n]`
+    - Other: `RUST_LOG=error;OPENSSL_DIR=[path/to/openssl/dir] cargo run [n]`
 
 ## Mac
 Coming soon

@@ -1,3 +1,4 @@
+#[allow(unused_variables)]
 extern crate futures;
 
 use std::{env};
@@ -54,7 +55,7 @@ fn main() {
         vec![4, 5, 6]
     ];
 
-    let node_keys = start_docker_containers(n, correct_unls);
+    let node_keys = start_docker_containers(n, bug_unls);
 
     let app = app::App::new(n as u16, only_subscribe, node_keys);
 

@@ -57,10 +57,8 @@ impl App {
         let mut tokio_tasks = vec![];
         let mut threads = vec![];
         let (collector_tx, collector_rx) = std::sync::mpsc::channel();
-        let (_control_tx, control_rx) = std::sync::mpsc::channel();
         let (subscription_tx, subscription_rx) = std::sync::mpsc::channel();
         let (server_state_tx, server_state_rx) = std::sync::mpsc::channel();
-        let (collector_state_tx, scheduler_state_rx) = std::sync::mpsc::channel();
         let peer = self.peers.clone();
 
         let mut node_state_vec = vec![NodeState::new(0); peer as usize];
@@ -71,7 +69,7 @@ impl App {
 
         // Start the collector which writes output to files and collects information on nodes
         let collector_task = thread::spawn(move || {
-            Collector::new(peer, collector_rx, subscription_rx, server_state_rx, control_rx, collector_state_tx, mutex_node_states_clone).start();
+            Collector::new(peer, subscription_rx, mutex_node_states_clone).start(collector_rx, server_state_rx);
         });
         threads.push(collector_task);
 
@@ -118,7 +116,7 @@ impl App {
             // Start the scheduler
             let scheduler = Scheduler::new(scheduler_peer_channels, collector_tx, mutex_node_states);
             let scheduler_thread = thread::spawn(move || {
-                scheduler.start(scheduler_receiver, scheduler_state_rx, scheduler_ga_sender, ga_scheduler_receiver, client_senders);
+                scheduler.start(scheduler_receiver, scheduler_ga_sender, ga_scheduler_receiver, client_senders);
             });
             threads.push(scheduler_thread);
 

@@ -212,7 +212,7 @@ impl MutexNodeStates {
             self.set_current_round(peer, old_round + 1);
             if current_phase != ConsensusPhase::Accepted {
                 self.node_states.lock().node_states[peer].number_of_failed_consensus_rounds += 1;
-                println!("Failed consensus round {}: establish -> open", peer);
+                println!("Failed consensus round peer {}: establish -> open", peer);
             }
         } else if new_phase == ConsensusPhase::Establish && current_phase != ConsensusPhase::Open {
             self.node_states.lock().node_states[peer].number_of_failed_consensus_rounds += 1;

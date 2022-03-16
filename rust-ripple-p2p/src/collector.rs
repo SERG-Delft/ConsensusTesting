@@ -4,7 +4,8 @@ use std::hash::{Hash, Hasher};
 use std::io::{BufWriter, Write};
 use std::path::Path;
 use std::sync::Arc;
-use std::sync::mpsc::{Receiver, Sender};
+use std::sync::mpsc::{Receiver};
+use std::thread;
 use serde_json::json;
 use crate::client::{ConsensusChange, PeerServerStateObject, PeerSubscriptionObject, SubscriptionObject};
 use crate::message_handler::RippleMessageObject;
@@ -19,12 +20,7 @@ use crate::protos::ripple::TMTransaction;
 /// Subscription file stores all subscription messages received from the client
 /// Node states contains the current state of all nodes individually, info is received from subscriptions
 pub struct Collector {
-    ripple_message_receiver: Receiver<Box<RippleMessage>>,
     subscription_receiver: Receiver<PeerSubscriptionObject>,
-    server_state_receiver: Receiver<PeerServerStateObject>,
-    control_receiver: Receiver<String>,
-    _scheduler_sender: Sender<SubscriptionObject>,
-    execution_file: BufWriter<File>,
     subscription_files: Vec<BufWriter<File>>,
     node_states: Arc<MutexNodeStates>,
 }
@@ -32,14 +28,9 @@ pub struct Collector {
 impl Collector {
     pub fn new(
         number_of_nodes: u16,
-        ripple_message_receiver: Receiver<Box<RippleMessage>>,
         subscription_receiver: Receiver<PeerSubscriptionObject>,
-        server_state_receiver: Receiver<PeerServerStateObject>,
-        control_receiver: Receiver<String>,
-        scheduler_sender: Sender<SubscriptionObject>,
         node_states: Arc<MutexNodeStates>,
     ) -> Self {
-        let execution_file = File::create(Path::new("execution.txt")).expect("Opening execution file failed");
         let mut subscription_files = vec![];
         for peer in 0..number_of_nodes {
             let mut subscription_file = BufWriter::new(File::create(Path::new(format!("subscription_{}.json", peer).as_str())).expect("Opening subscription file failed"));
@@ -47,41 +38,23 @@ impl Collector {
             subscription_files.push(subscription_file);
         }
         Collector {
-            ripple_message_receiver,
             subscription_receiver,
-            server_state_receiver,
-            control_receiver,
-            _scheduler_sender: scheduler_sender,
-            execution_file: BufWriter::new(execution_file),
             subscription_files,
             node_states,
         }
     }
 
-    pub fn start(&mut self) {
+    pub fn start(&mut self, ripple_message_receiver: Receiver<Box<RippleMessage>>, server_state_receiver: Receiver<PeerServerStateObject>) {
+        let node_states_clone = self.node_states.clone();
+        thread::spawn(move || Self::execution_writer(ripple_message_receiver));
+        thread::spawn(move || Self::server_state_handler(server_state_receiver, node_states_clone));
         loop {
-            // Stop writing to file if any control message is received
-            // Can be extended to start writing to file later, currently not implemented
-            match self.control_receiver.try_recv() {
-                Ok(_) => {
-                    break;
-                }
-                _ => {}
-            }
-            // Write all messages sent by the scheduler to peers to "execution.txt". After delay!
-            match self.ripple_message_receiver.try_recv() {
-                Ok(mut message) => {
-                    self.write_to_file(&mut message);
-                }
-                _ => {}
-            }
             // Handle subscription streams in a central place, TODO: refactor to own associated method.
-            match self.subscription_receiver.try_recv() {
+            match self.subscription_receiver.recv() {
                 Ok(subscription_object) => match subscription_object.subscription_object {
                     SubscriptionObject::ValidatedLedger(ledger) => {
                         self.node_states.set_validated_ledger(subscription_object.peer as usize,ledger.clone());
                         self.write_to_subscription_file(subscription_object.peer, json!({"LedgerValidated": ledger}).to_string());
-                        // self.scheduler_sender.send(SubscriptionObject::ValidatedLedger(ledger.clone())).expect("Scheduler send failed");
                     }
                     SubscriptionObject::ReceivedValidation(validation) =>
                         self.write_to_subscription_file(subscription_object.peer, json!({"ValidationReceived": validation}).to_string()),
@@ -115,21 +88,36 @@ impl Collector {
                 },
                 _ => {}
             }
-            match self.server_state_receiver.try_recv() {
-                Ok(server_state_object) => {
-                    self.node_states.set_server_state(server_state_object)
+        }
+    }
+
+    fn execution_writer(ripple_message_receiver: Receiver<Box<RippleMessage>>) {
+        let execution_file = File::create(Path::new("execution.txt")).expect("Opening execution file failed");
+        let mut execution_writer = BufWriter::new(execution_file);
+        loop {
+            // Write all messages sent by the scheduler to peers to "execution.txt". After delay!
+            match ripple_message_receiver.recv() {
+                Ok(message) => {
+                    match &message.message {
+                        TMProposeSet(tm_propose) => if tm_propose.get_proposeSeq() > 1 { println!("{}", message.to_string()) }
+                        _ => {},
+                    }
+                    execution_writer.write_all(message.to_string().as_bytes()).unwrap();
                 }
                 _ => {}
             }
         }
     }
 
-    fn write_to_file(&mut self, ripple_message: &mut RippleMessage) {
-        match &ripple_message.message {
-            TMProposeSet(tm_propose) => if tm_propose.get_proposeSeq() > 1 { println!("{}", ripple_message.to_string()) }
-            _ => {},
+    fn server_state_handler(server_state_receiver: Receiver<PeerServerStateObject>, node_states: Arc<MutexNodeStates>) {
+        loop {
+            match server_state_receiver.recv() {
+                Ok(server_state_object) => {
+                    node_states.set_server_state(server_state_object)
+                }
+                _ => {}
+            }
         }
-        self.execution_file.write_all(ripple_message.to_string().as_bytes()).unwrap();
     }
 
     fn write_to_subscription_file(&mut self, peer: u16, text: String) {
