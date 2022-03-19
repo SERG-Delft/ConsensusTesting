@@ -1708,6 +1708,7 @@ dependencies = [
  "powershell_script",
  "protobuf",
  "protobuf-codegen-pure",
+ "rayon",
  "ripemd160",
  "ripple-address-codec",
  "secp256k1",

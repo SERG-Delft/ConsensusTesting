@@ -2,12 +2,22 @@ use std::convert::TryInto;
 use std::fmt;
 use std::fmt::Formatter;
 
-pub struct Amount<'a> {
-    pub amount: &'a mut [u8],
+use crate::deserialization::blob_iterator::BlobIterator;
+
+pub struct Amount {
+    pub amount: u64,
 }
 
-impl fmt::Display for Amount<'_> {
+impl Amount {
+    pub fn parse(blob: &mut BlobIterator) -> Self {
+        let is_xrp: bool = (blob.peek() & 0b1000_0000) == 0;
+        if !is_xrp { panic!("cannot parse issued currency") }
+        Amount { amount: u64::from_be_bytes(blob.next_n_bytes(8).try_into().unwrap()) }
+    }
+}
+
+impl fmt::Display for Amount {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "Amount<{}XRP>", u64::from_be_bytes((*self.amount).try_into().unwrap()))
+        write!(f, "Amount<{}>", self.amount)
     }
 }

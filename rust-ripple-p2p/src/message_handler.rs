@@ -1,6 +1,7 @@
 use std::fmt::{Debug, Display, Formatter};
 use crate::protos::ripple::{TMManifest, TMPing, TMCluster, TMEndpoints, TMTransaction, TMGetLedger, TMLedgerData, TMProposeSet, TMStatusChange, TMHaveTransactionSet, TMValidation, TMGetObjectByHash, TMGetShardInfo, TMShardInfo, TMGetPeerShardInfo, TMPeerShardInfo, TMValidatorList};
 use serde_json;
+use crate::deserialization::{deserialize_validation};
 
 /// Deserialize message
 pub fn invoke_protocol_message(message_type: u16, payload: &[u8]) -> RippleMessageObject {
@@ -74,5 +75,24 @@ impl Display for RippleMessageObject {
             RippleMessageObject::TMValidatorList(validator_list) => ("ValidatorList", serde_json::to_string(validator_list).unwrap()),
         };
         write!(f, "{}: {}", name, string)
+    }
+}
+
+#[derive(Default, serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq)]
+pub struct ParsedValidation {
+    pub ledger_sequence: u32,
+    pub validated_hash: String,
+    pub hash: String,
+    pub consensus_hash: String,
+    pub cookie: u64,
+    pub signing_pub_key: String,
+    pub signature: String,
+    pub flags: u32,
+    pub signing_time: u32,
+}
+
+impl ParsedValidation {
+    pub fn new(validation: &TMValidation) -> Self {
+        deserialize_validation(validation.get_validation().clone())
     }
 }
