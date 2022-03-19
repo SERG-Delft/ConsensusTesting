@@ -215,6 +215,31 @@ fn parse_canonical_binary_format_with_iterator(mut blob_iterator: BlobIterator) 
     contents
 }
 
+fn mutate_transaction(mut contents: Vec<SerializationTypeValue>) -> Vec<SerializationTypeValue> {
+
+    let mutated_contents = contents.into_iter().
+        map(|x| {
+            match x {
+                SerializationTypeValue { field, type_name } if (type_name == String::from("Amount")) => {
+
+                    let mutated_field = match field {
+                        SerializationField::Amount(current_amount) => {
+                            let mutated_amount = current_amount.amount + 100;
+                            SerializationField::Amount(Amount{ amount: mutated_amount })
+                        }
+                        _ => { field }
+                    };
+
+                    SerializationTypeValue { field: mutated_field, type_name: String::from("Amount") }
+                }
+                _ => { x }
+            }
+        })
+        .collect();
+
+    mutated_contents
+}
+
 fn decode_type_code(type_code: u8) -> &'static str {
     return match type_code {
         0 => { "NotPresent" }
