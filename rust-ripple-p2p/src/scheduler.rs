@@ -12,7 +12,7 @@ use genevo::genetic::Phenotype;
 use websocket::Message;
 use crate::collector::RippleMessage;
 use crate::ga::fitness::ExtendedFitness;
-use crate::ga::genetic_algorithm::{CurrentFitness, DelayMapPhenotype, MessageType};
+use crate::ga::genetic_algorithm::{CurrentFitness, DelayMapPhenotype, DROP_THRESHOLD, MessageType};
 use crate::message_handler::{parse_protocol_message, RippleMessageObject};
 use crate::node_state::{MutexNodeStates};
 use crate::test_harness::TestHarness;
@@ -282,11 +282,37 @@ pub struct ScheduledEvent {}
 
 impl ScheduledEvent {
     fn schedule_execution(event: Event, duration: Duration, sender: STDSender<Event>) {
-        thread::spawn(move || {
-            trace!("Sleeping for {} ms for message: {} -> {}: {:?}", duration.as_millis(), event.from, event.to, event.message);
-            thread::sleep(duration);
-            trace!("Sending event to executor: {} -> {}: {:?}", event.from, event.to, event.message);
-            sender.send(event).expect("Scheduler receiver failed");
-        });
+        if duration.as_millis() > DROP_THRESHOLD as u128 {
+            return
+        } else {
+            thread::spawn(move || {
+                trace!("Sleeping for {} ms for message: {} -> {}: {:?}", duration.as_millis(), event.from, event.to, event.message);
+                thread::sleep(duration);
+                trace!("Sending event to executor: {} -> {}: {:?}", event.from, event.to, event.message);
+                sender.send(event).expect("Scheduler receiver failed");
+            });
+        }
+    }
+}
+
+#[cfg(test)]
+mod scheduler_tests {
+    use std::thread;
+    use std::time::Duration;
+    use crate::scheduler::{Event, ScheduledEvent};
+
+    #[test]
+    fn test_drop_threshold() {
+        let event = Event { from: 0, to: 1, message: vec![] };
+        let (sender, receiver) = std::sync::mpsc::channel();
+        ScheduledEvent::schedule_execution(event, Duration::from_millis(901), sender.clone());
+        thread::sleep(Duration::from_millis(1000));
+        let result = receiver.try_recv();
+        assert!(result.is_err());
+        let event = Event { from: 0, to: 1, message: vec![] };
+        ScheduledEvent::schedule_execution(event, Duration::from_millis(100), sender);
+        thread::sleep(Duration::from_millis(1000));
+        let result = receiver.try_recv();
+        assert!(result.is_ok());
     }
 }

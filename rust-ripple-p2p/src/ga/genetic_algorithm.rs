@@ -23,6 +23,7 @@ use crate::NUM_NODES;
 use super::mutation::GaussianMutator;
 
 pub type CurrentFitness = TimeFitness;
+pub const DROP_THRESHOLD: u32 = 900;
 
 pub(crate) fn num_genes() -> usize {
     *NUM_NODES * (*NUM_NODES-1) * MessageType::VALUES.len()
@@ -307,12 +308,10 @@ pub fn run_ga<S, C, T, H>(fitness_values: Arc<RwLock<HashMap<DelaysGenotype, T>>
 mod ga_tests {
     use std::collections::HashMap;
     use std::sync::{Arc, RwLock};
-    use std::sync::mpsc::{Receiver, Sender};
-    use std::thread;
-    use crate::client::ValidatedLedger;
+    use std::sync::mpsc::{Receiver};
     use crate::ga::crossover::NoCrossoverOperator;
-    use crate::ga::fitness::{ExtendedFitness, FitnessCalculation, SchedulerHandlerTrait};
-    use crate::ga::genetic_algorithm::{CurrentFitness, DelayMapPhenotype, DelaysGenotype, mu_lambda, run_ga, run_mu_lambda};
+    use crate::ga::fitness::{FitnessCalculation, SchedulerHandlerTrait};
+    use crate::ga::genetic_algorithm::{DelayMapPhenotype, DelaysGenotype, mu_lambda, run_ga};
     use crate::ga::fitness::validated_ledgers_fitness::ValidatedLedgersFitness;
 
     #[test]
@@ -351,7 +350,6 @@ mod ga_tests {
 
     impl SchedulerHandlerTrait for TestSchedulerHandler {
         fn run(self) {
-            let mut current_delays_genotype = DelaysGenotype::default();
             loop {
                 // Receive a new individual to test from a fitness function
                 match self.fitness_receiver.recv() {
