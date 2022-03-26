@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
+use json::object;
 
 use types::*;
 
@@ -162,6 +163,7 @@ fn parse_canonical_binary_format(blob: &[u8]) -> Vec<SerializationTypeValue> {
 }
 
 fn parse_canonical_binary_format_with_iterator(mut blob_iterator: BlobIterator) -> Vec<SerializationTypeValue> {
+    let mut json = object!{};
     let mut contents = vec![];
     // println!("New validation");
     while blob_iterator.has_next() {
@@ -172,26 +174,31 @@ fn parse_canonical_binary_format_with_iterator(mut blob_iterator: BlobIterator) 
             "UInt16" => {
                 let field = UInt16::parse(&mut blob_iterator);
                 // println!("- {}: {}", type_name, field);
+                json[&type_name] = field.value.into();
                 contents.push(SerializationTypeValue { field: SerializationField::U16(field), type_name });
             }
             "UInt32" => {
                 let field = UInt32::parse(&mut blob_iterator);
                 // println!("- {}: {}", type_name, field);
+                json[&type_name] = field.value.into();
                 contents.push(SerializationTypeValue { field: SerializationField::U32(field), type_name });
             }
             "UInt64" => {
                 let field = UInt64::parse(&mut blob_iterator);
                 // println!("- {}: {}", type_name, field);
+                json[&type_name] = field.value.into();
                 contents.push(SerializationTypeValue { field: SerializationField::U64(field), type_name });
             }
             "Hash256" => {
                 let field = Hash256::parse(&mut blob_iterator);
-                // println!("- {}: {}", type_name, field);
+                println!("- {}: {}", type_name, field);
+                json[&type_name] = format!("{:x?}", field.hash).into();
                 contents.push(SerializationTypeValue { field: SerializationField::H256(field), type_name });
             }
             "Amount" => {
                 let field = Amount::parse(&mut blob_iterator);
-                // println!("- {}: {}", type_name, field);
+                println!("- {}: {}", &type_name, &field);
+                json[&type_name] = field.amount.to_string().into();
                 contents.push(SerializationTypeValue { field: SerializationField::Amount(field), type_name });
             }
             "Blob" => {
@@ -202,6 +209,7 @@ fn parse_canonical_binary_format_with_iterator(mut blob_iterator: BlobIterator) 
             "AccountID" => {
                 let field = AccountID::parse(&mut blob_iterator);
                 // println!("- {}: {}", type_name, field);
+                json[&type_name] = field.base_58_check().into();
                 contents.push(SerializationTypeValue { field: SerializationField::AccountId(field), type_name });
             }
             "Vector256" => {
@@ -212,6 +220,7 @@ fn parse_canonical_binary_format_with_iterator(mut blob_iterator: BlobIterator) 
             _ => { panic!("unknown field type {}...", field_type) }
         }
     }
+    println!("{}", json);
     contents
 }
 

@@ -12,6 +12,7 @@ use crate::client::SubscriptionObject;
 use crate::collector::RippleMessage;
 use crate::deserialization::deserialize;
 use crate::message_handler::{invoke_protocol_message, RippleMessageObject};
+use crate::message_handler::RippleMessageObject::{TMTransaction, TMValidation};
 
 type P2PConnections = HashMap<usize, HashMap<usize, PeerChannel>>;
 
@@ -41,7 +42,16 @@ impl Scheduler {
 
     fn execute_event(&self, event: Event) {
         let mut rmo: RippleMessageObject = invoke_protocol_message(BigEndian::read_u16(&event.message[4..6]), &event.message[6..]);
-        println!("[{}->{}] {}", event.from + 1, event.to + 1, rmo);
+        match rmo {
+            TMTransaction(_) => {
+                deserialize(&rmo);
+                println!("[{}->{}] {}", event.from + 1, event.to + 1, rmo);
+            }
+            TMValidation(_) => {
+                // println!("[{}->{}] {}", event.from + 1, event.to + 1, rmo);
+            }
+            _ => ()
+        }
         self.p2p_connections.get(&event.to).unwrap().get(&event.from).unwrap().send(event.message);
         // match rmo {
         //     RippleMessageObject::TMTransaction(_) => {

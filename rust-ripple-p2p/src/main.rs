@@ -1,4 +1,5 @@
 extern crate futures;
+extern crate core;
 
 use std::env;
 use log::*;
