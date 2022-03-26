@@ -1,7 +1,11 @@
 use std::collections::HashMap;
+use std::convert::TryFrom;
 use std::fs::File;
 use std::io::Read;
-use json::object;
+use std::str::FromStr;
+use json::{JsonValue, object};
+use rippled_binary_codec::serialize::serialize_tx;
+use serde_json::Value;
 
 use types::*;
 
@@ -204,6 +208,7 @@ fn parse_canonical_binary_format_with_iterator(mut blob_iterator: BlobIterator) 
             "Blob" => {
                 let field = Blob::parse(&mut blob_iterator);
                 // println!("- {}: {}", type_name, field);
+                json[&type_name] = format!("{:x?}", field.blob).into();
                 contents.push(SerializationTypeValue { field: SerializationField::Blob(format!("{:x?}", field.blob)), type_name });
             }
             "AccountID" => {
@@ -221,7 +226,38 @@ fn parse_canonical_binary_format_with_iterator(mut blob_iterator: BlobIterator) 
         }
     }
     println!("{}", json);
+    println!("{:?}", mutate_and_serialize_json(json));
     contents
+}
+
+fn mutate_and_serialize_json(mut deserialized_transaction: JsonValue) -> Vec<u8> {
+
+    // mutate the amount
+    let amount = deserialized_transaction["Amount"].as_str().unwrap();
+    let mutated_amount = u64::from_str(amount).unwrap() + 100;
+    deserialized_transaction["Amount"] = JsonValue::from(mutated_amount.to_string());
+
+    // map the transaction type to its name (based on definitions.json)
+    let transaction_types = read_transaction_types();
+    let current_key = deserialized_transaction["TransactionType"].as_i64().unwrap();
+    let transaction_type = match transaction_types.get(&current_key) {
+        Some(transaction) => { transaction.to_string() }
+        None => { "Invalid".to_string() }
+    };
+    deserialized_transaction["TransactionType"] = JsonValue::from(transaction_type);
+
+    // TO DO: map the signing public key
+    deserialized_transaction["SigningPubKey"] = JsonValue::from("03EE83BB432547885C219634A1BC407A9DB0474145D69737D09CCDC63E1DEE7FE3".to_string());
+
+    // TO DO: map the txn signature
+    deserialized_transaction["TxnSignature"] = JsonValue::from("30440220143759437C04F7B61F012563AFE90D8DAFC46E86035E1D965A9CED282C97D4CE02204CFD241E86F17E011298FC1A39B63386C74306A5DE047E213B0F29EFA4571C2C".to_string());
+
+    println!("{}", deserialized_transaction.to_string());
+
+    return match serialize_tx(deserialized_transaction.to_string(), false) {
+        Some(string) => { serialize_tx(deserialized_transaction.to_string(), false).unwrap().as_bytes().to_vec() }
+        None => { panic!("could not serialize") }
+    }
 }
 
 fn mutate_transaction(mut contents: Vec<SerializationTypeValue>) -> Vec<SerializationTypeValue> {
@@ -308,6 +344,36 @@ fn get_type_field_code(blob: &mut BlobIterator) -> (u8, u8) {
         (true, false) => { (blob.next_byte(), low_bits) }
         (false, false) => { (high_bits, low_bits) }
     };
+}
+
+
+
+///
+///
+///
+/// # Transaction types
+///
+///
+///
+pub fn read_transaction_types() -> HashMap<i64, String> {
+    let mut data = String::new();
+    let mut file = File::open("src/deserialization/definitions.json").expect("Getting the file did not work.");
+    file.read_to_string(&mut data).expect("Reading from file did not work.");
+
+    let all_values: serde_json::Value = serde_json::from_str(&*data).expect("Parsing the data did not work.");
+    // get only the transactions
+    let transactions = serde_json::json!(all_values["TRANSACTION_TYPES"]);
+
+    let mut all_transactions = HashMap::new();
+
+    for transaction in transactions.as_object().unwrap() {
+        let (field_1, field_2) = transaction;
+        let current_key = field_2.as_i64().unwrap();
+        let current_value = field_1.to_string();
+        all_transactions.insert(current_key, current_value);
+    }
+
+    all_transactions
 }
 
 
