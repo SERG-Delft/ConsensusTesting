@@ -246,13 +246,17 @@ fn mutate_and_serialize_json(mut deserialized_transaction: JsonValue) -> Vec<u8>
     };
     deserialized_transaction["TransactionType"] = JsonValue::from(transaction_type);
 
-    // TO DO: map the signing public key
-    deserialized_transaction["SigningPubKey"] = JsonValue::from("03EE83BB432547885C219634A1BC407A9DB0474145D69737D09CCDC63E1DEE7FE3".to_string());
+    // map the signing public key
+    let encoded_signing_key = hex::encode_upper(deserialized_transaction["SigningPubKey"].as_str().unwrap());
+    deserialized_transaction["SigningPubKey"] = JsonValue::from(encoded_signing_key);
 
-    // TO DO: map the txn signature
-    deserialized_transaction["TxnSignature"] = JsonValue::from("30440220143759437C04F7B61F012563AFE90D8DAFC46E86035E1D965A9CED282C97D4CE02204CFD241E86F17E011298FC1A39B63386C74306A5DE047E213B0F29EFA4571C2C".to_string());
+    // map the txn signature
+    let encoded_txt_signature = hex::encode_upper(deserialized_transaction["TxnSignature"].as_str().unwrap());
+    deserialized_transaction["TxnSignature"] = JsonValue::from(encoded_txt_signature);
 
-    println!("{}", deserialized_transaction.to_string());
+    // println!("{}", deserialized_transaction["SigningPubKey"]);
+    // println!("{}", deserialized_transaction["TxnSignature"]);
+    // println!("{}", deserialized_transaction.to_string());
 
     return match serialize_tx(deserialized_transaction.to_string(), false) {
         Some(string) => { serialize_tx(deserialized_transaction.to_string(), false).unwrap().as_bytes().to_vec() }
