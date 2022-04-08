@@ -204,8 +204,11 @@ impl PeerConnection {
         tokio::spawn(async move {
             loop {
                 match receiver.recv().await {
-                    Some(message) => ssl_writer.write_all(message.as_slice()).await.expect("Unable to write to ssl stream"),
-                    None => panic!("Scheduler sender failed") // Break when there are no more messages
+                    Some(message) => match ssl_writer.write_all(message.as_slice()).await {
+                        Ok(_) => {}
+                        Err(err) => error!("Failed to write to ssl stream from {}, to {}, with err: {}", from, to, err)
+                    }
+                    None => error!("Scheduler sender failed")
                 }
             }
         });
@@ -213,19 +216,25 @@ impl PeerConnection {
             // Maximum ripple peer message is 64 MB
             let mut buf = BytesMut::with_capacity(64 * 1024);
             buf.resize(64 * 1024, 0);
-            let size = ssl_reader.read(buf.as_mut()).await.expect("Unable to read from ssl stream");
+            let size = match ssl_reader.read(buf.as_mut()).await {
+                Ok(res) => res,
+                Err(_) => {
+                    error!("Ssl stream closed on read from {}, to {}", from, to);
+                    return;
+                }
+            };
             buf.resize(size, 0);
             if size == 0 {
                 error!(
-                    "Current buffer: {}",
+                    "Current buffer: {}\nsocket closed",
                     String::from_utf8_lossy(buf.bytes()).trim()
                 );
-                panic!("socket closed");
+                return;
             }
             let bytes = buf.bytes();
             if bytes[0] & 0x80 != 0 {
-                error!("{:?}", bytes[0]);
-                panic!("Received compressed message");
+                error!("{:?}\nReceived compressed message", bytes[0]);
+                return;
             }
 
             if bytes[0] & 0xFC != 0 {
@@ -235,7 +244,7 @@ impl PeerConnection {
             let payload_size = BigEndian::read_u32(&bytes[0..4]) as usize;
 
             if payload_size > 64 * 1024 * 1024 {
-                panic!("Message size too large");
+                error!("Message size too large");
             }
 
             if buf.len() < 6 + payload_size {

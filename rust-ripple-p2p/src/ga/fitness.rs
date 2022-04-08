@@ -46,11 +46,13 @@ impl<T> FitnessFunction<DelaysGenotype, T> for FitnessCalculation<T>
                 match self.fitness_values.read().unwrap().get(delays_genotype) {
                     Some(fitness) => {
                         println!("Fitness found: {:?} for genotype: {:?}", fitness, delays_genotype);
+                        DelayMapPhenotype::from(delays_genotype).display_delays_by_message();
                         return fitness.clone();
                     }
                     None => {
                         if !sent_to_handler {
                             println!("Fitness not found for genotype: {:?}", delays_genotype);
+                            DelayMapPhenotype::from(delays_genotype).display_delays_by_message();
                             self.sender.send(delays_genotype.clone()).expect("Fitness calculator receiver failed");
                         }
                         sent_to_handler = true;

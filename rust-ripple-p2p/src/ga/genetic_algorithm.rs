@@ -7,11 +7,12 @@ use std::thread;
 use genevo::ga::genetic_algorithm;
 use genevo::genetic::{Phenotype};
 use genevo::operator::prelude::{MaximizeSelector, MultiPointCrossBreeder, RouletteWheelSelector};
-use genevo::operator::{CrossoverOp, SelectionOp};
+use genevo::operator::{CrossoverOp, GeneticOperator, SelectionOp};
 use genevo::population::ValueEncodedGenomeBuilder;
-use itertools::{chain};
+use itertools::{chain, Itertools};
 use genevo::prelude::{build_population, GenerationLimit, Population, SimResult, simulate, Simulation, SimulationBuilder};
 use genevo::reinsertion::elitist::ElitistReinserter;
+#[allow(unused_imports)]
 use crate::ga::crossover::NoCrossoverOperator;
 #[allow(unused_imports)]
 use crate::ga::fitness::state_accounting_fitness::StateAccountFitness;
@@ -23,7 +24,7 @@ use crate::NUM_NODES;
 use super::mutation::GaussianMutator;
 
 pub type CurrentFitness = TimeFitness;
-pub const DROP_THRESHOLD: u32 = 900;
+pub const DROP_THRESHOLD: u32 = 1500;
 
 pub(crate) fn num_genes() -> usize {
     *NUM_NODES * (*NUM_NODES-1) * MessageType::VALUES.len()
@@ -103,7 +104,7 @@ impl<T> Default for Parameter<RouletteWheelSelector, MultiPointCrossBreeder, T>
     }
 }
 
-fn mu_lambda<T, C>(mu: usize, lambda: usize, genes: Option<usize>, generation_limit: u64, mutation_rate: f64, crossover_operator: C) -> Parameter<MaximizeSelector, C, T>
+fn mu_lambda<T, C>(mu: usize, lambda: usize, genes: Option<usize>, max_delay: u32, generation_limit: u64, mutation_rate: f64, crossover_operator: C) -> Parameter<MaximizeSelector, C, T>
     where T: ExtendedFitness, C: CrossoverOp<DelaysGenotype>
 {
     let selection_ratio = mu as f64 / lambda as f64;
@@ -111,36 +112,35 @@ fn mu_lambda<T, C>(mu: usize, lambda: usize, genes: Option<usize>, generation_li
         None => num_genes(),
         Some(x) => x,
     };
+    let num_individuals_per_parents = 2;
     Parameter {
         population_size: lambda,
         generation_limit,
-        num_individuals_per_parents: 1,
+        num_individuals_per_parents,
         selection_ratio,
         num_crossover_points: num_genes / (*NUM_NODES * (*NUM_NODES - 1)),
         mutation_rate,
         reinsertion_ratio: 1.0,
         min_delay: 0,
-        max_delay: 1000,
+        max_delay,
         num_genes,
-        selection_operator: MaximizeSelector::new(selection_ratio, 1),
+        selection_operator: MaximizeSelector::new(selection_ratio, num_individuals_per_parents),
         crossover_operator,
         stupid_type_system: PhantomData
     }
 }
-
-// TODO: Get this info from main (global constant?)
 
 /// The message types that will be subject to delay
 #[derive(Debug, Eq, PartialEq, Hash, Clone, Copy)]
 pub enum MessageType {
     TMProposeSet,
     TMStatusChange,
-    TMTransaction,
+    TMValidation,
     TMHaveTransactionSet,
 }
 
 impl MessageType {
-    const VALUES: [Self; 4] = [Self::TMProposeSet, Self::TMStatusChange, Self::TMTransaction, Self::TMHaveTransactionSet];
+    const VALUES: [Self; 4] = [Self::TMProposeSet, Self::TMStatusChange, Self::TMValidation, Self::TMHaveTransactionSet];
 }
 
 // The phenotype from -> to -> message_type -> delay (ms)
@@ -172,6 +172,21 @@ impl DelayMapPhenotype {
         Self {
             delay_map: from_node,
             delays: genes.clone()
+        }
+    }
+
+    /// Display delays grouped by message and receiver node
+    pub fn message_type_delays(&self, message_type: &MessageType) -> Vec<(usize, Vec<u32>)> {
+        self.delay_map.iter()
+            .map(|(to, from)| (*to, from.values()
+                .map(|x| *x.get(message_type).unwrap())
+                .collect_vec()))
+            .collect::<Vec<(usize, Vec<u32>)>>()
+    }
+
+    pub fn display_delays_by_message(&self) {
+        for message_type in MessageType::VALUES {
+            println!("{:?}: {:?}", message_type, self.message_type_delays(&message_type))
         }
     }
 }
@@ -208,9 +223,17 @@ pub fn run<T>(scheduler_sender: Sender<DelayMapPhenotype>, scheduler_receiver: R
 /// Run a standard mu lambda GA
 #[allow(unused)]
 pub fn run_mu_lambda<T, C>(mu: usize, lambda: usize, scheduler_sender: Sender<DelayMapPhenotype>, scheduler_receiver: Receiver<T>, crossover_operator: C)
-    where T: ExtendedFitness + Debug + 'static, C: CrossoverOp<DelaysGenotype> + Sync
+    where T: ExtendedFitness + Debug + 'static, C: CrossoverOp<DelaysGenotype> + GeneticOperator + Sync + Debug
 {
-    let params = mu_lambda(mu, lambda, None, 50, 0.05, NoCrossoverOperator{});
+    match C::name().as_str() {
+        "No Crossover Operator" => {}
+        _ => {
+            if mu == 1 {
+                panic!("Cannot apply binary variation operator to single parent GA");
+            }
+        }
+    }
+    let params = mu_lambda(mu, lambda, None, 2000, 50, 0.1, crossover_operator);
     // Create initial population of size lambda, uniformly distributed over the range of possible values
 
     let (fitness_sender, fitness_receiver) = channel();
@@ -311,7 +334,7 @@ mod ga_tests {
     use std::sync::mpsc::{Receiver};
     use crate::ga::crossover::NoCrossoverOperator;
     use crate::ga::fitness::{FitnessCalculation, SchedulerHandlerTrait};
-    use crate::ga::genetic_algorithm::{DelayMapPhenotype, DelaysGenotype, mu_lambda, run_ga};
+    use crate::ga::genetic_algorithm::{DelayMapPhenotype, DelaysGenotype, MessageType, mu_lambda, run_ga};
     use crate::ga::fitness::validated_ledgers_fitness::ValidatedLedgersFitness;
 
     #[test]
@@ -320,11 +343,13 @@ mod ga_tests {
         let genotype = vec![959, 533, 12, 717, 406, 603, 767, 0, 304, 366, 925, 54, 854, 159, 611, 747, 839, 555, 985, 146, 678, 499, 67, 802, 991, 557, 185, 312, 557, 676, 659, 149, 963, 347, 817, 987, 451, 972, 515, 631, 174, 564, 551, 889, 665, 527, 645, 336, 977, 946, 641, 441, 113, 872, 778, 385, 878, 528, 947, 435, 913, 643, 4, 101, 472, 416, 624, 792, 925, 573, 225, 948, 862, 142, 580, 50, 742, 648, 338, 914];
         let phenotype = DelayMapPhenotype::from(&genotype);
         println!("{:?}", phenotype.delay_map);
+        println!("{:?}", phenotype.message_type_delays(&MessageType::TMValidation));
+        phenotype.display_delays_by_message();
     }
 
     #[test]
     fn test_mu_lambda() {
-        let params = mu_lambda(1, 2, Some(1), 5, 1.0, NoCrossoverOperator{});
+        let params = mu_lambda(1, 2, Some(1), 2000, 5, 1.0, NoCrossoverOperator{});
 
         let (fitness_sender, fitness_receiver) = std::sync::mpsc::channel();
         let fitness_values: Arc<RwLock<HashMap<DelaysGenotype, ValidatedLedgersFitness>>> = Arc::new(RwLock::new(HashMap::new()));

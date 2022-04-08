@@ -65,7 +65,7 @@ impl TestHarness<'static> {
         // Wait for all transactions to have been validated
         while node_states.get_min_validated_transactions() < number_of_transactions {
             node_states.transactions_cvar.wait(&mut node_states.node_states.lock());
-            debug!("{} out of {} transactions validated, max: {}", node_states.get_min_validated_transactions(), number_of_transactions, node_states.get_max_validated_transaction());
+            debug!("{} out of {} transactions validated, {} transactions unvalidated", node_states.get_min_validated_transactions(), number_of_transactions, node_states.get_min_unvalidated_transactions());
         }
         println!("Test harness over");
     }

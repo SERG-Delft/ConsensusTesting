@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::net::{SocketAddr, Ipv4Addr, IpAddr};
 use std::sync::Arc;
 use std::thread;
+use genevo::operator::prelude::MultiPointCrossBreeder;
 
 use log::*;
 use itertools::Itertools;
@@ -14,10 +15,11 @@ use crate::container_manager::NodeKeys;
 use crate::ga::crossover::NoCrossoverOperator;
 use crate::ga::fitness::ExtendedFitness;
 use crate::ga::genetic_algorithm;
-use crate::ga::genetic_algorithm::{CurrentFitness, run};
+use crate::ga::genetic_algorithm::{CurrentFitness, num_genes, run};
 use crate::peer_connection::PeerConnection;
 use crate::scheduler::{PeerChannel, Scheduler};
 use crate::node_state::{MutexNodeStates, NodeState, NodeStates};
+use crate::NUM_NODES;
 use crate::trace_comparisons::{run_fitness_comparison, run_no_delays, run_trace_graph_creation};
 
 const _NODE_PRIVATE_KEY: &str = "e55dc8f3741ac9668dbe858409e5d64f5ce88380f7228eccfe82b92b2c7848ba";
@@ -66,6 +68,7 @@ impl App {
         let node_states = NodeStates::new(node_state_vec);
         let mutex_node_states = Arc::new(MutexNodeStates::new(node_states));
         let mutex_node_states_clone = mutex_node_states.clone();
+        let mutex_node_states_clone_2 = mutex_node_states.clone();
 
         // Start the collector which writes output to files and collects information on nodes
         let collector_task = thread::spawn(move || {
@@ -91,7 +94,15 @@ impl App {
             let (scheduler_ga_sender, scheduler_ga_receiver) = std::sync::mpsc::channel::<CurrentFitness>();
 
             // Start the GA
-            thread::spawn(||genetic_algorithm::run_mu_lambda(1, 1, ga_scheduler_sender, scheduler_ga_receiver, NoCrossoverOperator{}));
+            thread::spawn(move ||
+                genetic_algorithm::run_mu_lambda(
+                    4,
+                    4,
+                    ga_scheduler_sender,
+                    scheduler_ga_receiver,
+                    MultiPointCrossBreeder::new(num_genes() / (*NUM_NODES * (*NUM_NODES - 1)))
+                )
+            );
             // thread::spawn(||genetic_algorithm::run(ga_scheduler_sender, scheduler_ga_receiver));
             // thread::spawn(|| run_trace_graph_creation(ga_scheduler_sender, scheduler_ga_receiver, mutex_node_states_clone_2));
             // thread::spawn(|| run_fitness_comparison(ga_scheduler_sender, scheduler_ga_receiver));
@@ -155,7 +166,10 @@ impl App {
         }
 
         for tokio_task in tokio_tasks {
-            tokio_task.await.expect("task failed");
+            match tokio_task.await {
+                Ok(_) => error!("A tokio task finished with ok"),
+                Err(err) => error!("A tokio task finished with an error: {:?}", err)
+            }
         }
         for thread in threads {
             thread.join().unwrap();

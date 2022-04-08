@@ -1,11 +1,13 @@
 use std::{env, fs, thread};
-use std::fs::{File, read_to_string};
+use std::char::decode_utf16;
+use std::fs::{create_dir_all, File, read_to_string};
 use std::io::Write;
 use std::process::Command;
 use std::str::from_utf8;
 use std::time::Duration;
+use chrono::{Utc};
 
-use log::debug;
+use log::{debug, error};
 use rayon::prelude::*;
 use serde::{Deserialize};
 
@@ -14,8 +16,9 @@ pub fn start_docker_containers(peers: usize, unls: Vec<Vec<usize>>) -> Vec<NodeK
     let node_keys = get_node_keys(peers);
     create_configs(peers, &node_keys);
     configure_unls(unls, &node_keys);
-    run_nodes(peers);
-    thread::sleep(Duration::from_secs(1));
+    let folders = create_log_folders(peers);
+    run_nodes(peers, folders);
+    thread::sleep(Duration::from_secs(3));
     node_keys
 }
 
@@ -51,8 +54,9 @@ fn get_node_keys(n: usize) -> Vec<NodeKeys> {
     if already_running.len() == 0 {
         debug!("trying to start key generator");
         remove_containers("key_generator");
-        start_node_with_options("key_generator", 0, false);
+        start_node_with_options("key_generator", 0, false, None);
     }
+    debug!("acquiring node keys");
     let keys: Vec<NodeKeys> = (0..n).into_par_iter().map(|_| acquire_keys()).collect();
     debug!("acquired {} node keys", keys.len());
     keys
@@ -96,20 +100,38 @@ fn configure_unls(unls: Vec<Vec<usize>>, keys: &Vec<NodeKeys>) {
     });
 }
 
-fn run_nodes(peers: usize) {
-    (0..peers).into_par_iter().for_each(|i| start_node(i));
+fn create_log_folders(peers: usize) -> Vec<String> {
+    let mut folders = vec![];
+    let now = Utc::now();
+    let date_string = now.format("%FT%H-%M-%S").to_string();
+    for i in 0..peers {
+        let folder_name = format!("{}\\..\\logs\\{}\\validator_{}", env::current_dir().unwrap().to_str().unwrap(), date_string, i);
+        println!("{}", folder_name);
+        match create_dir_all(&folder_name) {
+            Ok(_) => folders.push(folder_name),
+            Err(err) => error!("Could not create log folder, err: {}", err)
+        }
+    }
+    folders
 }
 
-fn start_node(id: usize) {
-    start_node_with_options(&format!("validator_{}", id), id, true);
+fn run_nodes(peers: usize, log_folders: Vec<String>) {
+    (0..peers).into_par_iter().for_each(|i| start_node(i, &log_folders[i]));
 }
 
-fn start_node_with_options(name: &str, offset: usize, expose_to_network: bool) {
+fn start_node(id: usize, log_folder: &str) {
+    start_node_with_options(&format!("validator_{}", id), id, true, Some(log_folder));
+}
+
+fn start_node_with_options(name: &str, offset: usize, expose_to_network: bool, log_folder: Option<&str>) {
     let mut command = Command::new("docker");
     let mut command = command
         .arg("run")
         .args(["-dit", "--name", name])
         .args(["--mount", &format!("type=bind,source={}/../config/{},target=/.config/ripple", env::current_dir().unwrap().to_str().unwrap(), name)]);
+    if let Some(folder) = log_folder {
+        command = command.args(["--mount", &format!("type=bind,source={},target=/var/log/rippled", folder)]);
+    }
     if expose_to_network {
         command = command
             .args(["--net", "ripple-net"])

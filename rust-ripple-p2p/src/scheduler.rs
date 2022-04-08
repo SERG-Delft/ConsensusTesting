@@ -125,7 +125,8 @@ impl Scheduler {
                         }
                         let message_type_map = current_delays.lock().delay_map.get(&event.from).unwrap().get(&event.to).unwrap().clone();
                         ms = match rmo {
-                            RippleMessageObject::TMTransaction(_) => message_type_map.get(&MessageType::TMTransaction).unwrap().clone(),
+                            // RippleMessageObject::TMTransaction(_) => message_type_map.get(&MessageType::TMTransaction).unwrap().clone(),
+                            RippleMessageObject::TMValidation(_) => message_type_map.get(&MessageType::TMValidation).unwrap().clone(),
                             RippleMessageObject::TMProposeSet(_) => message_type_map.get(&MessageType::TMProposeSet).unwrap().clone(),
                             RippleMessageObject::TMStatusChange(_) => message_type_map.get(&MessageType::TMStatusChange).unwrap().clone(),
                             RippleMessageObject::TMHaveTransactionSet(_) => message_type_map.get(&MessageType::TMHaveTransactionSet).unwrap().clone(),
@@ -199,6 +200,7 @@ impl Scheduler {
                 *locked_ledger_index = validated_ledger_index;
                 cvar.notify_all();
             }
+            println!("Validated ledgers: {:?}, fork: {}, liveness: {}", node_states_mutex.validated_ledgers(), node_states_mutex.check_for_fork(), node_states_mutex.check_liveness());
         }
     }
 
@@ -299,14 +301,15 @@ impl ScheduledEvent {
 mod scheduler_tests {
     use std::thread;
     use std::time::Duration;
+    use crate::ga::genetic_algorithm::DROP_THRESHOLD;
     use crate::scheduler::{Event, ScheduledEvent};
 
     #[test]
     fn test_drop_threshold() {
         let event = Event { from: 0, to: 1, message: vec![] };
         let (sender, receiver) = std::sync::mpsc::channel();
-        ScheduledEvent::schedule_execution(event, Duration::from_millis(901), sender.clone());
-        thread::sleep(Duration::from_millis(1000));
+        ScheduledEvent::schedule_execution(event, Duration::from_millis(DROP_THRESHOLD as u64 + 1), sender.clone());
+        thread::sleep(Duration::from_millis(DROP_THRESHOLD as u64 + 500));
         let result = receiver.try_recv();
         assert!(result.is_err());
         let event = Event { from: 0, to: 1, message: vec![] };

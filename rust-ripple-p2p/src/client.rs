@@ -192,7 +192,10 @@ impl Client<'static> {
             None => {},
         }
 
-        tx.send(Message::text(json.to_string())).unwrap();
+        match tx.send(Message::text(json.to_string())) {
+            Ok(_) => {}
+            Err(_) => error!("Client closed!")
+        }
     }
 
     pub fn subscribe(tx: &Sender<Message>, id: &str, streams: Vec<&str>) {

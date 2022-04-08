@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use std::fmt::{Debug, Formatter};
+use itertools::{Itertools};
 use parking_lot::{Mutex, Condvar};
 use petgraph::Graph;
 use petgraph::prelude::NodeIndex;
@@ -87,8 +88,25 @@ impl NodeStates {
         self.node_states.iter().map(|state| state.last_validated_ledger.ledger_index).min().expect("node states is empty")
     }
 
+    /// Check if nodes with equal validated ledger index have equal hash
+    pub fn check_for_fork(&self) -> bool {
+        let index_hash_map = self.node_states.iter()
+            .map(|state| (state.last_validated_ledger.ledger_index, &state.last_validated_ledger.ledger_hash))
+            .into_group_map();
+        !index_hash_map.iter().all(|x| x.1.iter().all_equal())
+    }
+
+    /// Liveness is at risk if one or more nodes stop validating, while the rest continues
+    pub fn check_liveness(&self) -> bool {
+        self.max_validated_ledger() - self.min_validated_ledger() < 2
+    }
+
     pub fn max_validated_ledger(&self) -> u32 {
         self.node_states.iter().map(|state| state.last_validated_ledger.ledger_index).max().expect("node states is empty")
+    }
+
+    pub fn validated_ledgers(&self) -> Vec<u32> {
+        self.node_states.iter().map(|state| state.last_validated_ledger.ledger_index).collect()
     }
 
     pub fn total_number_of_failed_consensus_rounds(&self) -> u32 {
@@ -121,35 +139,28 @@ impl NodeStates {
         let node_index = self.dependency_graph.add_node(dependency_event.clone());
         let dependency_node = DependencyNode { event: dependency_event, index: node_index };
 
-        let mut receiver_node_state = self.node_states[ripple_message.receiver_index()].clone();
-        let mut sender_node_state = self.node_states[ripple_message.sender_index()].clone();
-
-        if let Some(pos) = sender_node_state.unreceived_message_sends
+        // Match sender's latest message sent to this receive if possible
+        if let Some(pos) = self.node_states[ripple_message.sender_index()].unreceived_message_sends
             .iter()
             .position(|x| x.0 == ripple_message)
         {
-            let (_, dependency_node) = sender_node_state.unreceived_message_sends.remove(pos);
+            let (_, dependency_node) = self.node_states[ripple_message.sender_index()].unreceived_message_sends.remove(pos);
             match dependency_node {
                 None => {}
                 Some(node) => { self.dependency_graph.add_edge(node.index, node_index, ()); }
             }
         }
 
-        match receiver_node_state.latest_message_received {
+        match &self.node_states[ripple_message.receiver_index()].latest_message_received {
             None => {}
             Some(receive_dependency) => { self.dependency_graph.add_edge(receive_dependency.index, node_index, ()); }
         }
-
-        receiver_node_state.latest_message_received = Some(dependency_node);
-
-        self.node_states[ripple_message.receiver_index()] = receiver_node_state;
-        self.node_states[ripple_message.sender_index()] = sender_node_state;
+        self.node_states[ripple_message.receiver_index()].latest_message_received = Some(dependency_node);
     }
 
     pub fn add_send_dependency(&mut self, ripple_message: RippleMessage) {
-        let mut sender_node_state = self.node_states[ripple_message.sender_index()].clone();
-        sender_node_state.unreceived_message_sends.push((ripple_message.clone(), sender_node_state.latest_message_received.clone()));
-        self.node_states[ripple_message.sender_index()] = sender_node_state;
+        let latest_message_received = self.node_states[ripple_message.sender_index()].latest_message_received.clone();
+        self.node_states[ripple_message.sender_index()].unreceived_message_sends.push((ripple_message.clone(), latest_message_received));
     }
 
     pub fn set_current_delays(&mut self, delays: DelaysGenotype) {
@@ -275,6 +286,10 @@ impl MutexNodeStates {
         self.node_states.lock().node_states.iter().map(|x| x.validated_transactions.len()).max().unwrap()
     }
 
+    pub fn get_min_unvalidated_transactions(&self) -> usize {
+        self.node_states.lock().node_states.iter().map(|x| x.unvalidated_transactions.len()).min().unwrap()
+    }
+
     pub fn get_unvalidated_transaction(&self, peer: usize) -> Vec<String> {
         self.node_states.lock().node_states[peer].unvalidated_transactions.clone()
     }
@@ -359,4 +374,43 @@ impl Debug for DependencyEvent {
 pub struct DependencyNode {
     pub event: DependencyEvent,
     pub index: NodeIndex,
+}
+
+#[cfg(test)]
+mod node_states_tests {
+    use crate::client::ValidatedLedger;
+    use crate::node_state::{NodeState, NodeStates};
+
+    #[test]
+    fn test_fork_check() {
+        let mut node_states = setup(3);
+        node_states.node_states[0].last_validated_ledger = create_validated_ledger(1, "1");
+        node_states.node_states[1].last_validated_ledger = create_validated_ledger(1, "1");
+        node_states.node_states[2].last_validated_ledger = create_validated_ledger(2, "2");
+        assert!(!node_states.check_for_fork());
+        node_states.node_states[1].last_validated_ledger = create_validated_ledger(2, "1");
+        assert!(node_states.check_for_fork());
+        node_states.node_states[2].last_validated_ledger = create_validated_ledger(3, "3");
+        assert!(!node_states.check_for_fork());
+    }
+
+    fn setup(peers: usize) -> NodeStates {
+        let mut node_state_vec = vec![NodeState::new(0); peers];
+        for i in 0..peers { node_state_vec[i as usize].peer = i as usize }
+        NodeStates::new(node_state_vec)
+    }
+
+    fn create_validated_ledger(ledger_index: u32, ledger_hash: &str) -> ValidatedLedger {
+        ValidatedLedger {
+            fee_base: 0,
+            ledger_index,
+            ledger_time: 0,
+            reserve_base: 0,
+            reserve_inc: 0,
+            txn_count: 0,
+            ledger_hash: ledger_hash.to_string(),
+            fee_ref: 0,
+            validated_ledgers: None
+        }
+    }
 }

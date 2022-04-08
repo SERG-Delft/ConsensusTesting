@@ -103,6 +103,7 @@ impl Collector {
                         _ => {},
                     }
                     execution_writer.write_all(message.to_string().as_bytes()).unwrap();
+                    execution_writer.flush().unwrap();
                 }
                 _ => {}
             }

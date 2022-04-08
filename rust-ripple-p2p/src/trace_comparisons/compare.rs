@@ -3,10 +3,13 @@ mod graph_comparisons {
     use std::collections::HashMap;
     use std::str;
     use std::fs;
-    use std::io::{BufRead, BufReader};
+    use std::fs::File;
+    use std::io::{BufRead, BufReader, Write};
     use std::ops::Range;
+    use std::path::Path;
     use chrono::MAX_DATETIME;
     use itertools::Itertools;
+    use petgraph::dot::{Config, Dot};
     use petgraph::Graph;
     use rand_distr::num_traits::Pow;
     use ged::approximate_edit_distance::DistanceScoring;
@@ -85,8 +88,15 @@ mod graph_comparisons {
     }
 
     #[test]
+    fn get_dot_file() {
+        let graphs = import_graphs("trace_graphs.txt", 1);
+        let mut file = File::create(Path::new("run.txt")).expect("Opening dot file failed");
+        file.write(format!("{:?}", Dot::with_config(&graphs[0].1, &[Config::EdgeNoLabel])).as_bytes()).unwrap();
+    }
+
+    #[test]
     fn trace_comparison() {
-        let graphs = import_graphs("trace_graphs.txt");
+        let graphs = import_graphs("trace_graphs.txt", 20);
         let number_of_different_delays = 4;
         let number_of_runs_per_delay = 5;
         println!("{}", number_of_different_delays);
@@ -135,12 +145,12 @@ mod graph_comparisons {
         println!("rand2 delay -> rand2 delay = {} +- {}", rand2_to_rand2_sims.iter().map(|x| x.1).sum::<f32>() / rand2_to_rand2_sims.len() as f32, calculate_std(&rand2_to_rand2_sims));
     }
 
-    fn import_graphs(filename: &str) -> Vec<(String, Graph<DependencyEvent, ()>)> {
+    fn import_graphs(filename: &str, num_graphs: usize) -> Vec<(String, Graph<DependencyEvent, ()>)> {
         let file = fs::File::open(filename)
             .expect("Something went wrong opening the file");
         let mut reader = BufReader::new(file);
         let mut graphs = vec![];
-        for i in 0..20 {
+        for i in 0..num_graphs {
             let mut delay_buf = vec![];
             reader.read_until(b'+', &mut delay_buf).expect("Reading until delimiter failed");
             let delay_string = match str::from_utf8(&delay_buf) {

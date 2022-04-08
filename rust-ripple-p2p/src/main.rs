@@ -5,7 +5,7 @@ use std::{env};
 use log::*;
 use env_logger;
 use lazy_static::lazy_static;
-use crate::container_manager::start_docker_containers;
+use crate::container_manager::{NodeKeys, start_docker_containers};
 
 mod app;
 mod protos;
@@ -44,8 +44,10 @@ fn main() {
     env_logger::Builder::new().parse_default_env().init();
 
     let unls: Vec<Vec<usize>> = get_unls(n, UnlType::Full);
+    println!("Unls: {:?}", unls);
 
     let node_keys = start_docker_containers(n, unls);
+    // let node_keys = get_static_node_keys();
 
     let app = app::App::new(n as u16, only_subscribe, node_keys);
 
@@ -59,7 +61,10 @@ fn main() {
 
 pub fn get_num_nodes() -> usize {
     let args: Vec<String> = env::args().collect();
-    (&args[1]).parse::<usize>().unwrap()
+    match (&args[1]).parse::<usize>() {
+        Ok(n) => n,
+        Err(_) => 5 // default 5 nodes
+    }
 }
 
 /// Configure UNL based on unl_type enum
@@ -80,14 +85,52 @@ pub fn get_unls(num_nodes: usize, unl_type: UnlType) -> Vec<Vec<usize>> {
             [g1, g2, g3].concat()
         }
         UnlType::Buggy => {
-            let overlap: usize = ((num_nodes as f64) * 0.4).ceil() as usize;
-            let isolated_nodes: usize = ((overlap as f64) * 0.4).ceil() as usize;
-            let g1 = vec![(0..(num_nodes - isolated_nodes)).collect(); num_nodes - overlap];
-            let g2 = vec![(0..num_nodes).collect(); overlap - isolated_nodes];
-            let g3 = vec![((num_nodes - overlap)..num_nodes).collect(); isolated_nodes];
+            let small_half = ((num_nodes as f64 * 0.5) - 0.5).ceil() as usize;
+            let big_half = num_nodes - small_half;
+            let overlap: usize = (((small_half as f64) * 0.4) - 0.00001).floor() as usize;
+            let big_isolated_unl = big_half - (overlap as f64 * 0.5).ceil() as usize;
+            let small_isolated_unl = small_half - (overlap as f64 * 0.5).floor() as usize;
+            let g1 = vec![(0..(big_isolated_unl + overlap)).collect(); big_isolated_unl];
+            let g2 = vec![(0..num_nodes).collect(); overlap];
+            let g3 = vec![((num_nodes - (small_isolated_unl + overlap))..num_nodes).collect(); small_isolated_unl];
             [g1, g2, g3].concat()
         }
     }
+}
+
+pub fn get_static_node_keys() -> Vec<NodeKeys> {
+    vec![
+        NodeKeys {
+            validation_key: "".to_string(),
+            validation_private_key: "".to_string(),
+            validation_public_key: "n9KGGaWqcLWHyitJYXLgtY7XakSz4oaGgRvPMUQ4Vpni8T9rWMy5".to_string(),
+            validation_seed: "shEmJgbQaVKZU5hufLJyAtdgBCqW4".to_string()
+        },
+        NodeKeys {
+            validation_key: "".to_string(),
+            validation_private_key: "".to_string(),
+            validation_public_key: "n9LhhwYhd7MciE3ZZwqwWmk911ERz5xpEFrjWdkPgm87qJRRaFdo".to_string(),
+            validation_seed: "sn3Vs66YsbqwQ1etJ5Q2SEXssdr6S".to_string()
+        },
+        NodeKeys {
+            validation_key: "".to_string(),
+            validation_private_key: "".to_string(),
+            validation_public_key: "n9KQ6C4uJUoKmAqmr1kinbbYAoLZAuwjEsZmKGVdMUu7eQs1nqJc".to_string(),
+            validation_seed: "sascZVmiLA4keNfXx1naPbuceeA9q".to_string()
+        },
+        NodeKeys {
+            validation_key: "".to_string(),
+            validation_private_key: "".to_string(),
+            validation_public_key: "n9LJJUgZ8Jyw6Ea5mX3BPRFw6poPPUGRtN6gxiz3t1bCqZ8qCAvt".to_string(),
+            validation_seed: "ssJ6gd6LeBn2AiddUF42W6s6Ud9yR".to_string()
+        },
+        NodeKeys {
+            validation_key: "".to_string(),
+            validation_private_key: "".to_string(),
+            validation_public_key: "n9MfqaoBG4UFBJdGPy7ir6mZwb8R3RRSuVi79npf3brQ1zf5Jhpt".to_string(),
+            validation_seed: "sp1xJMz9K68gU2JbDuSygbiyweTWj".to_string()
+        },
+    ]
 }
 
 #[allow(unused)]
@@ -101,19 +144,19 @@ pub enum UnlType {
 mod config_tests {
     use crate::{get_unls, UnlType};
 
-    const FULL_5_UNL: Vec<Vec<i32>> = vec![
-        vec![0, 1, 2, 3, 4],
-        vec![0, 1, 2, 3, 4],
-        vec![0, 1, 2, 3, 4],
-        vec![0, 1, 2, 3, 4],
-        vec![0, 1, 2, 3, 4],
+    const FULL_5_UNL: [[usize; 5]; 5] = [
+        [0, 1, 2, 3, 4],
+        [0, 1, 2, 3, 4],
+        [0, 1, 2, 3, 4],
+        [0, 1, 2, 3, 4],
+        [0, 1, 2, 3, 4],
     ];
 
     #[test]
     fn unl_full_test() {
         let num_nodes = 5;
         let result = get_unls(num_nodes, UnlType::Full);
-        assert_eq!(result, FULL_5_UNL);
+        assert_eq!(result.as_slice(), FULL_5_UNL);
     }
 
     #[test]
@@ -147,32 +190,44 @@ mod config_tests {
     fn unl_buggy_test() {
         let result = get_unls(5, UnlType::Buggy);
         assert_eq!(result, vec![
-            vec![0, 1, 2, 3],
-            vec![0, 1, 2, 3],
-            vec![0, 1, 2, 3],
-            vec![0, 1, 2, 3, 4],
+            vec![0, 1, 2],
+            vec![0, 1, 2],
+            vec![0, 1, 2],
+            vec![3, 4],
             vec![3, 4],
         ]);
         let result = get_unls(7, UnlType::Buggy);
         assert_eq!(result, vec![
-            vec![0, 1, 2, 3, 4],
-            vec![0, 1, 2, 3, 4],
-            vec![0, 1, 2, 3, 4],
-            vec![0, 1, 2, 3, 4],
+            vec![0, 1, 2, 3],
+            vec![0, 1, 2, 3],
+            vec![0, 1, 2, 3],
             vec![0, 1, 2, 3, 4, 5, 6],
-            vec![4, 5, 6],
-            vec![4, 5, 6]
+            vec![3, 4, 5, 6],
+            vec![3, 4, 5, 6],
+            vec![3, 4, 5, 6]
         ]);
         let result = get_unls(8, UnlType::Buggy);
         assert_eq!(result, vec![
-            vec![0, 1, 2, 3, 4, 5],
-            vec![0, 1, 2, 3, 4, 5],
-            vec![0, 1, 2, 3, 4, 5],
-            vec![0, 1, 2, 3, 4, 5],
+            vec![0, 1, 2, 3],
+            vec![0, 1, 2, 3],
+            vec![0, 1, 2, 3],
             vec![0, 1, 2, 3, 4, 5, 6, 7],
-            vec![0, 1, 2, 3, 4, 5, 6, 7],
-            vec![4, 5, 6, 7],
-            vec![4, 5, 6, 7]
+            vec![3, 4, 5, 6, 7],
+            vec![3, 4, 5, 6, 7],
+            vec![3, 4, 5, 6, 7],
+            vec![3, 4, 5, 6, 7]
+        ]);
+        let result = get_unls(9, UnlType::Buggy);
+        assert_eq!(result, vec![
+            vec![0, 1, 2, 3, 4],
+            vec![0, 1, 2, 3, 4],
+            vec![0, 1, 2, 3, 4],
+            vec![0, 1, 2, 3, 4],
+            vec![0, 1, 2, 3, 4, 5, 6, 7, 8],
+            vec![4, 5, 6, 7, 8],
+            vec![4, 5, 6, 7, 8],
+            vec![4, 5, 6, 7, 8],
+            vec![4, 5, 6, 7, 8]
         ]);
     }
 }
