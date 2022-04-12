@@ -24,7 +24,7 @@ impl Fitness for DelayFitness {
 
     #[allow(unstable_name_collisions)]
     fn abs_diff(&self, other: &Self) -> Self {
-        Self { value: u32::abs_diff(&self.value, &other.value) }
+        Self { value: u32::abs_diff(self.value, other.value) }
     }
 }
 

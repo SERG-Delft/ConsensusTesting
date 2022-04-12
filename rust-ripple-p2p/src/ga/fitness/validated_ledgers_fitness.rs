@@ -23,7 +23,7 @@ impl Fitness for ValidatedLedgersFitness {
 
     #[allow(unstable_name_collisions)]
     fn abs_diff(&self, other: &Self) -> Self {
-        let value = u32::abs_diff(&self.value, &other.value);
+        let value = u32::abs_diff(self.value, other.value);
         Self { value }
     }
 }

@@ -15,7 +15,7 @@ use genevo::genetic::{AsScalar, Fitness, FitnessFunction};
 use std::fmt::{Display};
 use std::time::{Duration as TimeDuration};
 use log::debug;
-use crate::ga::genetic_algorithm::{DelayMapPhenotype, DelaysGenotype};
+use crate::ga::genetic_algorithm::{ExtendedGenotype, ExtendedPhenotype};
 use crate::node_state::MutexNodeStates;
 use crate::test_harness::TestHarness;
 
@@ -31,28 +31,26 @@ pub trait ExtendedFitness: Fitness + AsScalar + Clone + Send + Sync + Display {
 
 /// Fitness function communicates with scheduler handler for calculating and storing fitness of solutions.
 #[derive(Clone, Debug)]
-pub struct FitnessCalculation<T> where T: ExtendedFitness + Clone {
-    pub(crate) fitness_values: Arc<RwLock<HashMap<DelaysGenotype, T>>>,
-    pub(crate) sender: Sender<DelaysGenotype>,
+pub struct FitnessCalculation<T, G> where T: ExtendedFitness + Clone, G: ExtendedGenotype {
+    pub(crate) fitness_values: Arc<RwLock<HashMap<G, T>>>,
+    pub(crate) sender: Sender<G>,
 }
 
-impl<T> FitnessFunction<DelaysGenotype, T> for FitnessCalculation<T>
-    where T: ExtendedFitness
+impl<T, G> FitnessFunction<G, T> for FitnessCalculation<T, G>
+    where T: ExtendedFitness, G: ExtendedGenotype
 {
-    fn fitness_of(&self, delays_genotype: &DelaysGenotype) -> T {
+    fn fitness_of(&self, delays_genotype: &G) -> T {
         let mut sent_to_handler = false;
         loop {
             {
                 match self.fitness_values.read().unwrap().get(delays_genotype) {
                     Some(fitness) => {
                         println!("Fitness found: {:?} for genotype: {:?}", fitness, delays_genotype);
-                        DelayMapPhenotype::from(delays_genotype).display_delays_by_message();
                         return fitness.clone();
                     }
                     None => {
                         if !sent_to_handler {
                             println!("Fitness not found for genotype: {:?}", delays_genotype);
-                            DelayMapPhenotype::from(delays_genotype).display_delays_by_message();
                             self.sender.send(delays_genotype.clone()).expect("Fitness calculator receiver failed");
                         }
                         sent_to_handler = true;
@@ -83,33 +81,34 @@ pub trait SchedulerHandlerTrait {
 /// Scheduler handler is in charge of communicating new schedules to the scheduler
 /// Fitness functions send to this handler to request fitness values for untested solutions
 /// Calculated fitness values are stored in the fitness_values map and fitness functions will first check there
-pub struct SchedulerHandler<T>
-    where T: ExtendedFitness
+pub struct SchedulerHandler<T, G, P>
+    where T: ExtendedFitness, G: ExtendedGenotype, P: ExtendedPhenotype<G>
 {
-    scheduler_sender: Sender<DelayMapPhenotype>,
+    scheduler_sender: Sender<P>,
     scheduler_receiver: Receiver<T>,
-    fitness_receiver: Receiver<DelaysGenotype>,
-    fitness_values: Arc<RwLock<HashMap<DelaysGenotype, T>>>,
+    fitness_receiver: Receiver<G>,
+    fitness_values: Arc<RwLock<HashMap<G, T>>>,
 }
 
-impl<T> SchedulerHandler<T>
-    where T: ExtendedFitness
+impl<T, G, P> SchedulerHandler<T, G, P>
+    where T: ExtendedFitness, G: ExtendedGenotype, P: ExtendedPhenotype<G>
 {
     pub fn new(
-        scheduler_sender: Sender<DelayMapPhenotype>,
+        scheduler_sender: Sender<P>,
         scheduler_receiver: Receiver<T>,
-        fitness_receiver: Receiver<DelaysGenotype>,
-        fitness_values: Arc<RwLock<HashMap<DelaysGenotype, T>>>,
+        fitness_receiver: Receiver<G>,
+        fitness_values: Arc<RwLock<HashMap<G, T>>>,
     ) -> Self {
         SchedulerHandler { scheduler_sender, scheduler_receiver, fitness_receiver, fitness_values }
     }
 }
 
-impl<T> SchedulerHandlerTrait for SchedulerHandler<T>
-    where T: ExtendedFitness
+impl<T, G, P> SchedulerHandlerTrait for SchedulerHandler<T, G, P>
+    where T: ExtendedFitness, G: ExtendedGenotype, P: ExtendedPhenotype<G>
 {
     fn run(self) {
-        let mut current_delays_genotype = DelaysGenotype::default();
+        let mut current_delays_genotype = G::default();
+        self.fitness_values.write().unwrap().insert(current_delays_genotype.clone(), T::zero());
         loop {
             // Receive a new individual to test from a fitness function
             match self.fitness_receiver.recv() {
@@ -123,13 +122,13 @@ impl<T> SchedulerHandlerTrait for SchedulerHandler<T>
             }
             // Send the requested individual to the scheduler
             debug!("delay genome before send: {:?}", current_delays_genotype);
-            self.scheduler_sender.send(DelayMapPhenotype::from(current_delays_genotype.as_ref()))
+            self.scheduler_sender.send(P::from_genes(&current_delays_genotype))
                 .expect("Scheduler receiver failed");
             // Receive fitness from scheduler
             match self.scheduler_receiver.recv() {
-                Ok(duration) => {
-                    debug!("Received fitness of {:?} for genome: {:?}", duration, current_delays_genotype);
-                    self.fitness_values.write().unwrap().insert(current_delays_genotype.clone(), duration);
+                Ok(fitness) => {
+                    debug!("Received fitness of {:?} for genome: {:?}", fitness, current_delays_genotype);
+                    self.fitness_values.write().unwrap().insert(current_delays_genotype.clone(), fitness);
                 }
                 Err(_) => {}
             }

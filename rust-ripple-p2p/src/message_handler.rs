@@ -1,5 +1,6 @@
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
+use byteorder::{BigEndian, ByteOrder};
 use crate::protos::ripple::{TMManifest, TMPing, TMCluster, TMEndpoints, TMTransaction, TMGetLedger, TMLedgerData, TMProposeSet, TMStatusChange, TMHaveTransactionSet, TMValidation, TMGetObjectByHash, TMGetShardInfo, TMShardInfo, TMGetPeerShardInfo, TMPeerShardInfo, TMValidatorList};
 use serde_json;
 use crate::deserialization::{deserialize_validation};
@@ -31,6 +32,40 @@ pub fn parse_protocol_message(message_type: u16, payload: &[u8]) -> RippleMessag
 
 pub fn parse_message<T: protobuf::Message>(payload: &[u8]) -> T {
     return protobuf::Message::parse_from_bytes(&payload).unwrap()
+}
+
+pub fn write_message<T: protobuf::Message>(message_type: u16, message: T) -> Vec<u8> {
+    let payload = match message.write_to_bytes() {
+        Ok(res) => res,
+        Err(err) => panic!("Writing protobuf message to bytes failed: {}", err)
+    };
+    let mut payload_size_buf = [0;4];
+    BigEndian::write_u32(&mut payload_size_buf, payload.len() as u32);
+    let mut message_type_buf = [0;2];
+    BigEndian::write_u16(&mut message_type_buf, message_type);
+    payload_size_buf.iter().copied().chain(message_type_buf.iter().copied()).chain(payload.into_iter()).collect()
+}
+
+pub fn rmo_to_bytes(rmo: RippleMessageObject) -> Vec<u8> {
+    match rmo {
+        RippleMessageObject::TMManifest(manifest) => write_message(2, manifest),
+        RippleMessageObject::TMPing(ping) => write_message(3, ping),
+        RippleMessageObject::TMCluster(cluster) => write_message(5, cluster),
+        RippleMessageObject::TMEndpoints(endpoints) => write_message(15, endpoints),
+        RippleMessageObject::TMTransaction(transaction) => write_message(30, transaction),
+        RippleMessageObject::TMGetLedger(get_ledger) => write_message(31, get_ledger),
+        RippleMessageObject::TMLedgerData(ledger_data) => write_message(32, ledger_data),
+        RippleMessageObject::TMProposeSet(propose_set) => write_message(33, propose_set),
+        RippleMessageObject::TMStatusChange(status_change) => write_message(34, status_change),
+        RippleMessageObject::TMHaveTransactionSet(have_transaction_set) => write_message(35, have_transaction_set),
+        RippleMessageObject::TMValidation(validation) => write_message(41, validation),
+        RippleMessageObject::TMGetObjectByHash(get_object_by_hash) => write_message(42, get_object_by_hash),
+        RippleMessageObject::TMGetShardInfo(get_shard_info) => write_message(50, get_shard_info),
+        RippleMessageObject::TMShardInfo(shard_info) => write_message(51, shard_info),
+        RippleMessageObject::TMGetPeerShardInfo(get_peer_shard_info) => write_message(52, get_peer_shard_info),
+        RippleMessageObject::TMPeerShardInfo(peer_shard_info) => write_message(53, peer_shard_info),
+        RippleMessageObject::TMValidatorList(validator_list) => write_message(54, validator_list),
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -81,6 +116,12 @@ impl RippleMessageObject {
 impl Hash for RippleMessageObject {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.message_type().hash(state);
+    }
+}
+
+impl Default for RippleMessageObject {
+    fn default() -> Self {
+        RippleMessageObject::TMProposeSet(TMProposeSet::default())
     }
 }
 
