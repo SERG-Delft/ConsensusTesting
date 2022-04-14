@@ -107,28 +107,28 @@ impl<T, G, P> SchedulerHandlerTrait for SchedulerHandler<T, G, P>
     where T: ExtendedFitness, G: ExtendedGenotype, P: ExtendedPhenotype<G>
 {
     fn run(self) {
-        let mut current_delays_genotype = G::default();
-        self.fitness_values.write().unwrap().insert(current_delays_genotype.clone(), T::zero());
+        let mut current_individual = G::default();
+        self.fitness_values.write().unwrap().insert(current_individual.clone(), T::zero());
         loop {
             // Receive a new individual to test from a fitness function
             match self.fitness_receiver.recv() {
-                Ok(delays_genotype) => {
-                    debug!("Fitness function wants fitness for: {:?}", delays_genotype);
-                    if current_delays_genotype != delays_genotype && self.fitness_values.read().unwrap().contains_key(&current_delays_genotype) {
-                        current_delays_genotype = delays_genotype;
+                Ok(individual) => {
+                    debug!("Fitness function wants fitness for: {:?}", individual);
+                    if current_individual != individual && self.fitness_values.read().unwrap().contains_key(&current_individual) {
+                        current_individual = individual;
                     }
                 }
                 Err(_) => {}
             }
             // Send the requested individual to the scheduler
-            debug!("delay genome before send: {:?}", current_delays_genotype);
-            self.scheduler_sender.send(P::from_genes(&current_delays_genotype))
+            debug!("Individual before send: {:?}", current_individual);
+            self.scheduler_sender.send(P::from_genes(&current_individual))
                 .expect("Scheduler receiver failed");
             // Receive fitness from scheduler
             match self.scheduler_receiver.recv() {
                 Ok(fitness) => {
-                    debug!("Received fitness of {:?} for genome: {:?}", fitness, current_delays_genotype);
-                    self.fitness_values.write().unwrap().insert(current_delays_genotype.clone(), fitness);
+                    debug!("Received fitness of {:?} for individual: {:?}", fitness, current_individual);
+                    self.fitness_values.write().unwrap().insert(current_individual.clone(), fitness);
                 }
                 Err(_) => {}
             }

@@ -1,8 +1,9 @@
 use std::marker::PhantomData;
 use genevo::operator::{CrossoverOp, SelectionOp};
 use genevo::operator::prelude::{MaximizeSelector, MultiPointCrossBreeder, MultiPointCrossover, RouletteWheelSelector};
+use crate::ga::delay_encoding::DelaysGenotype;
 use crate::ga::fitness::ExtendedFitness;
-use crate::ga::genetic_algorithm::{CurrentFitness, DelaysGenotype, ExtendedGenotype, num_genes};
+use crate::ga::genetic_algorithm::{CurrentFitness, ExtendedGenotype, num_genes};
 use crate::ga::priority_encoding::{Priority, PriorityGenotype};
 use crate::NUM_NODES;
 

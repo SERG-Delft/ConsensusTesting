@@ -1,5 +1,5 @@
 pub mod delay_scheduler;
-pub mod inbox_scheduler;
+pub mod priority_scheduler;
 
 use std::cmp::Ordering;
 use log::{error};
@@ -9,7 +9,7 @@ use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use chrono::Utc;
 use tokio::sync::mpsc::{Sender as TokioSender, Receiver as TokioReceiver};
-use std::sync::mpsc::{Sender as STDSender, Receiver as STDReceiver};
+use std::sync::mpsc::{Sender as STDSender, Receiver as STDReceiver, channel};
 use std::thread;
 use parking_lot::{Mutex, Condvar};
 use byteorder::{BigEndian, ByteOrder};
@@ -24,7 +24,7 @@ use crate::test_harness::TestHarness;
 type P2PConnections = HashMap<usize, HashMap<usize, PeerChannel>>;
 
 pub trait Scheduler: Sized {
-    type IndividualPhenotype;
+    type IndividualPhenotype: Default + Send + 'static;
 
     fn start(self, receiver: TokioReceiver<Event>,
              ga_sender: STDSender<CurrentFitness>,
@@ -44,10 +44,30 @@ pub trait Scheduler: Sized {
         thread::spawn(move || Self::update_current_round(node_states_clone, current_round_clone));
         thread::spawn(move || Self::update_latest_validated_ledger(node_states_clone_3, latest_validated_ledger_clone));
         thread::spawn(move || Self::harness_controller(ga_sender, client_senders, latest_validated_ledger_clone_2, current_round_clone_2, run_clone, node_states_clone_2));
-        self.start_extension(receiver, ga_receiver);
+
+        // self.start_extension(receiver, ga_receiver);
+        let (event_schedule_sender, event_schedule_receiver) = channel();
+        let run_clone = self.get_state().run.clone();
+        let node_states_clone = self.get_state().node_states.clone();
+        let node_states_clone_2 = self.get_state().node_states.clone();
+        let current_priorities = Arc::new(Mutex::new(Self::IndividualPhenotype::default()));
+        let current_priorities_2 = current_priorities.clone();
+        thread::spawn(move || Self::schedule_controller(receiver, run_clone, current_priorities, node_states_clone, event_schedule_sender));
+        thread::spawn(move || Self::listen_to_ga(current_priorities_2, ga_receiver, node_states_clone_2));
+        loop {
+            match event_schedule_receiver.recv() {
+                Ok(event) => self.execute_event(event),
+                Err(_) => panic!("Scheduler sender failed")
+            }
+        }
     }
 
-    fn start_extension(self, receiver: TokioReceiver<Event>, ga_receiver: STDReceiver<Self::IndividualPhenotype>);
+    fn schedule_controller(receiver: TokioReceiver<Event>,
+                           run: Arc<(Mutex<bool>, Condvar)>,
+                           current_individual: Arc<Mutex<Self::IndividualPhenotype>>,
+                           node_states: Arc<MutexNodeStates>,
+                           event_schedule_sender: STDSender<RMOEvent>
+    );
 
     fn listen_to_ga(current_individual: Arc<Mutex<Self::IndividualPhenotype>>, ga_receiver: STDReceiver<Self::IndividualPhenotype>, node_states: Arc<MutexNodeStates>);
 
@@ -163,6 +183,19 @@ pub struct SchedulerState {
     pub node_states: Arc<MutexNodeStates>,
 }
 
+impl SchedulerState {
+    pub fn new(p2p_connections: P2PConnections, collector_sender: STDSender<Box<RippleMessage>>, node_states: Arc<MutexNodeStates>) -> Self {
+        SchedulerState {
+            p2p_connections,
+            collector_sender,
+            run: Arc::new((Mutex::new(false), Condvar::new())),
+            latest_validated_ledger: Arc::new((Mutex::new(0), Condvar::new())),
+            current_round: Arc::new((Mutex::new(0), Condvar::new())),
+            node_states,
+        }
+    }
+}
+
 /// Struct for sending from a peer to another peer
 pub struct PeerChannel {
     sender: TokioSender<Vec<u8>>,
@@ -198,7 +231,7 @@ impl Event {
     }
 }
 
-#[derive(Default, Clone, PartialEq)]
+#[derive(Default, Clone, PartialEq, Debug)]
 pub struct RMOEvent {
     pub from: usize,
     pub to: usize,
@@ -243,9 +276,8 @@ mod scheduler_tests {
     use std::time::Duration;
     use crate::ga::genetic_algorithm::DROP_THRESHOLD;
     use crate::message_handler::RippleMessageObject;
-    use crate::message_handler::RippleMessageObject::TMTransaction;
     use crate::protos::ripple::{TMTransaction as PBTransaction, TransactionStatus};
-    use crate::scheduler::{Event, RMOEvent, ScheduledEvent};
+    use crate::scheduler::{Event, RMOEvent};
     use crate::scheduler::delay_scheduler::ScheduledEvent;
 
     #[test]
@@ -261,7 +293,6 @@ mod scheduler_tests {
 
     #[test]
     fn test_drop_threshold() {
-        let event = Event { from: 0, to: 1, message: vec![] };
         let rmo_event = RMOEvent { from: 0, to: 1, message: RippleMessageObject::TMTransaction(PBTransaction::new()) };
         let (sender, receiver) = std::sync::mpsc::channel();
         ScheduledEvent::schedule_execution(rmo_event, Duration::from_millis(DROP_THRESHOLD as u64 + 1), sender.clone());

@@ -7,7 +7,7 @@ use petgraph::Graph;
 use petgraph::prelude::NodeIndex;
 use crate::client::{PeerServerStateObject, ServerStateObject, ValidatedLedger};
 use crate::collector::RippleMessage;
-use crate::ga::genetic_algorithm::DelaysGenotype;
+use crate::ga::delay_encoding::DelaysGenotype;
 
 /// Contains the state for a particular node at a particular time
 #[derive(Clone, Debug)]

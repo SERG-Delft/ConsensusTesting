@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use std::sync::mpsc::{Sender as STDSender, Receiver as STDReceiver, channel};
+use std::sync::mpsc::{Sender as STDSender, Receiver as STDReceiver};
 use tokio::sync::mpsc::{Receiver as TokioReceiver};
 use std::thread;
 use std::time::Duration;
@@ -8,7 +8,8 @@ use genevo::genetic::{Phenotype};
 use log::{debug, error, trace};
 use parking_lot::{Condvar, Mutex};
 use crate::collector::RippleMessage;
-use crate::ga::genetic_algorithm::{ConsensusMessageType, DelayMapPhenotype, DROP_THRESHOLD};
+use crate::ga::genetic_algorithm::{ConsensusMessageType, DROP_THRESHOLD};
+use crate::ga::delay_encoding::DelayMapPhenotype;
 use crate::message_handler::RippleMessageObject;
 use crate::node_state::MutexNodeStates;
 use crate::scheduler::{Event, P2PConnections, RMOEvent, Scheduler, SchedulerState};
@@ -23,25 +24,23 @@ pub struct DelayScheduler {
 }
 
 impl DelayScheduler {
+    #[allow(unused)]
     pub fn new(p2p_connections: P2PConnections, collector_sender: STDSender<Box<RippleMessage>>, node_states: Arc<MutexNodeStates>) -> Self {
         DelayScheduler {
-            state: SchedulerState {
-                p2p_connections,
-                collector_sender,
-                run: Arc::new((Mutex::new(false), Condvar::new())),
-                latest_validated_ledger: Arc::new((Mutex::new(0), Condvar::new())),
-                current_round: Arc::new((Mutex::new(0), Condvar::new())),
-                node_states,
-            }
+            state: SchedulerState::new(p2p_connections, collector_sender, node_states)
         }
     }
+}
+
+impl Scheduler for DelayScheduler {
+    type IndividualPhenotype = DelayMapPhenotype;
 
     /// Wait for new messages delivered by peers
     /// If the network is not stable, immediately relay messages
     /// Else schedule messages with a certain delay
     fn schedule_controller(mut receiver: TokioReceiver<Event>,
                            run: Arc<(Mutex<bool>, Condvar)>,
-                           current_delays: Arc<Mutex<DelayMapPhenotype>>,
+                           current_delays: Arc<Mutex<Self::IndividualPhenotype>>,
                            node_states: Arc<MutexNodeStates>,
                            event_schedule_sender: STDSender<RMOEvent>
     )
@@ -76,27 +75,6 @@ impl DelayScheduler {
                     )
                 },
                 None => error!("Peer senders failed")
-            }
-        }
-    }
-}
-
-impl Scheduler for DelayScheduler {
-    type IndividualPhenotype = DelayMapPhenotype;
-
-    fn start_extension(self, receiver: TokioReceiver<Event>, ga_receiver: STDReceiver<Self::IndividualPhenotype>) {
-        let (event_schedule_sender, event_schedule_receiver) = channel();
-        let run_clone = self.get_state().run.clone();
-        let node_states_clone = self.get_state().node_states.clone();
-        let node_states_clone_2 = self.get_state().node_states.clone();
-        let current_delays = Arc::new(Mutex::new(Self::IndividualPhenotype::default()));
-        let current_delays_2 = current_delays.clone();
-        thread::spawn(move || Self::schedule_controller(receiver, run_clone, current_delays, node_states_clone, event_schedule_sender));
-        thread::spawn(move || Self::listen_to_ga(current_delays_2, ga_receiver, node_states_clone_2));
-        loop {
-            match event_schedule_receiver.recv() {
-                Ok(event) => self.execute_event(event),
-                Err(_) => panic!("Scheduler sender failed")
             }
         }
     }

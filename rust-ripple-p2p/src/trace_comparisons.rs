@@ -6,8 +6,9 @@ use std::sync::mpsc::{Sender, Receiver};
 use std::thread;
 use rand::distributions::Uniform;
 use rand::Rng;
+use crate::ga::delay_encoding::DelayMapPhenotype;
 use crate::ga::fitness::ExtendedFitness;
-use crate::ga::genetic_algorithm::{CurrentFitness, DelayMapPhenotype, ExtendedPhenotype, num_genes};
+use crate::ga::genetic_algorithm::{CurrentFitness, ExtendedPhenotype, num_genes};
 use crate::node_state::MutexNodeStates;
 
 mod compare;
@@ -179,17 +180,17 @@ pub fn run_trace_graph_creation<T>(scheduler_sender: Sender<DelayMapPhenotype>, 
     where T: ExtendedFitness + 'static
 {
     let mut scheduler_handler = TraceGraphSchedulerHandler::new(scheduler_sender, scheduler_receiver);
-    thread::spawn(move ||scheduler_handler.trace_graph_creation(node_states));
+    thread::spawn(move || scheduler_handler.trace_graph_creation(node_states));
 }
 
 #[allow(unused)]
 pub fn run_fitness_comparison(scheduler_sender: Sender<DelayMapPhenotype>, scheduler_receiver: Receiver<CurrentFitness>) {
     let mut scheduler_handler = FitnessComparisonSchedulerHandler::new(scheduler_sender, scheduler_receiver);
-    thread::spawn(move ||scheduler_handler.fitness_comparison());
+    thread::spawn(move || scheduler_handler.fitness_comparison());
 }
 
 #[allow(unused)]
 pub fn run_no_delays(scheduler_sender: Sender<DelayMapPhenotype>, scheduler_receiver: Receiver<CurrentFitness>, number_of_tests: usize) {
     let mut scheduler_handler = NoDelaySchedulerHandler::new(scheduler_sender, scheduler_receiver, number_of_tests);
-    thread::spawn(move ||scheduler_handler.run());
+    thread::spawn(move || scheduler_handler.run());
 }
