@@ -37,14 +37,14 @@ impl Client<'static> {
                 let message = match rx.recv() {
                     Ok(m) => m,
                     Err(e) => {
-                        debug!("Send Loop: {:?}", e);
+                        trace!("Send Loop: {:?}", e);
                         return;
                     }
                 };
                 // Send the message
                 match sender.send_message(&message) {
                     Ok(()) => {
-                        debug!("Send Loop sent message: {:?}", message);
+                        trace!("Send Loop sent message: {:?}", message);
                         ()
                     },
                     Err(e) => {
@@ -62,7 +62,7 @@ impl Client<'static> {
                 let message = match message {
                     Ok(m) => m,
                     Err(e) => {
-                        debug!("Receive Loop erred: {:?}", e);
+                        warn!("Receive Loop erred: {:?}", e);
                         let _ = tx_1.send(Message::from(OwnedMessage::Close(None)));
                         return;
                     }
@@ -81,7 +81,7 @@ impl Client<'static> {
                                             Err(_) => { println!("Could not parse peer{} server_state object: {}", peer, text); }
                                         }
                                     }
-                                    Some("Test harness") => debug!("peer{} Test harness: {}", peer, text.as_str()),
+                                    Some("Test harness") => trace!("peer{} Test harness: {}", peer, text.as_str()),
                                     None => match serde_json::from_value::<SubscriptionObject>(value) {
                                         Ok(subscription_object) => {
                                             subscription_collector_sender.send(PeerSubscriptionObject::new(peer, subscription_object)).unwrap();
@@ -91,10 +91,10 @@ impl Client<'static> {
                                     _ => {}
                                 }
                             },
-                            _ => { debug!("Unknown client message from peer: {}", peer) }
+                            _ => { warn!("Unknown client message from peer: {}", peer) }
                         }
                     },
-                    _ => debug!("Receive Loop: {:?}", message)
+                    _ => warn!("Receive Loop: {:?}", message)
                 }
             }
         });
@@ -188,7 +188,7 @@ impl Client<'static> {
             "fee_mult_max": 10000000,
         });
         match transaction.sequence {
-            Some(sequence) => debug!("Sending transaction: {}", sequence),
+            Some(sequence) => trace!("Sending transaction: {}", sequence),
             None => {},
         }
 
