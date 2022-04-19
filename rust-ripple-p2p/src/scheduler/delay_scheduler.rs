@@ -57,7 +57,7 @@ impl Scheduler for DelayScheduler {
                             node_states.add_send_dependency(*RippleMessage::new(format!("Ripple{}", rmo_event.from + 1), format!("Ripple{}", rmo_event.to + 1), Utc::now(), rmo_event.message.clone()));
                         }
                         let message_type_map = current_delays.lock().delay_map.get(&rmo_event.from).unwrap().get(&rmo_event.to).unwrap().clone();
-                        ms = match rmo_event.message {
+                        ms = match &rmo_event.message {
                             RippleMessageObject::TMValidation(_) => message_type_map.get(&ConsensusMessageType::TMValidation).unwrap().clone(),
                             RippleMessageObject::TMProposeSet(proposal) => {
                                 match proposal.get_proposeSeq() {

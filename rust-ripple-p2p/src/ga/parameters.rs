@@ -6,7 +6,6 @@ use crate::ga::encoding::{ExtendedGenotype, num_genes};
 use crate::ga::fitness::ExtendedFitness;
 use crate::ga::genetic_algorithm::{ConsensusMessageType, CurrentFitness};
 use crate::ga::encoding::priority_encoding::{Priority, PriorityGenotype};
-use crate::NUM_NODES;
 
 /// Parameters for the GA
 #[allow(unused)]

@@ -89,24 +89,24 @@ impl Scheduler for PriorityScheduler {
                             node_states.add_send_dependency(*RippleMessage::new(format!("Ripple{}", rmo_event.from + 1), format!("Ripple{}", rmo_event.to + 1), Utc::now(), rmo_event.message.clone()));
                             let message_type_map = current_individual.lock().priority_map.get(&rmo_event.from).unwrap().get(&rmo_event.to).unwrap().clone();
 
-                            let priority = match rmo_event.message {
-                                RippleMessageObject::TMValidation(_) => message_type_map.get(&ConsensusMessageType::TMValidation).unwrap().clone(),
-                                RippleMessageObject::TMProposeSet(&proposal) => {
+                            let priority = match &rmo_event.message {
+                                RippleMessageObject::TMValidation(_) => message_type_map.get(&ConsensusMessageType::TMValidation).unwrap(),
+                                RippleMessageObject::TMProposeSet(proposal) => {
                                     match proposal.get_proposeSeq() {
-                                        0 => message_type_map.get(&ConsensusMessageType::TMProposeSet0).unwrap().clone(),
-                                        1 => message_type_map.get(&ConsensusMessageType::TMProposeSet1).unwrap().clone(),
-                                        2 => message_type_map.get(&ConsensusMessageType::TMProposeSet2).unwrap().clone(),
-                                        3 => message_type_map.get(&ConsensusMessageType::TMProposeSet3).unwrap().clone(),
-                                        4 => message_type_map.get(&ConsensusMessageType::TMProposeSet4).unwrap().clone(),
-                                        5 => message_type_map.get(&ConsensusMessageType::TMProposeSet5).unwrap().clone(),
-                                        4294967295 => message_type_map.get(&ConsensusMessageType::TMProposeSetBowOut).unwrap().clone(),
-                                        _ => message_type_map.get(&ConsensusMessageType::TMProposeSet0).unwrap().clone(),
+                                        0 => message_type_map.get(&ConsensusMessageType::TMProposeSet0).unwrap(),
+                                        1 => message_type_map.get(&ConsensusMessageType::TMProposeSet1).unwrap(),
+                                        2 => message_type_map.get(&ConsensusMessageType::TMProposeSet2).unwrap(),
+                                        3 => message_type_map.get(&ConsensusMessageType::TMProposeSet3).unwrap(),
+                                        4 => message_type_map.get(&ConsensusMessageType::TMProposeSet4).unwrap(),
+                                        5 => message_type_map.get(&ConsensusMessageType::TMProposeSet5).unwrap(),
+                                        4294967295 => message_type_map.get(&ConsensusMessageType::TMProposeSetBowOut).unwrap(),
+                                        _ => message_type_map.get(&ConsensusMessageType::TMProposeSet0).unwrap(),
                                     }
                                 },
-                                RippleMessageObject::TMStatusChange(_) => message_type_map.get(&ConsensusMessageType::TMStatusChange).unwrap().clone(),
-                                RippleMessageObject::TMHaveTransactionSet(_) => message_type_map.get(&ConsensusMessageType::TMHaveTransactionSet).unwrap().clone(),
-                                RippleMessageObject::TMTransaction(_) => message_type_map.get(&ConsensusMessageType::TMTransaction).unwrap().clone(),
-                                _ => 0
+                                RippleMessageObject::TMStatusChange(_) => message_type_map.get(&ConsensusMessageType::TMStatusChange).unwrap(),
+                                RippleMessageObject::TMHaveTransactionSet(_) => message_type_map.get(&ConsensusMessageType::TMHaveTransactionSet).unwrap(),
+                                RippleMessageObject::TMTransaction(_) => message_type_map.get(&ConsensusMessageType::TMTransaction).unwrap(),
+                                _ => &Priority(0f32)
                             };
                             inbox_lock.lock().push(OrderedRMOEvent::new(rmo_event, *priority));
                             inbox_cvar.notify_all();
