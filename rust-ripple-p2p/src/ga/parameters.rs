@@ -1,10 +1,11 @@
 use std::marker::PhantomData;
 use genevo::operator::{CrossoverOp, SelectionOp};
 use genevo::operator::prelude::{MaximizeSelector, MultiPointCrossBreeder, MultiPointCrossover, RouletteWheelSelector};
-use crate::ga::delay_encoding::DelaysGenotype;
+use crate::ga::encoding::delay_encoding::DelaysGenotype;
+use crate::ga::encoding::{ExtendedGenotype, num_genes};
 use crate::ga::fitness::ExtendedFitness;
-use crate::ga::genetic_algorithm::{CurrentFitness, ExtendedGenotype, num_genes};
-use crate::ga::priority_encoding::{Priority, PriorityGenotype};
+use crate::ga::genetic_algorithm::{ConsensusMessageType, CurrentFitness};
+use crate::ga::encoding::priority_encoding::{Priority, PriorityGenotype};
 use crate::NUM_NODES;
 
 /// Parameters for the GA
@@ -67,7 +68,7 @@ impl<S, C, G> Parameter<S, C, CurrentFitness, G> where S: SelectionOp<G, Current
             population_size: 8,
             generation_limit: 5,
             num_individuals_per_parents: 2,
-            num_crossover_points: num_genes() / (*NUM_NODES * (*NUM_NODES - 1)),
+            num_crossover_points: ConsensusMessageType::VALUES.len(),
             mutation_rate: 0.05,
             mutation_std: 50f64,
             reinsertion_ratio: 0.7,
@@ -75,7 +76,7 @@ impl<S, C, G> Parameter<S, C, CurrentFitness, G> where S: SelectionOp<G, Current
             max_value: 1000,
             num_genes: num_genes(),
             selection_operator: RouletteWheelSelector::new(0.7, 2),
-            crossover_operator: MultiPointCrossBreeder::new(num_genes() / (*NUM_NODES * (*NUM_NODES - 1))),
+            crossover_operator: MultiPointCrossBreeder::new(ConsensusMessageType::VALUES.len()),
             stupid_type_system: PhantomData,
             stupid_type_system_2: PhantomData
         }
@@ -86,7 +87,7 @@ impl<S, C, G> Parameter<S, C, CurrentFitness, G> where S: SelectionOp<G, Current
             population_size: 8,
             generation_limit: 5,
             num_individuals_per_parents: 2,
-            num_crossover_points: num_genes() / (*NUM_NODES * (*NUM_NODES - 1)),
+            num_crossover_points: ConsensusMessageType::VALUES.len(),
             mutation_rate: 0.05,
             mutation_std: 50f64,
             reinsertion_ratio: 0.7,
@@ -94,7 +95,7 @@ impl<S, C, G> Parameter<S, C, CurrentFitness, G> where S: SelectionOp<G, Current
             max_value: Priority(1000f32),
             num_genes: num_genes(),
             selection_operator: RouletteWheelSelector::new(0.7, 2),
-            crossover_operator: MultiPointCrossBreeder::new(num_genes() / (*NUM_NODES * (*NUM_NODES - 1))),
+            crossover_operator: MultiPointCrossBreeder::new(ConsensusMessageType::VALUES.len()),
             stupid_type_system: PhantomData,
             stupid_type_system_2: PhantomData
         }
@@ -107,7 +108,7 @@ pub fn default_mu_lambda_delays(mu: usize, lambda: usize) -> Parameter<MaximizeS
         population_size: lambda,
         generation_limit: 5,
         num_individuals_per_parents: 2,
-        num_crossover_points: num_genes() / (*NUM_NODES * (*NUM_NODES - 1)),
+        num_crossover_points: ConsensusMessageType::VALUES.len(),
         mutation_rate: 0.05,
         mutation_std: 50f64,
         reinsertion_ratio,
@@ -115,7 +116,7 @@ pub fn default_mu_lambda_delays(mu: usize, lambda: usize) -> Parameter<MaximizeS
         max_value: 2000,
         num_genes: num_genes(),
         selection_operator: MaximizeSelector::new(reinsertion_ratio, 2),
-        crossover_operator: MultiPointCrossBreeder::new(num_genes() / (*NUM_NODES * (*NUM_NODES - 1))),
+        crossover_operator: MultiPointCrossBreeder::new(ConsensusMessageType::VALUES.len()),
         stupid_type_system: PhantomData,
         stupid_type_system_2: PhantomData
     }
@@ -125,17 +126,17 @@ pub fn default_mu_lambda_priorities(mu: usize, lambda: usize) -> Parameter<Maxim
     let reinsertion_ratio = mu as f64 / lambda as f64;
     Parameter {
         population_size: lambda,
-        generation_limit: 5,
+        generation_limit: 25,
         num_individuals_per_parents: 2,
-        num_crossover_points: num_genes() / (*NUM_NODES * (*NUM_NODES - 1)),
+        num_crossover_points: ConsensusMessageType::VALUES.len(),
         mutation_rate: 0.05,
-        mutation_std: 50f64,
+        mutation_std: 0.1f64,
         reinsertion_ratio,
         min_value: Priority(0f32),
-        max_value: Priority(1000f32),
+        max_value: Priority(1f32),
         num_genes: num_genes(),
         selection_operator: MaximizeSelector::new(reinsertion_ratio, 2),
-        crossover_operator: MultiPointCrossBreeder::new(num_genes() / (*NUM_NODES * (*NUM_NODES - 1))),
+        crossover_operator: MultiPointCrossBreeder::new(ConsensusMessageType::VALUES.len()),
         stupid_type_system: PhantomData,
         stupid_type_system_2: PhantomData
     }

@@ -1,8 +1,8 @@
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 use genevo::genetic::{AsScalar, Fitness};
+use crate::ga::encoding::num_genes;
 use crate::ga::fitness::ExtendedFitness;
-use crate::ga::genetic_algorithm::{num_genes};
 use crate::node_state::MutexNodeStates;
 use crate::test_harness::TestHarness;
 

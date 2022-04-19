@@ -6,6 +6,7 @@ pub(crate) mod validated_ledgers_fitness;
 pub(crate) mod time_fitness;
 pub(crate) mod delay_fitness;
 pub(crate) mod state_accounting_fitness;
+pub(crate) mod propose_seq_fitness;
 
 use std::collections::HashMap;
 use std::sync::mpsc::{Receiver, Sender};
@@ -15,7 +16,7 @@ use genevo::genetic::{AsScalar, Fitness, FitnessFunction};
 use std::fmt::{Display};
 use std::time::{Duration as TimeDuration};
 use log::debug;
-use crate::ga::genetic_algorithm::{ExtendedGenotype, ExtendedPhenotype};
+use crate::ga::encoding::{ExtendedGenotype, ExtendedPhenotype};
 use crate::node_state::MutexNodeStates;
 use crate::test_harness::TestHarness;
 

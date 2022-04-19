@@ -1,8 +1,11 @@
 use std::collections::HashMap;
 use genevo::genetic::Phenotype;
 use itertools::{chain, Itertools};
-use crate::ga::genetic_algorithm::{ConsensusMessageType, ExtendedGenotype, ExtendedPhenotype};
+use crate::ga::encoding::{ExtendedGenotype, ExtendedPhenotype};
+use crate::ga::genetic_algorithm::{ConsensusMessageType};
 use crate::NUM_NODES;
+
+pub const DROP_THRESHOLD: u32 = 1800;
 
 // The genotype
 pub(crate) type DelaysGenotype = Vec<u32>;
@@ -28,13 +31,6 @@ impl DelayMapPhenotype {
                 .map(|x| *x.get(message_type).unwrap())
                 .collect_vec()))
             .collect::<Vec<(usize, Vec<u32>)>>()
-    }
-
-    #[allow(unused)]
-    pub fn display_delays_by_message(&self) {
-        for message_type in ConsensusMessageType::VALUES {
-            println!("{:?}: {:?}", message_type, self.message_type_delays(&message_type))
-        }
     }
 }
 
@@ -67,6 +63,13 @@ impl ExtendedPhenotype<DelaysGenotype> for DelayMapPhenotype {
         Self {
             delay_map: from_node,
             delays: genes.clone()
+        }
+    }
+
+    #[allow(unused)]
+    fn display_genotype_by_message(&self) {
+        for message_type in ConsensusMessageType::VALUES {
+            println!("{:?}: {:?}", message_type, self.message_type_delays(&message_type))
         }
     }
 }

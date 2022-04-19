@@ -1,6 +1,6 @@
 use genevo::population::{build_population, Population, ValueEncodedGenomeBuilder};
-use crate::ga::delay_encoding::DelaysGenotype;
-use crate::ga::priority_encoding::{Priority, PriorityGenotype};
+use crate::ga::encoding::delay_encoding::DelaysGenotype;
+use crate::ga::encoding::priority_encoding::{Priority, PriorityGenotype};
 
 pub fn build_delays_population(num_genes: usize, min_delay: u32, max_delay: u32, population_size: usize) -> Population<DelaysGenotype> {
     build_population()

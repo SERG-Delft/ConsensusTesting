@@ -172,6 +172,10 @@ pub trait Scheduler: Sized {
             execution_sequence += 1;
         }
     }
+
+    fn get_map_phenotype_value() {
+
+    }
 }
 
 pub struct SchedulerState {
@@ -274,7 +278,7 @@ impl Ord for RMOEvent {
 mod scheduler_tests {
     use std::thread;
     use std::time::Duration;
-    use crate::ga::genetic_algorithm::DROP_THRESHOLD;
+    use crate::ga::encoding::delay_encoding::DROP_THRESHOLD;
     use crate::message_handler::RippleMessageObject;
     use crate::protos::ripple::{TMTransaction as PBTransaction, TransactionStatus};
     use crate::scheduler::{Event, RMOEvent};

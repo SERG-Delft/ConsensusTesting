@@ -16,13 +16,13 @@ use crate::client::{Client};
 use crate::collector::{Collector, RippleMessage};
 use crate::container_manager::NodeKeys;
 use crate::ga::crossover::NoCrossoverOperator;
-use crate::ga::delay_encoding::DelayMapPhenotype;
+use crate::ga::encoding::delay_encoding::DelayMapPhenotype;
 use crate::ga::fitness::ExtendedFitness;
 use crate::ga::genetic_algorithm;
-use crate::ga::genetic_algorithm::{CurrentFitness, num_genes, run, run_default_mu_lambda_priorities};
+use crate::ga::genetic_algorithm::{CurrentFitness, run, run_default_mu_lambda_priorities};
 use crate::ga::parameters::{default_mu_lambda_delays, default_mu_lambda_priorities, Parameter};
 use crate::ga::population_builder::{build_delays_population, build_priorities_population};
-use crate::ga::priority_encoding::PriorityMapPhenotype;
+use crate::ga::encoding::priority_encoding::PriorityMapPhenotype;
 use crate::peer_connection::PeerConnection;
 use crate::scheduler::{Event, PeerChannel, Scheduler};
 use crate::node_state::{MutexNodeStates, NodeState, NodeStates};
@@ -34,7 +34,7 @@ use crate::trace_comparisons::{run_fitness_comparison, run_no_delays, run_trace_
 const _NODE_PRIVATE_KEY: &str = "e55dc8f3741ac9668dbe858409e5d64f5ce88380f7228eccfe82b92b2c7848ba";
 const _NODE_PUBLIC_KEY_BASE58: &str = "n9KAa2zVWjPHgfzsE3iZ8HAbzJtPrnoh4H2M2HgE7dfqtvyEb1KJ";
 // Account and its keys to send transaction to
-const _ACCOUNT_ID: &str = "rE4DHSdcXafD7DkpJuFCAvc3CvsgXHjmEJ";
+const _ACCOUNT_ADDRESS: &str = "rE4DHSdcXafD7DkpJuFCAvc3CvsgXHjmEJ";
 const _MASTER_KEY: &str = "BUSY MARS SLED SNUG OBOE REID SUNK NEW GYM LAD LICE FEAT";
 const _MASTER_SEED: &str = "saNSJMEBKisBr6phJtGXUcV85RBZ3";
 const _MASTER_SEED_HEX: &str = "FDDE6A91607445E59C6F7CF07AF7B661";

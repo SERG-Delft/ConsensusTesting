@@ -267,7 +267,10 @@ pub enum TransactionType {
     PaymentChannelCreate,
     PaymentChannelFund,
     PaymentChannelClaim,
-    DepositPreauth
+    DepositPreauth,
+    EnableAmendment,
+    SetFee,
+    UNLModify
 }
 
 /// Fields specific to a payment transaction
@@ -307,7 +310,7 @@ pub struct ValidatedLedger {
 /// A validation message received by the node from some other node (or itself)
 /// Received from the validations subscription stream
 #[allow(unused)]
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ReceivedValidation {
     #[serde(skip_serializing_if = "Option::is_none")]
     amendments: Option<Vec<String>>,
@@ -330,7 +333,7 @@ pub struct ReceivedValidation {
 }
 
 /// A type of peer status event, sent when a peer of this node changes status
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum PeerStatusEvent {
     #[serde(rename = "CLOSING_LEDGER")]
     ClosingLedger,
@@ -344,7 +347,7 @@ pub enum PeerStatusEvent {
 
 /// A peer status event, sent when a peer of this node changes status
 /// Sent by the peer_status subscription stream
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct PeerStatusChange {
     action: PeerStatusEvent,
     date: u32,
@@ -360,13 +363,13 @@ pub struct PeerStatusChange {
 
 /// A consensus phase change done by this node
 /// Sent by the consensus subscription stream
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ConsensusChange {
     pub consensus: String
 }
 
 /// The status of the subscribed to server
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ServerStatus {
     base_fee: u32,
     load_base: u32,
@@ -379,7 +382,7 @@ pub struct ServerStatus {
 }
 
 /// The different types of subscription objects
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(tag = "type")]
 pub enum SubscriptionObject {
     #[serde(rename = "ledgerClosed")]
@@ -561,5 +564,19 @@ pub struct PeerServerStateObject {
 impl PeerServerStateObject {
     fn new(peer: u16, server_state_object: ServerStateObject) -> Self {
         PeerServerStateObject{ peer, server_state_object }
+    }
+}
+
+#[cfg(test)]
+mod client_tests {
+    use serde_json::Value;
+    use crate::client::SubscriptionObject;
+
+    #[test]
+    fn parse_transaction_subscription_test() {
+        let text = String::from("{\"engine_result\":\"tesSUCCESS\",\"engine_result_code\":0,\"engine_result_message\":\"The transaction was applied. Only final in a validated ledger.\",\"ledger_hash\":\"26CEAA70664693084A374B2997E87EB12D1835B658070336F2BB00956A7034B6\",\"ledger_index\":257,\"meta\":{\"AffectedNodes\":[{\"CreatedNode\":{\"LedgerEntryType\":\"FeeSettings\",\"LedgerIndex\":\"4BC50C9B0D8515D3EAAE1E74B29A95804346C491EE1A95BF25E4AAB854A6A651\",\"NewFields\":{\"BaseFee\":\"a\",\"ReferenceFeeUnits\":10,\"ReserveBase\":20000000,\"ReserveIncrement\":5000000}}}],\"TransactionIndex\":0,\"TransactionResult\":\"tesSUCCESS\"},\"status\":\"closed\",\"transaction\":{\"Account\":\"rrrrrrrrrrrrrrrrrrrrrhoLvTp\",\"BaseFee\":\"a\",\"Fee\":\"0\",\"LedgerSequence\":257,\"ReferenceFeeUnits\":10,\"ReserveBase\":20000000,\"ReserveIncrement\":5000000,\"Sequence\":0,\"SigningPubKey\":\"\",\"TransactionType\":\"SetFee\",\"date\":703267220,\"hash\":\"9CCE3C7AD8ABF51C3E2B36D5BA8C1197BD3CAD20AD1B60BB7D036147D870008E\"},\"type\":\"transaction\",\"validated\":true}");
+        let v: Value = serde_json::from_str(text.as_str()).unwrap();
+        let res = serde_json::from_value::<SubscriptionObject>(v);
+        dbg!(res);
     }
 }

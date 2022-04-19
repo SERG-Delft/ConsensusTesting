@@ -5,7 +5,8 @@ use genevo::prelude::Rng;
 use itertools::{chain, Itertools};
 use rand::distributions::uniform::{SampleBorrow, SampleUniform, UniformFloat, UniformSampler};
 use rand_distr::{Normal, Distribution};
-use crate::ga::genetic_algorithm::{ConsensusMessageType, ExtendedGenotype, ExtendedPhenotype};
+use crate::ga::encoding::{ExtendedGenotype, ExtendedPhenotype};
+use crate::ga::genetic_algorithm::{ConsensusMessageType};
 use crate::ga::mutation::{GaussianMutation};
 use crate::NUM_NODES;
 
@@ -94,13 +95,6 @@ impl PriorityMapPhenotype {
                 .collect_vec()))
             .collect::<Vec<(usize, Vec<Priority>)>>()
     }
-
-    #[allow(unused)]
-    pub fn display_priorities_by_message(&self) {
-        for message_type in ConsensusMessageType::VALUES {
-            println!("{:?}: {:?}", message_type, self.message_type_priorities(&message_type))
-        }
-    }
 }
 
 impl Phenotype<PriorityGenotype> for PriorityMapPhenotype {
@@ -134,12 +128,19 @@ impl ExtendedPhenotype<PriorityGenotype> for PriorityMapPhenotype {
             priorities: genes.clone()
         }
     }
+
+    #[allow(unused)]
+    fn display_genotype_by_message(&self) {
+        for message_type in ConsensusMessageType::VALUES {
+            println!("{:?}: {:?}", message_type, self.message_type_priorities(&message_type))
+        }
+    }
 }
 
 #[cfg(test)]
 mod test_priority_encoding {
     use std::collections::BinaryHeap;
-    use crate::ga::priority_encoding::Priority;
+    use crate::ga::encoding::priority_encoding::Priority;
     use crate::message_handler::RippleMessageObject;
     use crate::protos::ripple::TMStatusChange;
     use crate::scheduler::priority_scheduler::OrderedRMOEvent;

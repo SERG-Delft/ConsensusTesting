@@ -6,9 +6,10 @@ use std::sync::mpsc::{Sender, Receiver};
 use std::thread;
 use rand::distributions::Uniform;
 use rand::Rng;
-use crate::ga::delay_encoding::DelayMapPhenotype;
+use crate::ga::encoding::delay_encoding::DelayMapPhenotype;
+use crate::ga::encoding::{ExtendedPhenotype, num_genes};
 use crate::ga::fitness::ExtendedFitness;
-use crate::ga::genetic_algorithm::{CurrentFitness, ExtendedPhenotype, num_genes};
+use crate::ga::genetic_algorithm::{CurrentFitness};
 use crate::node_state::MutexNodeStates;
 
 mod compare;

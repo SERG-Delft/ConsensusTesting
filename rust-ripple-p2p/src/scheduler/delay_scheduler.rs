@@ -8,8 +8,8 @@ use genevo::genetic::{Phenotype};
 use log::{debug, error, trace};
 use parking_lot::{Condvar, Mutex};
 use crate::collector::RippleMessage;
-use crate::ga::genetic_algorithm::{ConsensusMessageType, DROP_THRESHOLD};
-use crate::ga::delay_encoding::DelayMapPhenotype;
+use crate::ga::genetic_algorithm::{ConsensusMessageType};
+use crate::ga::encoding::delay_encoding::{DelayMapPhenotype, DROP_THRESHOLD};
 use crate::message_handler::RippleMessageObject;
 use crate::node_state::MutexNodeStates;
 use crate::scheduler::{Event, P2PConnections, RMOEvent, Scheduler, SchedulerState};
@@ -59,9 +59,21 @@ impl Scheduler for DelayScheduler {
                         let message_type_map = current_delays.lock().delay_map.get(&rmo_event.from).unwrap().get(&rmo_event.to).unwrap().clone();
                         ms = match rmo_event.message {
                             RippleMessageObject::TMValidation(_) => message_type_map.get(&ConsensusMessageType::TMValidation).unwrap().clone(),
-                            RippleMessageObject::TMProposeSet(_) => message_type_map.get(&ConsensusMessageType::TMProposeSet).unwrap().clone(),
+                            RippleMessageObject::TMProposeSet(proposal) => {
+                                match proposal.get_proposeSeq() {
+                                    0 => message_type_map.get(&ConsensusMessageType::TMProposeSet0).unwrap().clone(),
+                                    1 => message_type_map.get(&ConsensusMessageType::TMProposeSet1).unwrap().clone(),
+                                    2 => message_type_map.get(&ConsensusMessageType::TMProposeSet2).unwrap().clone(),
+                                    3 => message_type_map.get(&ConsensusMessageType::TMProposeSet3).unwrap().clone(),
+                                    4 => message_type_map.get(&ConsensusMessageType::TMProposeSet4).unwrap().clone(),
+                                    5 => message_type_map.get(&ConsensusMessageType::TMProposeSet5).unwrap().clone(),
+                                    4294967295 => message_type_map.get(&ConsensusMessageType::TMProposeSetBowOut).unwrap().clone(),
+                                    _ => message_type_map.get(&ConsensusMessageType::TMProposeSet0).unwrap().clone(),
+                                }
+                            },
                             RippleMessageObject::TMStatusChange(_) => message_type_map.get(&ConsensusMessageType::TMStatusChange).unwrap().clone(),
                             RippleMessageObject::TMHaveTransactionSet(_) => message_type_map.get(&ConsensusMessageType::TMHaveTransactionSet).unwrap().clone(),
+                            RippleMessageObject::TMTransaction(_) => message_type_map.get(&ConsensusMessageType::TMTransaction).unwrap().clone(),
                             _ => 0
                         };
                     } else {

@@ -7,7 +7,7 @@ use petgraph::Graph;
 use petgraph::prelude::NodeIndex;
 use crate::client::{PeerServerStateObject, ServerStateObject, ValidatedLedger};
 use crate::collector::RippleMessage;
-use crate::ga::delay_encoding::DelaysGenotype;
+use crate::ga::encoding::delay_encoding::DelaysGenotype;
 
 /// Contains the state for a particular node at a particular time
 #[derive(Clone, Debug)]
@@ -22,6 +22,7 @@ pub struct NodeState {
     pub unreceived_message_sends: Vec<(RippleMessage, Option<DependencyNode>)>,
     pub latest_message_received: Option<DependencyNode>,
     pub server_state: ServerStateObject,
+    pub bowed_out: bool,
 }
 
 impl NodeState {
@@ -37,6 +38,7 @@ impl NodeState {
             unreceived_message_sends: vec![],
             latest_message_received: None,
             server_state: ServerStateObject::default(),
+            bowed_out: false,
         }
     }
 }
@@ -57,6 +59,8 @@ pub struct NodeStates {
     pub dependency_graph: Graph<DependencyEvent, ()>,
     pub current_delays: DelaysGenotype,
     pub server_state_updates: Vec<bool>,
+    pub highest_propose_seq: u32,
+    pub bow_outs: u32,
 }
 
 impl NodeStates {
@@ -69,7 +73,14 @@ impl NodeStates {
             dependency_graph: petgraph::Graph::new(),
             current_delays: vec![],
             server_state_updates: vec![false; number_of_nodes],
+            highest_propose_seq: 0,
+            bow_outs: 0,
         }
+    }
+
+    fn set_current_round(&mut self, peer: usize, new_round: u32) {
+        self.node_states[peer].current_consensus_round = new_round;
+        self.node_states[peer].bowed_out = false;
     }
 
     pub fn max_current_round(&self) -> u32 {
@@ -181,6 +192,23 @@ impl NodeStates {
     pub fn get_server_state(&self, peer: usize) -> ServerStateObject {
         self.node_states[peer].server_state.clone()
     }
+
+    fn set_highest_propose_seq(&mut self, propose_seq: u32, peer: usize) {
+        if propose_seq == 4294967295 && !self.node_states[peer].bowed_out {
+            self.bow_outs += 1;
+        } else if propose_seq > self.highest_propose_seq {
+            self.highest_propose_seq = propose_seq;
+        }
+    }
+
+    fn get_highest_propose_seq(&self) -> (u32, u32) {
+        (self.highest_propose_seq, self.bow_outs)
+    }
+
+    fn clear_propose_seq(&mut self) {
+        self.highest_propose_seq = 0;
+        self.bow_outs = 0;
+    }
 }
 
 /// Wrap NodeStates in a Mutex with Condvars for convenient access in the rest of the program.
@@ -211,7 +239,7 @@ impl MutexNodeStates {
     }
 
     pub fn set_current_round(&self, peer: usize, new_round: u32) {
-        self.node_states.lock().node_states[peer].current_consensus_round = new_round;
+        self.node_states.lock().set_current_round(peer, new_round);
         self.round_cvar.notify_all();
     }
 
@@ -227,6 +255,8 @@ impl MutexNodeStates {
             }
         } else if new_phase == ConsensusPhase::Establish && current_phase != ConsensusPhase::Open {
             self.node_states.lock().node_states[peer].number_of_failed_consensus_rounds += 1;
+            let old_round = self.get_current_round(peer);
+            self.set_current_round(peer, old_round + 1);
             println!("Failed consensus round peer {}: accepted -> establish", peer);
         }
         self.node_states.lock().node_states[peer].consensus_phase = new_phase;
@@ -356,6 +386,18 @@ impl MutexNodeStates {
 
     pub fn get_server_state(&self, peer: usize) -> ServerStateObject {
         self.node_states.lock().get_server_state(peer)
+    }
+
+    pub fn set_highest_propose_seq(&self, propose_seq: u32, peer: usize) {
+        self.node_states.lock().set_highest_propose_seq(propose_seq, peer);
+    }
+
+    pub fn get_highest_propose_seq(&self) -> (u32, u32) {
+        self.node_states.lock().get_highest_propose_seq()
+    }
+
+    pub fn clear_highest_propose_seq(&self) {
+        self.node_states.lock().clear_propose_seq();
     }
 }
 

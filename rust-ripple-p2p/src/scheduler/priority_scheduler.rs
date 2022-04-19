@@ -4,12 +4,13 @@ use std::sync::Arc;
 use std::sync::mpsc::{Receiver as STDReceiver, Sender as STDSender};
 use std::thread;
 use chrono::Utc;
-use log::{debug, error};
+use log::{debug, error, trace};
 use parking_lot::{Condvar, Mutex};
 use tokio::sync::mpsc::Receiver as TokioReceiver;
 use crate::collector::RippleMessage;
 use crate::ga::genetic_algorithm::ConsensusMessageType;
-use crate::ga::priority_encoding::{Priority, PriorityMapPhenotype};
+use crate::ga::encoding::priority_encoding::{Priority, PriorityMapPhenotype};
+use crate::message_handler::RippleMessageObject;
 use crate::node_state::MutexNodeStates;
 use crate::scheduler::{Event, P2PConnections, RMOEvent, Scheduler, SchedulerState};
 
@@ -18,7 +19,7 @@ pub struct PriorityScheduler {
 }
 
 const MAX_INBOX_SIZE: usize = 100;
-const MAX_DURATION_MILLIS: i64 = 50;
+const MAX_DURATION_MILLIS: i64 = 30;
 
 impl PriorityScheduler {
     #[allow(unused)]
@@ -43,14 +44,14 @@ impl PriorityScheduler {
                     size_counter += 1;
                     time = Utc::now();
                     if size_counter % 10 == 0 {
-                        dbg!(size_counter);
+                        trace!("{}", size_counter);
                     }
                 }
                 if Utc::now().signed_duration_since(time) > chrono::Duration::milliseconds(MAX_DURATION_MILLIS) {
                     event_schedule_sender.send(inbox_heap.pop().unwrap().rmo_event).expect("Event scheduler failed");
                     time_counter += 1;
                     if time_counter % 10 == 0 {
-                        dbg!(time_counter);
+                        trace!("{}", time_counter);
                     }
                     time = Utc::now();
                 }
@@ -87,15 +88,25 @@ impl Scheduler for PriorityScheduler {
                         if Self::is_consensus_rmo(&rmo_event.message) {
                             node_states.add_send_dependency(*RippleMessage::new(format!("Ripple{}", rmo_event.from + 1), format!("Ripple{}", rmo_event.to + 1), Utc::now(), rmo_event.message.clone()));
                             let message_type_map = current_individual.lock().priority_map.get(&rmo_event.from).unwrap().get(&rmo_event.to).unwrap().clone();
-                            let priority = match rmo_event.message.message_type() {
-                                "Validation" => message_type_map.get(&ConsensusMessageType::TMValidation).unwrap(),
-                                "ProposeSet" => message_type_map.get(&ConsensusMessageType::TMProposeSet).unwrap(),
-                                "StatusChange" => message_type_map.get(&ConsensusMessageType::TMStatusChange).unwrap(),
-                                "HaveTransactionSet" => message_type_map.get(&ConsensusMessageType::TMHaveTransactionSet).unwrap(),
-                                _ => {
-                                    error!("Should be consensus message, but not matched!");
-                                    &Priority(0f32)
-                                }
+
+                            let priority = match rmo_event.message {
+                                RippleMessageObject::TMValidation(_) => message_type_map.get(&ConsensusMessageType::TMValidation).unwrap().clone(),
+                                RippleMessageObject::TMProposeSet(&proposal) => {
+                                    match proposal.get_proposeSeq() {
+                                        0 => message_type_map.get(&ConsensusMessageType::TMProposeSet0).unwrap().clone(),
+                                        1 => message_type_map.get(&ConsensusMessageType::TMProposeSet1).unwrap().clone(),
+                                        2 => message_type_map.get(&ConsensusMessageType::TMProposeSet2).unwrap().clone(),
+                                        3 => message_type_map.get(&ConsensusMessageType::TMProposeSet3).unwrap().clone(),
+                                        4 => message_type_map.get(&ConsensusMessageType::TMProposeSet4).unwrap().clone(),
+                                        5 => message_type_map.get(&ConsensusMessageType::TMProposeSet5).unwrap().clone(),
+                                        4294967295 => message_type_map.get(&ConsensusMessageType::TMProposeSetBowOut).unwrap().clone(),
+                                        _ => message_type_map.get(&ConsensusMessageType::TMProposeSet0).unwrap().clone(),
+                                    }
+                                },
+                                RippleMessageObject::TMStatusChange(_) => message_type_map.get(&ConsensusMessageType::TMStatusChange).unwrap().clone(),
+                                RippleMessageObject::TMHaveTransactionSet(_) => message_type_map.get(&ConsensusMessageType::TMHaveTransactionSet).unwrap().clone(),
+                                RippleMessageObject::TMTransaction(_) => message_type_map.get(&ConsensusMessageType::TMTransaction).unwrap().clone(),
+                                _ => 0
                             };
                             inbox_lock.lock().push(OrderedRMOEvent::new(rmo_event, *priority));
                             inbox_cvar.notify_all();
@@ -174,7 +185,7 @@ mod priority_scheduler_tests {
     use std::thread;
     use std::time::Duration;
     use parking_lot::{Condvar, Mutex};
-    use crate::ga::priority_encoding::Priority;
+    use crate::ga::encoding::priority_encoding::Priority;
     use crate::message_handler::RippleMessageObject;
     use crate::protos::ripple::{TMStatusChange, TMValidation};
     use crate::scheduler::priority_scheduler::{MAX_DURATION_MILLIS, MAX_INBOX_SIZE, OrderedRMOEvent, PriorityScheduler};
