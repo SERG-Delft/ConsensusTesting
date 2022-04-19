@@ -11,7 +11,8 @@ use crate::client::{Client, Transaction};
 use crate::node_state::MutexNodeStates;
 
 const _AMOUNT: u32 = 2u32.pow(31);
-const _ACCOUNT_ID: &str = "rE4DHSdcXafD7DkpJuFCAvc3CvsgXHjmEJ";
+const _ACCOUNT_ADDRESS: &str = "rE4DHSdcXafD7DkpJuFCAvc3CvsgXHjmEJ";
+const _ACCOUNT_SEED: &str = "saNSJMEBKisBr6phJtGXUcV85RBZ3";
 const _GENESIS_ADDRESS: &str = "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh";
 const _GENESIS_SEED: &str = "snoPBrXtMeMyMHUVTgbuqAfg1SUTb";
 
@@ -49,7 +50,7 @@ impl TestHarness<'static> {
         let split = line.split_whitespace().collect_vec();
         let client_index = split[0].parse::<usize>().expect("Client index needs to of u32");
         let delay = Duration::from_millis(split[1].parse::<u64>().expect("Transaction delay needs to be of u64"));
-        let transaction = Client::create_payment_transaction(_AMOUNT, _ACCOUNT_ID, _GENESIS_ADDRESS, Some((sequence + 1) as u32));
+        let transaction = Client::create_payment_transaction(_AMOUNT, _ACCOUNT_ADDRESS, _GENESIS_ADDRESS, Some((sequence + 1) as u32));
         // let transaction = Client::create_payment_transaction(_AMOUNT, _ACCOUNT_ID, _GENESIS_ADDRESS, None);
         TransactionTimed { transaction, delay, client_index }
     }
@@ -98,23 +99,23 @@ mod harness_tests {
     use std::sync::mpsc::channel;
     use std::time::Duration;
     use crate::client::Client;
-    use crate::test_harness::{_ACCOUNT_ID, _AMOUNT, _GENESIS_ADDRESS, TestHarness, TransactionTimed};
+    use crate::test_harness::{_ACCOUNT_ADDRESS, _AMOUNT, _GENESIS_ADDRESS, TestHarness, TransactionTimed};
 
     // This test fails without a "harness.txt" containing 600, 1350, 6000 on separate lines
     #[test]
     fn parse_harness() {
         let transaction1 = TransactionTimed {
-            transaction: Client::create_payment_transaction(_AMOUNT, _ACCOUNT_ID, _GENESIS_ADDRESS, Some(1)),
+            transaction: Client::create_payment_transaction(_AMOUNT, _ACCOUNT_ADDRESS, _GENESIS_ADDRESS, Some(1)),
             delay: Duration::from_millis(600),
             client_index: 0,
         };
         let transaction2 = TransactionTimed {
-            transaction: Client::create_payment_transaction(_AMOUNT, _ACCOUNT_ID, _GENESIS_ADDRESS, Some(2)),
+            transaction: Client::create_payment_transaction(_AMOUNT, _ACCOUNT_ADDRESS, _GENESIS_ADDRESS, Some(2)),
             delay: Duration::from_millis(1350),
             client_index: 0,
         };
         let transaction3 = TransactionTimed {
-            transaction: Client::create_payment_transaction(_AMOUNT, _ACCOUNT_ID, _GENESIS_ADDRESS, Some(3)),
+            transaction: Client::create_payment_transaction(_AMOUNT, _ACCOUNT_ADDRESS, _GENESIS_ADDRESS, Some(3)),
             delay: Duration::from_millis(6000),
             client_index: 0,
         };

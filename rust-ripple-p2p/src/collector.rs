@@ -13,7 +13,7 @@ use chrono::{DateTime, MAX_DATETIME, Utc};
 use itertools::Itertools;
 use crate::message_handler::RippleMessageObject::TMProposeSet;
 use crate::node_state::{ConsensusPhase, MutexNodeStates};
-use crate::protos::ripple::TMTransaction;
+use crate::protos::ripple::{TMTransaction};
 
 /// Collects and writes data to files and the scheduler
 /// Execution file stores all messages sent from the proxy
@@ -46,7 +46,8 @@ impl Collector {
 
     pub fn start(&mut self, ripple_message_receiver: Receiver<Box<RippleMessage>>, server_state_receiver: Receiver<PeerServerStateObject>) {
         let node_states_clone = self.node_states.clone();
-        thread::spawn(move || Self::execution_writer(ripple_message_receiver));
+        let node_state_clone_2 = self.node_states.clone();
+        thread::spawn(move || Self::execution_writer(ripple_message_receiver, node_state_clone_2));
         thread::spawn(move || Self::server_state_handler(server_state_receiver, node_states_clone));
         loop {
             // Handle subscription streams in a central place, TODO: refactor to own associated method.
@@ -91,7 +92,7 @@ impl Collector {
         }
     }
 
-    fn execution_writer(ripple_message_receiver: Receiver<Box<RippleMessage>>) {
+    fn execution_writer(ripple_message_receiver: Receiver<Box<RippleMessage>>, node_states: Arc<MutexNodeStates>) {
         let execution_file = File::create(Path::new("execution.txt")).expect("Opening execution file failed");
         let mut execution_writer = BufWriter::new(execution_file);
         loop {
@@ -99,7 +100,10 @@ impl Collector {
             match ripple_message_receiver.recv() {
                 Ok(message) => {
                     match &message.message {
-                        TMProposeSet(tm_propose) => if tm_propose.get_proposeSeq() > 1 { println!("{}", message.to_string()) }
+                        TMProposeSet(tm_propose) => {
+                            node_states.set_highest_propose_seq(tm_propose.get_proposeSeq(), message.sender_index());
+                            if tm_propose.get_proposeSeq() > 1 { println!("{}", message.to_string()) }
+                        },
                         _ => {},
                     }
                     execution_writer.write_all(message.to_string().as_bytes()).unwrap();

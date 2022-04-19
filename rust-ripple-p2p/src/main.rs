@@ -34,12 +34,6 @@ fn main() {
 
     let args: Vec<String> = env::args().collect();
     let n: usize = (&args[1]).parse().unwrap();
-    let only_subscribe = if &args.len() > &2 {
-        match (&args[2]).parse::<u16>() {
-            Ok(_) => true,
-            Err(_) => false
-        }
-    } else { false };
 
     env_logger::Builder::new().parse_default_env().init();
 
@@ -49,7 +43,7 @@ fn main() {
     let node_keys = start_docker_containers(n, unls);
     // let node_keys = get_static_node_keys();
 
-    let app = app::App::new(n as u16, only_subscribe, node_keys);
+    let app = app::App::new(n as u16, node_keys);
 
     if let Err(error) = runtime.block_on(app.start()) {
         error!("Error: {}", error);
@@ -61,7 +55,7 @@ fn main() {
 
 pub fn get_num_nodes() -> usize {
     let args: Vec<String> = env::args().collect();
-    match (&args[1]).parse::<usize>() {
+    match (&args[1]).parse() {
         Ok(n) => n,
         Err(_) => 5 // default 5 nodes
     }

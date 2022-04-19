@@ -52,8 +52,8 @@ impl Fitness for StateAccountFitness {
     #[allow(unstable_name_collisions)]
     fn abs_diff(&self, other: &Self) -> Self {
         Self {
-            not_full_duration: u32::abs_diff(&self.not_full_duration, &other.not_full_duration),
-            not_full_transitions: u32::abs_diff(&self.not_full_transitions, &other.not_full_transitions),
+            not_full_duration: u32::abs_diff(self.not_full_duration, other.not_full_duration),
+            not_full_transitions: u32::abs_diff(self.not_full_transitions, other.not_full_transitions),
         }
     }
 }

@@ -3,20 +3,21 @@ use std::sync::Arc;
 use genevo::genetic::{AsScalar, Fitness};
 use crate::ga::fitness::ExtendedFitness;
 use crate::node_state::MutexNodeStates;
+use crate::NUM_NODES;
 use crate::test_harness::TestHarness;
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug, serde::Serialize, serde::Deserialize)]
-pub struct ValidatedLedgersFitness {
+pub struct ProposeSeqFitness {
     pub value: u32
 }
 
-impl ValidatedLedgersFitness {
-    pub fn new(ledgers: u32) -> Self {
-        ValidatedLedgersFitness { value: ledgers }
+impl ProposeSeqFitness {
+    pub fn new(propose_seq: u32) -> Self {
+        ProposeSeqFitness { value: propose_seq }
     }
 }
 
-impl Fitness for ValidatedLedgersFitness {
+impl Fitness for ProposeSeqFitness {
     fn zero() -> Self {
         Self { value: 0 }
     }
@@ -28,13 +29,13 @@ impl Fitness for ValidatedLedgersFitness {
     }
 }
 
-impl Display for ValidatedLedgersFitness {
+impl Display for ProposeSeqFitness {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "ValidatedLedgersFitness: {}\n", self.value)
+        write!(f, "ProposeSeqFitness: {}\n", self.value)
     }
 }
 
-impl ExtendedFitness for ValidatedLedgersFitness {
+impl ExtendedFitness for ProposeSeqFitness {
     fn average(a: &[Self]) -> Self {
         let mut sum = 0u32;
         for fitness in a {
@@ -51,14 +52,16 @@ impl ExtendedFitness for ValidatedLedgersFitness {
         Self { value: 0 }
     }
 
+    /// Evenly distribute fitness value between propse sequence and number of bow outs.
     fn run_harness(test_harness: TestHarness<'static>, node_states: Arc<MutexNodeStates>) -> Self {
-        let start = node_states.min_validated_ledger();
+        node_states.clear_highest_propose_seq();
         test_harness.schedule_transactions(node_states.clone());
-        Self::new(node_states.min_validated_ledger() - start)
+        let (propose_sequence, bow_outs) = node_states.get_highest_propose_seq();
+        Self::new(propose_sequence * NUM_NODES.clone() as u32 + bow_outs)
     }
 }
 
-impl AsScalar for ValidatedLedgersFitness {
+impl AsScalar for ProposeSeqFitness {
     fn as_scalar(&self) -> f64 {
         self.value as f64
     }

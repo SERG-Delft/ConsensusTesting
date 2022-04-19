@@ -1,9 +1,7 @@
 use std::{env, fs, thread};
-use std::char::decode_utf16;
 use std::fs::{create_dir_all, File, read_to_string};
 use std::io::Write;
 use std::process::Command;
-use std::str::from_utf8;
 use std::time::Duration;
 use chrono::{Utc};
 
@@ -28,7 +26,7 @@ fn remove_containers(name: &str) {
         .args(["--filter", "ancestor=mvanmeerten/rippled-boost-cmake"])
         .args(["--filter", &format!("name={}", name)])
         .output().unwrap();
-    let ids: Vec<&str> = from_utf8(&*leftovers.stdout).unwrap().lines().collect();
+    let ids: Vec<&str> = std::str::from_utf8(&*leftovers.stdout).unwrap().lines().collect();
     debug!("found following nodes to kill: {:?}", ids);
     Command::new("docker").args(["rm", "-f", "-v"]).args(&ids).output().unwrap();
     debug!("killed all nodes");
@@ -55,6 +53,7 @@ fn get_node_keys(n: usize) -> Vec<NodeKeys> {
         debug!("trying to start key generator");
         remove_containers("key_generator");
         start_node_with_options("key_generator", 0, false, None);
+        thread::sleep(Duration::from_secs(1));
     }
     debug!("acquiring node keys");
     let keys: Vec<NodeKeys> = (0..n).into_par_iter().map(|_| acquire_keys()).collect();
@@ -124,6 +123,7 @@ fn start_node(id: usize, log_folder: &str) {
 }
 
 fn start_node_with_options(name: &str, offset: usize, expose_to_network: bool, log_folder: Option<&str>) {
+    debug!("Starting node: {}, expose_to_network: {}, log_folder: {:?}", name, expose_to_network, log_folder);
     let mut command = Command::new("docker");
     let mut command = command
         .arg("run")
