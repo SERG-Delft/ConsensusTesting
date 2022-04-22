@@ -25,7 +25,7 @@ use crate::ga::encoding::priority_encoding::{PriorityGenotype, PriorityMapPhenot
 use crate::ga::fitness::propose_seq_fitness::ProposeSeqFitness;
 use super::mutation::GaussianMutator;
 
-pub type CurrentFitness = ProposeSeqFitness;
+pub type CurrentFitness = TimeFitness;
 
 /// The message types that will be subject to delay
 #[derive(Debug, Eq, PartialEq, Hash, Clone, Copy)]
@@ -228,8 +228,8 @@ mod ga_tests {
                     Ok(delays_genotype) => match &delays_genotype[..] {
                         x => {
                             println!("Received {:?} from fitness calculation", x);
-                            // self.fitness_values.write().unwrap().insert(delays_genotype.clone(), CurrentFitness::new(Duration::from_secs(x[0] as u64)));
-                            self.fitness_values.write().unwrap().insert(delays_genotype.clone(), CurrentFitness::new(x[0]));
+                            self.fitness_values.write().unwrap().insert(delays_genotype.clone(), CurrentFitness::new(Duration::from_secs(x[0] as u64)));
+                            // self.fitness_values.write().unwrap().insert(delays_genotype.clone(), CurrentFitness::new(x[0]));
                         }
                     },
                     Err(_) => {}

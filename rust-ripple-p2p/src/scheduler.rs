@@ -196,12 +196,12 @@ pub trait Scheduler: Sized {
         // Wait for transactions to be in validated ledger
         while node_states.get_min_validated_transactions().len() < test_harness.accounts.len()-1 {
             let mut ledger_number = ledger_lock.lock();
-            debug!("Validated ledger increased to: {}", *ledger_number - 1);
+            debug!("Validated ledger increased to: {}", *ledger_number);
             ledger_cvar.wait(&mut ledger_number);
         }
         // Empty transaction queue
         while let Ok(_) = test_harness.client_receiver.try_recv() {}
-        debug!("Accounts created in ledger: {}", *ledger_lock.lock());
+        debug!("Accounts created in ledger: {}", *ledger_lock.lock()-1);
     }
 }
 

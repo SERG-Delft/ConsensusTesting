@@ -142,11 +142,17 @@ impl Client<'static> {
         destination_id: &str,
         sender_address: &str,
         sequence: Option<u32>,
+        include_fee: bool
     ) -> Transaction
     {
         // Create payment object for payment to account
+        let amount = if include_fee {
+            amount * 10u32.pow(7) + 10
+        } else {
+            amount * 10u32.pow(7)
+        };
         let payment = Payment {
-            amount: (amount * 10u32.pow(7)).to_string(),
+            amount: amount.to_string(),
             destination: String::from(destination_id),
             destination_tag: None,
             invoice_id: None,

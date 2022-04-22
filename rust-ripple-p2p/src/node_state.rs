@@ -338,7 +338,7 @@ impl MutexNodeStates {
 
     pub fn get_min_validated_transactions_idx(&self, transactions: &Vec<TransactionTimed>) -> Vec<usize> {
         self.get_min_validated_transactions().iter()
-            .map(|tx| TestHarness::calc_tx_idx(transactions, tx).unwrap()).collect::<Vec<usize>>()
+            .filter_map(|tx| TestHarness::calc_tx_idx(transactions, tx)).collect::<Vec<usize>>()
     }
 
     pub fn get_number_min_validated_transactions(&self) -> usize {

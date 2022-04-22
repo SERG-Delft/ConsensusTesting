@@ -99,7 +99,7 @@ impl TestHarness<'static> {
         let amount = split[2].parse::<u32>().expect("Amount needs to of u32");
         let from = split[3].parse::<usize>().expect("From account index needs to be of usize");
         let to = split[4].parse::<usize>().expect("To account index needs to be of usize");
-        let transaction = Client::create_payment_transaction(amount, &accounts[to].account_keys.account_id, &accounts[from].account_keys.account_id, None);
+        let transaction = Client::create_payment_transaction(amount, &accounts[to].account_keys.account_id, &accounts[from].account_keys.account_id, None, from == 0);
         TransactionTimed { transaction, from, delay, client_index }
     }
 
@@ -124,12 +124,7 @@ impl TestHarness<'static> {
         // Wait for all transactions to have been validated
         let mut min_validated_transactions = node_states.get_min_validated_transactions_idx(&self.transactions);
         while TransactionResult::check_transaction_results(&self.transaction_results, &min_validated_transactions) == false {
-            // debug!("{} out of {} transactions validated, unvalidated idxs: {:?}", node_states.get_number_min_validated_transactions(), self.succeeded_transactions.len(),
-            //     self.succeeded_transactions.difference(&min_validated_transactions)
-            //         .map(|tx| Self::calc_tx_idx(&self.transactions, tx).unwrap())
-            //         .collect::<Vec<usize>>()
-            //     );
-            node_states.transactions_cvar.wait(&mut node_states.node_states.lock());
+            node_states.transactions_cvar.wait_for(&mut node_states.node_states.lock(), Duration::from_millis(1000));
             min_validated_transactions = node_states.get_min_validated_transactions_idx(&self.transactions);
         }
         self.succeeded_transactions.clear();
@@ -180,6 +175,7 @@ impl TestHarness<'static> {
                     &self.accounts[i].account_keys.account_id,
                     &self.accounts[0].account_keys.account_id,
                     None,
+                    false
                 ),
                 Some(self.accounts[0].sequence()),
                 self.accounts[0].account_keys.master_seed.clone(),
@@ -280,19 +276,19 @@ mod harness_tests {
         let actual_harness = TestHarness::parse_test_harness(vec![tx_1.clone(), tx_2.clone()], client_rx, Some("harness_test.txt"));
         let accounts = actual_harness.accounts.clone();
         let transaction1 = TransactionTimed {
-            transaction: Client::create_payment_transaction(80, &accounts[1].account_keys.account_id, &accounts[0].account_keys.account_id, None),
+            transaction: Client::create_payment_transaction(80, &accounts[1].account_keys.account_id, &accounts[0].account_keys.account_id, None, true),
             delay: Duration::from_millis(0),
             client_index: 0,
             from: 0
         };
         let transaction2 = TransactionTimed {
-            transaction: Client::create_payment_transaction(80, &accounts[2].account_keys.account_id, &accounts[1].account_keys.account_id, None),
+            transaction: Client::create_payment_transaction(80, &accounts[2].account_keys.account_id, &accounts[1].account_keys.account_id, None, false),
             delay: Duration::from_millis(1000),
             client_index: 0,
             from: 1
         };
         let transaction3 = TransactionTimed {
-            transaction: Client::create_payment_transaction(80, &accounts[3].account_keys.account_id, &accounts[1].account_keys.account_id, None),
+            transaction: Client::create_payment_transaction(80, &accounts[3].account_keys.account_id, &accounts[1].account_keys.account_id, None, false),
             delay: Duration::from_millis(1000),
             client_index: 1,
             from: 1
