@@ -2,7 +2,7 @@ pub mod delay_scheduler;
 pub mod priority_scheduler;
 
 use std::cmp::Ordering;
-use log::{error};
+use log::{debug, error};
 use std::collections::{HashMap};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
@@ -14,6 +14,7 @@ use std::thread;
 use parking_lot::{Mutex, Condvar};
 use byteorder::{BigEndian, ByteOrder};
 use websocket::Message;
+use crate::client::{Transaction};
 use crate::collector::RippleMessage;
 use crate::ga::fitness::ExtendedFitness;
 use crate::ga::genetic_algorithm::{CurrentFitness, ConsensusMessageType};
@@ -26,10 +27,12 @@ type P2PConnections = HashMap<usize, HashMap<usize, PeerChannel>>;
 pub trait Scheduler: Sized {
     type IndividualPhenotype: Default + Send + 'static;
 
-    fn start(self, receiver: TokioReceiver<Event>,
+    fn start(self,
+             receiver: TokioReceiver<Event>,
              ga_sender: STDSender<CurrentFitness>,
              ga_receiver: STDReceiver<Self::IndividualPhenotype>,
-             client_senders: Vec<STDSender<Message<'static>>>
+             client_senders: Vec<STDSender<Message<'static>>>,
+             client_receiver: STDReceiver<(Transaction, String)>
     )
     {
         let latest_validated_ledger_clone = self.get_state().latest_validated_ledger.clone();
@@ -43,17 +46,17 @@ pub trait Scheduler: Sized {
 
         thread::spawn(move || Self::update_current_round(node_states_clone, current_round_clone));
         thread::spawn(move || Self::update_latest_validated_ledger(node_states_clone_3, latest_validated_ledger_clone));
-        thread::spawn(move || Self::harness_controller(ga_sender, client_senders, latest_validated_ledger_clone_2, current_round_clone_2, run_clone, node_states_clone_2));
+        thread::spawn(move || Self::harness_controller(ga_sender, client_senders, client_receiver, latest_validated_ledger_clone_2, current_round_clone_2, run_clone, node_states_clone_2));
 
         // self.start_extension(receiver, ga_receiver);
         let (event_schedule_sender, event_schedule_receiver) = channel();
         let run_clone = self.get_state().run.clone();
         let node_states_clone = self.get_state().node_states.clone();
         let node_states_clone_2 = self.get_state().node_states.clone();
-        let current_priorities = Arc::new(Mutex::new(Self::IndividualPhenotype::default()));
-        let current_priorities_2 = current_priorities.clone();
-        thread::spawn(move || Self::schedule_controller(receiver, run_clone, current_priorities, node_states_clone, event_schedule_sender));
-        thread::spawn(move || Self::listen_to_ga(current_priorities_2, ga_receiver, node_states_clone_2));
+        let current_individual = Arc::new(Mutex::new(Self::IndividualPhenotype::default()));
+        let current_individual_2 = current_individual.clone();
+        thread::spawn(move || Self::schedule_controller(receiver, run_clone, current_individual, node_states_clone, event_schedule_sender));
+        thread::spawn(move || Self::listen_to_ga(current_individual_2, ga_receiver, node_states_clone_2));
         loop {
             match event_schedule_receiver.recv() {
                 Ok(event) => self.execute_event(event),
@@ -131,6 +134,7 @@ pub trait Scheduler: Sized {
     fn harness_controller(
         ga_sender: STDSender<CurrentFitness>,
         client_senders: Vec<STDSender<Message<'static>>>,
+        client_receiver: STDReceiver<(Transaction, String)>,
         latest_validated_ledger: Arc<(Mutex<u32>, Condvar)>,
         current_round: Arc<(Mutex<u32>, Condvar)>,
         run: Arc<(Mutex<bool>, Condvar)>,
@@ -140,10 +144,11 @@ pub trait Scheduler: Sized {
         let (ledger_lock, ledger_cvar) = &*latest_validated_ledger;
         let (round_lock, round_cvar) = &*current_round;
         let (run_lock, run_cvar) = &*run;
-        let mut execution_sequence = 0;
+        let mut test_harness = TestHarness::parse_test_harness(client_senders.clone(), client_receiver, None);
+        node_states.set_harness_transactions(test_harness.transactions.clone());
+        Self::stabilize_network(&mut test_harness, node_states.clone(), latest_validated_ledger.clone());
         // Every loop is one execution of the test harness
         loop {
-            let test_harness = TestHarness::parse_test_harness(client_senders.clone(), execution_sequence);
             let mut ledger_number = ledger_lock.lock();
             let first_validated_ledger = *ledger_number;
             println!("Waiting for network stabilization");
@@ -162,19 +167,41 @@ pub trait Scheduler: Sized {
                     *run_lock.lock() = true;
                     println!("Starting test harness run");
                     run_cvar.notify_all();
-                    let fitness = CurrentFitness::run_harness(test_harness, node_states.clone());
+                    let fitness = CurrentFitness::run_harness(&mut test_harness, node_states.clone());
                     // Send fitness of test case to GA
                     ga_sender.send(fitness).expect("GA receiver failed");
                     *run_lock.lock() = false;
                     run_cvar.notify_all();
                 }
             }
-            execution_sequence += 1;
         }
     }
 
-    fn get_map_phenotype_value() {
-
+    fn stabilize_network(
+        test_harness: &mut TestHarness<'static>,
+        node_states: Arc<MutexNodeStates>,
+        latest_validated_ledger: Arc<(Mutex<u32>, Condvar)>,
+    )
+    {
+        let (ledger_lock, ledger_cvar) = &*latest_validated_ledger;
+        let mut ledger_number = ledger_lock.lock();
+        let validated_ledger = *ledger_number;
+        debug!("Waiting for network to stabilize");
+        ledger_cvar.wait(&mut ledger_number);
+        if *ledger_number > validated_ledger {
+            drop(ledger_number);
+            debug!("Network stable, creating accounts");
+            test_harness.create_accounts();
+        }
+        // Wait for transactions to be in validated ledger
+        while node_states.get_min_validated_transactions().len() < test_harness.accounts.len()-1 {
+            let mut ledger_number = ledger_lock.lock();
+            debug!("Validated ledger increased to: {}", *ledger_number - 1);
+            ledger_cvar.wait(&mut ledger_number);
+        }
+        // Empty transaction queue
+        while let Ok(_) = test_harness.client_receiver.try_recv() {}
+        debug!("Accounts created in ledger: {}", *ledger_lock.lock());
     }
 }
 

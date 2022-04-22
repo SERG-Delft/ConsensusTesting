@@ -46,6 +46,14 @@ pub struct NodeKeys {
 }
 
 fn get_node_keys(n: usize) -> Vec<NodeKeys> {
+    start_key_generator();
+    debug!("acquiring node keys");
+    let keys: Vec<NodeKeys> = (0..n).into_par_iter().map(|_| acquire_keys()).collect();
+    debug!("acquired {} node keys", keys.len());
+    keys
+}
+
+pub fn start_key_generator() {
     let already_running = Command::new("docker")
         .args(["ps", "--filter", "name=key_generator", "--quiet"])
         .output().unwrap().stdout;
@@ -55,10 +63,6 @@ fn get_node_keys(n: usize) -> Vec<NodeKeys> {
         start_node_with_options("key_generator", 0, false, None);
         thread::sleep(Duration::from_secs(1));
     }
-    debug!("acquiring node keys");
-    let keys: Vec<NodeKeys> = (0..n).into_par_iter().map(|_| acquire_keys()).collect();
-    debug!("acquired {} node keys", keys.len());
-    keys
 }
 
 fn acquire_keys() -> NodeKeys {
@@ -140,4 +144,26 @@ fn start_node_with_options(name: &str, offset: usize, expose_to_network: bool, l
     }
     command.arg("mvanmeerten/rippled-boost-cmake").output().unwrap();
     debug!("started {}", name);
+}
+
+pub fn create_account() -> AccountKeys {
+    let output = Command::new("docker").arg("exec")
+        .args(["key_generator", "/bin/sh", "-c"])
+        .args(["./rippled/my_build/rippled wallet_propose"])
+        .output().unwrap().stdout;
+    let keys = std::str::from_utf8(&output).unwrap();
+    let result: AccountKeysResult = serde_json::from_str(&keys).unwrap();
+    debug!("acquired account keys {:?}", result.result);
+    result.result
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct AccountKeys {
+    pub account_id: String,
+    pub master_seed: String,
+}
+
+#[derive(Deserialize)]
+pub struct AccountKeysResult {
+    result: AccountKeys
 }

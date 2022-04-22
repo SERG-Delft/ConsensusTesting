@@ -80,7 +80,7 @@ impl ExtendedFitness for StateAccountFitness {
         Self { not_full_duration: 0, not_full_transitions: 0 }
     }
 
-    fn run_harness(test_harness: TestHarness<'static>, node_states: Arc<MutexNodeStates>) -> Self {
+    fn run_harness(test_harness: &mut TestHarness<'static>, node_states: Arc<MutexNodeStates>) -> Self {
         let before_server_states = Self::update_server_states(node_states.clone(), &test_harness);
         test_harness.schedule_transactions(node_states.clone());
         let after_server_states = Self::update_server_states(node_states, &test_harness);

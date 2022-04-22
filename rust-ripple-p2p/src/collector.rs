@@ -70,18 +70,18 @@ impl Collector {
                     }
                     SubscriptionObject::Transaction(transaction_subscription) => {
                         // Transactions can be validated or unvalidated
+                        self.write_to_subscription_file(subscription_object.peer, json!({"Transaction": transaction_subscription}).to_string());
                         if transaction_subscription.validated {
                             self.node_states.add_validated_transaction(
                                 subscription_object.peer as usize,
-                                transaction_subscription.transaction.txn_signature.clone().unwrap()
+                                transaction_subscription.transaction
                             );
                         } else {
                             self.node_states.add_unvalidated_transaction(
                                 subscription_object.peer as usize,
-                                transaction_subscription.transaction.txn_signature.clone().unwrap()
+                                transaction_subscription.transaction
                             );
                         }
-                        self.write_to_subscription_file(subscription_object.peer, json!({"Transaction": transaction_subscription}).to_string())
                     }
                     SubscriptionObject::ServerStatus(server_status) => {
                         self.write_to_subscription_file(subscription_object.peer, json!({"ServerStatus": server_status}).to_string())

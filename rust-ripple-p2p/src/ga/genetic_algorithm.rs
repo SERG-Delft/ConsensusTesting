@@ -173,18 +173,19 @@ mod ga_tests {
     use std::collections::HashMap;
     use std::sync::{Arc, RwLock};
     use std::sync::mpsc::{Receiver};
-    use std::time::Duration;
     use genevo::operator::prelude::{MaximizeSelector, MultiPointCrossBreeder};
     use crate::ga::encoding::delay_encoding::{DelayMapPhenotype, DelaysGenotype};
+    use crate::ga::encoding::num_genes;
     use crate::ga::fitness::{FitnessCalculation, SchedulerHandlerTrait};
     use crate::ga::genetic_algorithm::{ConsensusMessageType, run_ga, ExtendedPhenotype, CurrentFitness};
     use crate::ga::parameters::default_mu_lambda_delays;
     use crate::ga::population_builder::build_delays_population;
 
     #[test]
+    #[ignore]
     fn test_phenotype() {
         //let genotype: DelaysGenotype = (1..81).collect_vec();
-        let genotype: DelaysGenotype = vec![959, 533, 12, 717, 406, 603, 767, 0, 304, 366, 925, 54, 854, 159, 611, 747, 839, 555, 985, 146, 678, 499, 67, 802, 991, 557, 185, 312, 557, 676, 659, 149, 963, 347, 817, 987, 451, 972, 515, 631, 174, 564, 551, 889, 665, 527, 645, 336, 977, 946, 641, 441, 113, 872, 778, 385, 878, 528, 947, 435, 913, 643, 4, 101, 472, 416, 624, 792, 925, 573, 225, 948, 862, 142, 580, 50, 742, 648, 338, 914];
+        let genotype: DelaysGenotype = vec![100u32; num_genes()];
         let phenotype = DelayMapPhenotype::from_genes(&genotype);
         println!("{:?}", phenotype.delay_map);
         println!("{:?}", phenotype.message_type_delays(&ConsensusMessageType::TMValidation));
@@ -192,6 +193,7 @@ mod ga_tests {
     }
 
     #[test]
+    #[ignore]
     fn test_mu_lambda() {
         let params = default_mu_lambda_delays(1, 2);
         let population = build_delays_population(params.num_genes, params.min_value, params.max_value, params.population_size);

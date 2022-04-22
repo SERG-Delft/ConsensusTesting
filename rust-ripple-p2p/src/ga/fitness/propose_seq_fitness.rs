@@ -53,7 +53,7 @@ impl ExtendedFitness for ProposeSeqFitness {
     }
 
     /// Evenly distribute fitness value between propse sequence and number of bow outs.
-    fn run_harness(test_harness: TestHarness<'static>, node_states: Arc<MutexNodeStates>) -> Self {
+    fn run_harness(test_harness: &mut TestHarness<'static>, node_states: Arc<MutexNodeStates>) -> Self {
         node_states.clear_highest_propose_seq();
         test_harness.schedule_transactions(node_states.clone());
         let (propose_sequence, bow_outs) = node_states.get_highest_propose_seq();

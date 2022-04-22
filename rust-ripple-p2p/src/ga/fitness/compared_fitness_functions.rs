@@ -89,7 +89,7 @@ impl ExtendedFitness for ComparedFitnessFunctions {
         }
     }
 
-    fn run_harness(test_harness: TestHarness<'static>, node_states: Arc<MutexNodeStates>) -> Self {
+    fn run_harness(test_harness: &mut TestHarness<'static>, node_states: Arc<MutexNodeStates>) -> Self {
         let before_server_states = StateAccountFitness::update_server_states(node_states.clone(), &test_harness);
         node_states.clear_number_of_failed_consensus_rounds();
         let start_validated_ledgers = node_states.node_states.lock().min_validated_ledger();

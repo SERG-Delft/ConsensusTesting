@@ -29,7 +29,7 @@ impl PriorityScheduler {
         }
     }
 
-    fn inbox_controller(inbox: Arc<(Mutex<BinaryHeap<OrderedRMOEvent>>, Condvar)>, event_schedule_sender: STDSender<RMOEvent>) {
+    fn inbox_controller(inbox: Arc<(Mutex<BinaryHeap<OrderedRMOEvent>>, Condvar)>, event_schedule_sender: STDSender<RMOEvent>, max_inbox_size: usize, max_duration_millis: i64) {
         let (inbox_lock, inbox_cvar) = &*inbox;
         let mut time = Utc::now();
         let mut size_counter = 0;
@@ -37,9 +37,9 @@ impl PriorityScheduler {
         loop {
             let mut inbox_heap = inbox_lock.lock();
             // inbox_cvar.wait_for(&mut inbox_heap, std::time::Duration::from_millis(MAX_DURATION_MILLIS as u64));
-            inbox_cvar.wait(&mut inbox_heap);
+            // inbox_cvar.wait(&mut inbox_heap);
             {
-                while inbox_heap.len() > MAX_INBOX_SIZE {
+                while inbox_heap.len() > max_inbox_size {
                     event_schedule_sender.send(inbox_heap.pop().unwrap().rmo_event).expect("Event scheduler failed");
                     size_counter += 1;
                     time = Utc::now();
@@ -47,8 +47,10 @@ impl PriorityScheduler {
                         trace!("{}", size_counter);
                     }
                 }
-                if Utc::now().signed_duration_since(time) > chrono::Duration::milliseconds(MAX_DURATION_MILLIS) {
-                    event_schedule_sender.send(inbox_heap.pop().unwrap().rmo_event).expect("Event scheduler failed");
+                if Utc::now().signed_duration_since(time) > chrono::Duration::milliseconds(max_duration_millis) {
+                    if !inbox_heap.is_empty() {
+                        event_schedule_sender.send(inbox_heap.pop().unwrap().rmo_event).expect("Event scheduler failed");
+                    }
                     time_counter += 1;
                     if time_counter % 10 == 0 {
                         trace!("{}", time_counter);
@@ -77,7 +79,7 @@ impl Scheduler for PriorityScheduler {
         let inbox = Arc::new((Mutex::new(BinaryHeap::new()), Condvar::new()));
         let event_schedule_sender_2 = event_schedule_sender.clone();
         let inbox_2 = inbox.clone();
-        thread::spawn(move || Self::inbox_controller(inbox_2, event_schedule_sender_2));
+        thread::spawn(move || Self::inbox_controller(inbox_2, event_schedule_sender_2, MAX_INBOX_SIZE, MAX_DURATION_MILLIS));
         let (inbox_lock, inbox_cvar) = &*inbox;
         loop {
             match receiver.blocking_recv() {
@@ -188,7 +190,7 @@ mod priority_scheduler_tests {
     use crate::ga::encoding::priority_encoding::Priority;
     use crate::message_handler::RippleMessageObject;
     use crate::protos::ripple::{TMStatusChange, TMValidation};
-    use crate::scheduler::priority_scheduler::{MAX_DURATION_MILLIS, MAX_INBOX_SIZE, OrderedRMOEvent, PriorityScheduler};
+    use crate::scheduler::priority_scheduler::{OrderedRMOEvent, PriorityScheduler};
     use crate::scheduler::RMOEvent;
 
     #[test]
@@ -197,18 +199,20 @@ mod priority_scheduler_tests {
         let inbox_clone = inbox.clone();
         let (inbox_lock, inbox_cvar) = &*inbox;
         let (event_schedule_sender, event_scheduler_receiver) = channel();
-        thread::spawn(move || PriorityScheduler::inbox_controller(inbox_clone, event_schedule_sender));
+        let max_inbox_size = 10usize;
+        let max_duration_millis = 500;
+        thread::spawn(move || PriorityScheduler::inbox_controller(inbox_clone, event_schedule_sender, max_inbox_size, max_duration_millis));
         thread::sleep(Duration::from_millis(100));
         let mut rmo_event_size = RMOEvent::default();
         rmo_event_size.message = RippleMessageObject::TMStatusChange(TMStatusChange::new());
         let mut rmo_event_time = RMOEvent::default();
         rmo_event_time.message = RippleMessageObject::TMValidation(TMValidation::new());
-        for i in 0..MAX_INBOX_SIZE+1 {
+        for i in 0..max_inbox_size+1 {
             let mut inbox_heap = inbox_lock.lock();
-            if i == MAX_INBOX_SIZE {
+            if i == max_inbox_size {
                 inbox_heap.push(OrderedRMOEvent::new(rmo_event_size.clone(), Priority(i as f32)));
                 println!("Sending message {} to inbox", i);
-            } else if i == MAX_INBOX_SIZE - 1 {
+            } else if i == max_inbox_size - 1 {
                 inbox_heap.push(OrderedRMOEvent::new(rmo_event_time.clone(), Priority(i as f32)));
             } else {
                 inbox_heap.push(OrderedRMOEvent::new(RMOEvent::default(), Priority(i as f32)));
@@ -216,7 +220,7 @@ mod priority_scheduler_tests {
             }
             println!("woke up {} threads", inbox_cvar.notify_all());
         }
-        let res = event_scheduler_receiver.recv_timeout(Duration::from_millis((MAX_DURATION_MILLIS / 2i64) as u64));
+        let res = event_scheduler_receiver.recv();
         assert_eq!(res, Ok(rmo_event_size));
         let res = event_scheduler_receiver.recv();
         assert_eq!(res, Ok(rmo_event_time));

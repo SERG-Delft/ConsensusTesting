@@ -12,7 +12,7 @@ use itertools::Itertools;
 use websocket::Message;
 
 use super::{EmptyResult};
-use crate::client::{Client};
+use crate::client::{Client, Payment, Transaction};
 use crate::collector::{Collector, RippleMessage};
 use crate::container_manager::NodeKeys;
 use crate::ga::crossover::NoCrossoverOperator;
@@ -69,6 +69,7 @@ impl App {
         let (collector_tx, collector_rx) = std::sync::mpsc::channel();
         let (subscription_tx, subscription_rx) = std::sync::mpsc::channel();
         let (server_state_tx, server_state_rx) = std::sync::mpsc::channel();
+        let (test_harness_tx, test_harness_rx) = std::sync::mpsc::channel();
         let peer = self.peers.clone();
 
         let mut node_state_vec = vec![NodeState::new(0); peer as usize];
@@ -86,7 +87,7 @@ impl App {
         // Create a client for each peer, which subscribes (among others) to certain streams
         let mut clients = vec![];
         for i in 0..self.peers {
-            clients.push(Client::new(i, format!("ws://127.0.0.1:{}", 6005+i).as_str(), subscription_tx.clone(), server_state_tx.clone()));
+            clients.push(Client::new(i, format!("ws://127.0.0.1:{}", 6005+i).as_str(), subscription_tx.clone(), server_state_tx.clone(), test_harness_tx.clone()));
         }
         let client_senders = clients.iter().map(|client| client.sender_channel.clone()).collect_vec();
 
@@ -115,7 +116,7 @@ impl App {
         }
 
         // Start GA and scheduler
-        let scheduler_type = SchedulerType::Priority;
+        let scheduler_type = SchedulerType::None;
         match scheduler_type {
             SchedulerType::Priority => {
                 let (ga_scheduler_sender, ga_scheduler_receiver) = std::sync::mpsc::channel();
@@ -130,7 +131,8 @@ impl App {
                     collector_tx,
                     mutex_node_states,
                     scheduler_receiver,
-                    client_senders
+                    client_senders,
+                    test_harness_rx
                 );
             }
             SchedulerType::Delay => {
@@ -146,7 +148,8 @@ impl App {
                     collector_tx,
                     mutex_node_states,
                     scheduler_receiver,
-                    client_senders
+                    client_senders,
+                    test_harness_rx
                 );
             }
             SchedulerType::TraceGraph => {
@@ -154,19 +157,19 @@ impl App {
                 let mutex_node_states_clone_2 = mutex_node_states.clone();
                 threads.push(thread::spawn(|| run_trace_graph_creation(ga_scheduler_sender, scheduler_ga_receiver, mutex_node_states_clone_2)));
                 let scheduler = DelayScheduler::new(scheduler_peer_channels, collector_tx, mutex_node_states);
-                threads.push(thread::spawn(move || scheduler.start(scheduler_receiver, scheduler_ga_sender, ga_scheduler_receiver, client_senders)));
+                threads.push(thread::spawn(move || scheduler.start(scheduler_receiver, scheduler_ga_sender, ga_scheduler_receiver, client_senders, test_harness_rx)));
             }
             SchedulerType::FitnessComparison => {
                 let (ga_scheduler_sender, ga_scheduler_receiver) = std::sync::mpsc::channel();
                 threads.push(thread::spawn(|| run_fitness_comparison(ga_scheduler_sender, scheduler_ga_receiver)));
                 let scheduler = DelayScheduler::new(scheduler_peer_channels, collector_tx, mutex_node_states);
-                threads.push(thread::spawn(move || scheduler.start(scheduler_receiver, scheduler_ga_sender, ga_scheduler_receiver, client_senders)));
+                threads.push(thread::spawn(move || scheduler.start(scheduler_receiver, scheduler_ga_sender, ga_scheduler_receiver, client_senders, test_harness_rx)));
             }
             SchedulerType::None => {
                 let (ga_scheduler_sender, ga_scheduler_receiver) = std::sync::mpsc::channel();
                 threads.push(thread::spawn(|| run_no_delays(ga_scheduler_sender, scheduler_ga_receiver, 20)));
                 let scheduler = DelayScheduler::new(scheduler_peer_channels, collector_tx, mutex_node_states);
-                threads.push(thread::spawn(move || scheduler.start(scheduler_receiver, scheduler_ga_sender, ga_scheduler_receiver, client_senders)));
+                threads.push(thread::spawn(move || scheduler.start(scheduler_receiver, scheduler_ga_sender, ga_scheduler_receiver, client_senders, test_harness_rx)));
             }
         }
 
@@ -234,14 +237,15 @@ impl App {
         collector_tx: Sender<Box<RippleMessage>>,
         mutex_node_states: Arc<MutexNodeStates>,
         scheduler_receiver: TokioReceiver<Event>,
-        client_senders: Vec<Sender<Message<'static>>>
+        client_senders: Vec<Sender<Message<'static>>>,
+        client_receiver: Receiver<(Transaction, String)>
     )
     {
         // Start the GA
         thread::spawn(move || genetic_algorithm::run_default_mu_lambda_delays(mu, lambda, ga_scheduler_sender, scheduler_ga_receiver));
         // Start the scheduler
         let scheduler = DelayScheduler::new(scheduler_peer_channels, collector_tx, mutex_node_states);
-        thread::spawn(move || scheduler.start(scheduler_receiver, scheduler_ga_sender, ga_scheduler_receiver, client_senders));
+        thread::spawn(move || scheduler.start(scheduler_receiver, scheduler_ga_sender, ga_scheduler_receiver, client_senders, client_receiver));
     }
 
     /// Start the mu lambda GA and priority scheduler
@@ -257,14 +261,15 @@ impl App {
         collector_tx: Sender<Box<RippleMessage>>,
         mutex_node_states: Arc<MutexNodeStates>,
         scheduler_receiver: TokioReceiver<Event>,
-        client_senders: Vec<Sender<Message<'static>>>
+        client_senders: Vec<Sender<Message<'static>>>,
+        client_receiver: Receiver<(Transaction, String)>
     )
     {
         // Start the GA
         thread::spawn(move || genetic_algorithm::run_default_mu_lambda_priorities(mu, lambda, ga_scheduler_sender, scheduler_ga_receiver));
         // Start the scheduler
         let scheduler = PriorityScheduler::new(scheduler_peer_channels, collector_tx, mutex_node_states);
-        thread::spawn(move || scheduler.start(scheduler_receiver, scheduler_ga_sender, ga_scheduler_receiver, client_senders));
+        thread::spawn(move || scheduler.start(scheduler_receiver, scheduler_ga_sender, ga_scheduler_receiver, client_senders, client_receiver));
     }
 }
 

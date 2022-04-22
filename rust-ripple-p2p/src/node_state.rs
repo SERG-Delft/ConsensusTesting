@@ -1,13 +1,16 @@
 #![allow(dead_code)]
 
+use std::collections::HashSet;
 use std::fmt::{Debug, Formatter};
 use itertools::{Itertools};
+use log::debug;
 use parking_lot::{Mutex, Condvar};
 use petgraph::Graph;
 use petgraph::prelude::NodeIndex;
-use crate::client::{PeerServerStateObject, ServerStateObject, ValidatedLedger};
+use crate::client::{PeerServerStateObject, ServerStateObject, Transaction, ValidatedLedger};
 use crate::collector::RippleMessage;
 use crate::ga::encoding::delay_encoding::DelaysGenotype;
+use crate::test_harness::{TestHarness, TransactionTimed};
 
 /// Contains the state for a particular node at a particular time
 #[derive(Clone, Debug)]
@@ -16,8 +19,8 @@ pub struct NodeState {
     pub consensus_phase: ConsensusPhase,
     pub current_consensus_round: u32,
     pub last_validated_ledger: ValidatedLedger,
-    pub unvalidated_transactions: Vec<String>,
-    pub validated_transactions: Vec<String>,
+    pub unvalidated_transactions: Vec<Transaction>,
+    pub validated_transactions: Vec<Transaction>,
     pub number_of_failed_consensus_rounds: u32,
     pub unreceived_message_sends: Vec<(RippleMessage, Option<DependencyNode>)>,
     pub latest_message_received: Option<DependencyNode>,
@@ -61,6 +64,7 @@ pub struct NodeStates {
     pub server_state_updates: Vec<bool>,
     pub highest_propose_seq: u32,
     pub bow_outs: u32,
+    pub harness_transactions: Vec<TransactionTimed>,
 }
 
 impl NodeStates {
@@ -75,6 +79,7 @@ impl NodeStates {
             server_state_updates: vec![false; number_of_nodes],
             highest_propose_seq: 0,
             bow_outs: 0,
+            harness_transactions: vec![],
         }
     }
 
@@ -209,6 +214,10 @@ impl NodeStates {
         self.highest_propose_seq = 0;
         self.bow_outs = 0;
     }
+
+    fn set_harness_transactions(&mut self, harness_transactions: Vec<TransactionTimed>) {
+        self.harness_transactions = harness_transactions;
+    }
 }
 
 /// Wrap NodeStates in a Mutex with Condvars for convenient access in the rest of the program.
@@ -274,13 +283,15 @@ impl MutexNodeStates {
         self.transactions_cvar.notify_all();
     }
 
-    pub fn add_unvalidated_transaction(&self, peer: usize, transaction_signature: String) {
-        self.node_states.lock().node_states[peer].unvalidated_transactions.push(transaction_signature);
+    pub fn add_unvalidated_transaction(&self, peer: usize, transaction: Transaction) {
+        self.node_states.lock().node_states[peer].unvalidated_transactions.push(transaction);
         self.transactions_cvar.notify_all();
     }
 
-    pub fn add_validated_transaction(&self, peer: usize, transaction_signature: String) {
-        self.node_states.lock().node_states[peer].validated_transactions.push(transaction_signature);
+    pub fn add_validated_transaction(&self, peer: usize, transaction: Transaction) {
+        let mut node_lock = self.node_states.lock();
+        debug!("Added validated transaction: {:?}", TestHarness::calc_tx_idx(&node_lock.harness_transactions, &transaction));
+        node_lock.node_states[peer].validated_transactions.push(transaction);
         self.transactions_cvar.notify_all();
     }
 
@@ -308,11 +319,33 @@ impl MutexNodeStates {
         self.node_states.lock().node_states[peer].last_validated_ledger.clone()
     }
 
-    pub fn get_min_validated_transactions(&self) -> usize {
+    pub fn get_max_validated_transactions(&self) -> HashSet<Transaction> {
+        self.node_states.lock().node_states.iter()
+            .flat_map(|x| x.validated_transactions.clone())
+            .unique()
+            .collect::<HashSet<Transaction>>()
+    }
+
+    pub fn get_min_validated_transactions(&self) -> HashSet<Transaction> {
+        self.node_states.lock().node_states.iter()
+            .flat_map(|x| x.validated_transactions.clone())
+            .counts()
+            .into_iter()
+            .filter(|(_tx, count)| *count == self.number_of_nodes)
+            .map(|(tx, _count)| tx)
+            .collect::<HashSet<Transaction>>()
+    }
+
+    pub fn get_min_validated_transactions_idx(&self, transactions: &Vec<TransactionTimed>) -> Vec<usize> {
+        self.get_min_validated_transactions().iter()
+            .map(|tx| TestHarness::calc_tx_idx(transactions, tx).unwrap()).collect::<Vec<usize>>()
+    }
+
+    pub fn get_number_min_validated_transactions(&self) -> usize {
         self.node_states.lock().node_states.iter().map(|x| x.validated_transactions.len()).min().unwrap()
     }
 
-    pub fn get_max_validated_transaction(&self) -> usize {
+    pub fn get_number_max_validated_transaction(&self) -> usize {
         self.node_states.lock().node_states.iter().map(|x| x.validated_transactions.len()).max().unwrap()
     }
 
@@ -320,11 +353,11 @@ impl MutexNodeStates {
         self.node_states.lock().node_states.iter().map(|x| x.unvalidated_transactions.len()).min().unwrap()
     }
 
-    pub fn get_unvalidated_transaction(&self, peer: usize) -> Vec<String> {
+    pub fn get_unvalidated_transaction(&self, peer: usize) -> Vec<Transaction> {
         self.node_states.lock().node_states[peer].unvalidated_transactions.clone()
     }
 
-    pub fn get_validated_transaction(&self, peer: usize) -> Vec<String> {
+    pub fn get_validated_transaction(&self, peer: usize) -> Vec<Transaction> {
         self.node_states.lock().node_states[peer].validated_transactions.clone()
     }
 
@@ -398,6 +431,10 @@ impl MutexNodeStates {
 
     pub fn clear_highest_propose_seq(&self) {
         self.node_states.lock().clear_propose_seq();
+    }
+
+    pub fn set_harness_transactions(&self, harness_transactions: Vec<TransactionTimed>) {
+        self.node_states.lock().set_harness_transactions(harness_transactions);
     }
 }
 
