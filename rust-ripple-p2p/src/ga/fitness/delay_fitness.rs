@@ -47,10 +47,14 @@ impl ExtendedFitness for DelayFitness {
         Self { value: (num_genes() * 1000) as u32 }
     }
 
-    fn run_harness(test_harness: TestHarness<'static>, node_states: Arc<MutexNodeStates>) -> Self {
+    fn run_harness(test_harness: &mut TestHarness<'static>, node_states: Arc<MutexNodeStates>) -> Self {
         let result = Self::new(node_states.get_current_delays().iter().sum::<u32>());
-        test_harness.schedule_transactions(node_states);
-        result
+        let liveness = test_harness.schedule_transactions(node_states);
+        if liveness {
+            result
+        } else {
+            Self::zero()
+        }
     }
 }
 

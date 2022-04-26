@@ -95,6 +95,7 @@ mod graph_comparisons {
     }
 
     #[test]
+    #[ignore]
     fn trace_comparison() {
         let graphs = import_graphs("trace_graphs.txt", 20);
         let number_of_different_delays = 4;

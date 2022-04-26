@@ -57,10 +57,14 @@ impl ExtendedFitness for TimeFitness {
         TimeFitness { value: TimeDuration::from_secs(0) }
     }
 
-    fn run_harness(test_harness: TestHarness<'static>, node_states: Arc<MutexNodeStates>) -> Self {
+    fn run_harness(test_harness: &mut TestHarness<'static>, node_states: Arc<MutexNodeStates>) -> Self {
         let start = Instant::now();
-        test_harness.schedule_transactions(node_states);
-        Self::new(Instant::now().duration_since(start))
+        let liveness = test_harness.schedule_transactions(node_states);
+        if liveness {
+            Self::new(Instant::now().duration_since(start))
+        } else {
+            Self::zero()
+        }
     }
 }
 

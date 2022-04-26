@@ -119,14 +119,14 @@ impl PeerConnection {
                 }
 
                 let response_code = resp.code.unwrap();
-                debug!(
+                trace!(
                     "Response: version {}, code {}, reason {}",
                     resp.version.unwrap(),
                     resp.code.unwrap(),
                     resp.reason.unwrap()
                 );
                 for header in headers.iter().filter(|h| **h != httparse::EMPTY_HEADER) {
-                    debug!("{}: {}", header.name, String::from_utf8_lossy(header.value));
+                    trace!("{}: {}", header.name, String::from_utf8_lossy(header.value));
                 }
 
                 buf.advance(n + 4);
@@ -134,13 +134,13 @@ impl PeerConnection {
                 if response_code != 101 {
                     loop {
                         if ssl_stream.read_to_end(&mut buf.to_vec()).await.unwrap() == 0 {
-                            debug!("Body: {}", String::from_utf8_lossy(buf.bytes()).trim());
+                            trace!("Body: {}", String::from_utf8_lossy(buf.bytes()).trim());
                         }
                     }
                 }
 
                 if !buf.is_empty() {
-                    debug!(
+                    error!(
                         "Current buffer is not empty?: {}",
                         String::from_utf8_lossy(buf.bytes()).trim()
                     );
@@ -162,7 +162,7 @@ impl PeerConnection {
                          receiver1: tokio::sync::mpsc::Receiver<Vec<u8>>,
                          receiver2: tokio::sync::mpsc::Receiver<Vec<u8>>
     ) -> (JoinHandle<()>, JoinHandle<()>) {
-        info!("Thread {:?} has started", self.name);
+        trace!("Thread {:?} has started", self.name);
         // Connect to the two validators using each other's identity
         let ssl_stream1 = Self::connect_to_peer(self.address1, self.private_key2.as_str(), self.public_key2.as_str()).await;
         let ssl_stream2 = Self::connect_to_peer(self.address2, self.private_key1.as_str(), self.public_key1.as_str()).await;

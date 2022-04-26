@@ -2,6 +2,7 @@
 extern crate futures;
 
 use std::{env};
+use chrono::Utc;
 use log::*;
 use env_logger;
 use lazy_static::lazy_static;
@@ -27,6 +28,7 @@ type EmptyResult = AnyResult<()>;
 
 lazy_static! {
     pub static ref NUM_NODES: usize = get_num_nodes();
+    pub static ref LOG_FOLDER: String = get_log_path();
 }
 
 fn main() {
@@ -59,6 +61,16 @@ pub fn get_num_nodes() -> usize {
         Ok(n) => n,
         Err(_) => 5 // default 5 nodes
     }
+}
+
+pub fn get_log_path() -> String {
+    let now = Utc::now();
+    let date_string = now.format("%FT%H-%M-%S").to_string();
+    let log_path = format!("{}\\..\\logs\\{}", env::current_dir().unwrap().to_str().unwrap(), date_string);
+    if !std::path::Path::new(&log_path).exists() {
+        std::fs::create_dir_all(&log_path).expect("Creating log directory failed");
+    }
+    log_path
 }
 
 /// Configure UNL based on unl_type enum

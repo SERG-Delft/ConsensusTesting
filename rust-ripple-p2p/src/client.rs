@@ -19,7 +19,13 @@ pub struct Client<'a> {
 }
 
 impl Client<'static> {
-    pub fn new(peer: u16, connection: &str, subscription_collector_sender: Sender<PeerSubscriptionObject>, server_state_collector_sender: Sender<PeerServerStateObject>) -> Self {
+    pub fn new(
+        peer: u16,
+        connection: &str,
+        subscription_collector_sender: Sender<PeerSubscriptionObject>,
+        server_state_collector_sender: Sender<PeerServerStateObject>,
+        test_harness_sender: Sender<(Transaction, String)>,
+    ) -> Self {
         let client = ClientBuilder::new(connection)
             .unwrap()
             .connect_insecure()
@@ -81,7 +87,20 @@ impl Client<'static> {
                                             Err(_) => { println!("Could not parse peer{} server_state object: {}", peer, text); }
                                         }
                                     }
-                                    Some("Test harness") => trace!("peer{} Test harness: {}", peer, text.as_str()),
+                                    Some("Test harness") => {
+                                        let transaction = match serde_json::from_value::<Transaction>(value["result"]["tx_json"].clone()) {
+                                            Ok(transaction) => transaction,
+                                            Err(_) => {
+                                                error!("peer{} Test harness: {}", peer, text.as_str());
+                                                match serde_json::from_value::<Transaction>(value["request"]["tx_json"].clone()) {
+                                                    Ok(transaction) => transaction,
+                                                    Err(_) => panic!("Could not even parse request")
+                                                }
+                                            }
+                                        };
+                                        let engine_result = serde_json::from_value(value["result"]["engine_result"].clone()).unwrap_or_else(|_|"error".to_string());
+                                        test_harness_sender.send((transaction, engine_result)).unwrap();
+                                    }
                                     None => match serde_json::from_value::<SubscriptionObject>(value) {
                                         Ok(subscription_object) => {
                                             subscription_collector_sender.send(PeerSubscriptionObject::new(peer, subscription_object)).unwrap();
@@ -123,11 +142,14 @@ impl Client<'static> {
         destination_id: &str,
         sender_address: &str,
         sequence: Option<u32>,
+        include_fee: usize,
+        source_tag: usize,
     ) -> Transaction
     {
         // Create payment object for payment to account
+        let amount = amount * 10u32.pow(7) + 10 * include_fee as u32;
         let payment = Payment {
-            amount,
+            amount: amount.to_string(),
             destination: String::from(destination_id),
             destination_tag: None,
             invoice_id: None,
@@ -137,6 +159,7 @@ impl Client<'static> {
 
         // Create transaction object containing the payment
         Transaction {
+            data: Some(payment),
             account: String::from(sender_address),
             transaction_type: TransactionType::Payment,
             fee: None,
@@ -144,12 +167,11 @@ impl Client<'static> {
             account_txn_id: None,
             flags: None,
             last_ledger_sequence: None,
-            source_tag: None,
+            source_tag: Some(source_tag as u32),
             signing_pub_key: None,
             txn_signature: None,
             date: None,
             hash: None,
-            data: Some(payment)
         }
     }
 
@@ -219,9 +241,11 @@ impl Client<'static> {
 
 /// A transaction struct containing some, but not all, fields a ripple transaction can hold
 /// Used for communication with node by serde (de)serialization
-#[derive(Serialize, Deserialize, PartialEq, Eq, Debug, Clone)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Debug, Clone, Default, Hash)]
 #[serde(rename_all = "PascalCase")]
 pub struct Transaction {
+    #[serde(rename = "Data", skip_serializing_if = "Option::is_none", flatten)]
+    pub data: Option<Payment>,
     #[serde(rename = "Account")]
     pub account: String,
     #[serde(rename = "TransactionType")]
@@ -246,12 +270,10 @@ pub struct Transaction {
     pub date: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hash: Option<String>,
-    #[serde(rename = "Data", skip_serializing_if = "Option::is_none", flatten)]
-    pub data: Option<Payment>
 }
 
 /// The different transaction types
-#[derive(Serialize, Deserialize, Eq, PartialEq, Debug, Clone)]
+#[derive(Serialize, Deserialize, Eq, PartialEq, Debug, Clone, Hash)]
 pub enum TransactionType {
     Payment,
     OfferCreate,
@@ -273,11 +295,15 @@ pub enum TransactionType {
     UNLModify
 }
 
+impl Default for TransactionType {
+    fn default() -> Self { TransactionType::Payment }
+}
+
 /// Fields specific to a payment transaction
-#[derive(Serialize, Deserialize, Eq, PartialEq, Debug, Clone)]
+#[derive(Serialize, Deserialize, Eq, PartialEq, Debug, Clone, Default, Hash)]
 pub struct Payment  {
     #[serde(rename = "Amount")]
-    pub amount: u32,
+    pub amount: String,
     #[serde(rename = "Destination")]
     pub destination: String,
     #[serde(rename = "DestinationTag", skip_serializing_if = "Option::is_none")]
@@ -404,7 +430,7 @@ pub enum SubscriptionObject {
 /// Sent by the transaction_proposed subscription stream.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct TransactionSubscription {
-    engine_result: String,
+    pub engine_result: String,
     engine_result_code: u32,
     engine_result_message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -570,13 +596,24 @@ impl PeerServerStateObject {
 #[cfg(test)]
 mod client_tests {
     use serde_json::Value;
-    use crate::client::SubscriptionObject;
+    use crate::client::{SubscriptionObject, Transaction};
 
     #[test]
     fn parse_transaction_subscription_test() {
         let text = String::from("{\"engine_result\":\"tesSUCCESS\",\"engine_result_code\":0,\"engine_result_message\":\"The transaction was applied. Only final in a validated ledger.\",\"ledger_hash\":\"26CEAA70664693084A374B2997E87EB12D1835B658070336F2BB00956A7034B6\",\"ledger_index\":257,\"meta\":{\"AffectedNodes\":[{\"CreatedNode\":{\"LedgerEntryType\":\"FeeSettings\",\"LedgerIndex\":\"4BC50C9B0D8515D3EAAE1E74B29A95804346C491EE1A95BF25E4AAB854A6A651\",\"NewFields\":{\"BaseFee\":\"a\",\"ReferenceFeeUnits\":10,\"ReserveBase\":20000000,\"ReserveIncrement\":5000000}}}],\"TransactionIndex\":0,\"TransactionResult\":\"tesSUCCESS\"},\"status\":\"closed\",\"transaction\":{\"Account\":\"rrrrrrrrrrrrrrrrrrrrrhoLvTp\",\"BaseFee\":\"a\",\"Fee\":\"0\",\"LedgerSequence\":257,\"ReferenceFeeUnits\":10,\"ReserveBase\":20000000,\"ReserveIncrement\":5000000,\"Sequence\":0,\"SigningPubKey\":\"\",\"TransactionType\":\"SetFee\",\"date\":703267220,\"hash\":\"9CCE3C7AD8ABF51C3E2B36D5BA8C1197BD3CAD20AD1B60BB7D036147D870008E\"},\"type\":\"transaction\",\"validated\":true}");
         let v: Value = serde_json::from_str(text.as_str()).unwrap();
         let res = serde_json::from_value::<SubscriptionObject>(v);
-        dbg!(res);
+        assert!(res.is_ok());
+    }
+
+    #[test]
+    fn parse_transaction_submit_test() {
+        let text = String::from("{\"id\":\"Test harness\",\"result\":{\"deprecated\":\"Signing support in the 'submit' command has been deprecated and will be removed in a future version of the server. Please migrate to a standalone signing tool.\",\"engine_result\":\"tesSUCCESS\",\"engine_result_code\":0,\"engine_result_message\":\"The transaction was applied. Only final in a validated ledger.\",\"tx_blob\":\"1200002280000000240000000161400000003B9ACA0068400000000000000A73210330E7FC9D56BB25D6893BA3F317AE5BCF33B3291BD63DB32654A313222F7FD02074473045022100D39D6D57D44805CDEF0AC773170694C92D078234FF8C22FC0573E4C95BCC3D1E02203CF47C8D855EECDD48A4CCF62BEC09FA5F854EA970D400A3F4CADBFB88B1574F8114B5F762798A53D543A014CAF8B297CFF8F2F937E883147CC7B086211F8C6ECD22D2104BC3AC06A25B900F\",\"tx_json\":{\"Account\":\"rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh\",\"Amount\":\"1000000000\",\"Destination\":\"rU48rTg9WhAA4kTFSRDZnfbuxKGqSU9You\",\"Fee\":\"10\",\"Flags\":2147483648,\"Sequence\":1,\"SigningPubKey\":\"0330E7FC9D56BB25D6893BA3F317AE5BCF33B3291BD63DB32654A313222F7FD020\",\"TransactionType\":\"Payment\",\"TxnSignature\":\"3045022100D39D6D57D44805CDEF0AC773170694C92D078234FF8C22FC0573E4C95BCC3D1E02203CF47C8D855EECDD48A4CCF62BEC09FA5F854EA970D400A3F4CADBFB88B1574F\",\"hash\":\"8406CADDE46381CC3D2D8F6A31AC4C3640583FC81741CD4D6DA51DF9C40DC00F\"}},\"status\":\"success\",\"type\":\"response\"}");
+        let v: Value = serde_json::from_str(text.as_str()).unwrap();
+        let payment = serde_json::from_value::<Transaction>(v["result"]["tx_json"].clone());
+        let engine_result: String = serde_json::from_value(v["result"]["engine_result"].clone()).unwrap();
+        assert_eq!(engine_result, "tesSUCCESS".to_string());
+        println!("{:?}", payment);
+        assert_eq!(payment.is_ok(), true);
     }
 }

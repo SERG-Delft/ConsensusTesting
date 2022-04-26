@@ -27,7 +27,7 @@ pub trait ExtendedFitness: Fitness + AsScalar + Clone + Send + Sync + Display {
 
     fn lowest_possible_fitness() -> Self;
 
-    fn run_harness(test_harness: TestHarness<'static>, node_states: Arc<MutexNodeStates>) -> Self;
+    fn run_harness(test_harness: &mut TestHarness<'static>, node_states: Arc<MutexNodeStates>) -> Self;
 }
 
 /// Fitness function communicates with scheduler handler for calculating and storing fitness of solutions.

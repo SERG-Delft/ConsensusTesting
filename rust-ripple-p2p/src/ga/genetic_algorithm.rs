@@ -25,7 +25,7 @@ use crate::ga::encoding::priority_encoding::{PriorityGenotype, PriorityMapPhenot
 use crate::ga::fitness::propose_seq_fitness::ProposeSeqFitness;
 use super::mutation::GaussianMutator;
 
-pub type CurrentFitness = ProposeSeqFitness;
+pub type CurrentFitness = TimeFitness;
 
 /// The message types that will be subject to delay
 #[derive(Debug, Eq, PartialEq, Hash, Clone, Copy)]
@@ -139,7 +139,7 @@ pub fn run_ga<S, C, T, H, G, P>(scheduler_handler: H, fitness_calculation: Fitne
                     step.processing_time
                 );
                 println!("Best individual:");
-                P::from_genes(&best_solution.solution.genome).display_genotype_by_message();
+                println!("{}", P::from_genes(&best_solution.solution.genome).display_genotype_by_message());
                 //                println!("| population: [{}]", result.population.iter().map(|g| g.as_text())
                 //                    .collect::<Vec<String>>().join("], ["));
             },
@@ -156,7 +156,7 @@ pub fn run_ga<S, C, T, H, G, P>(scheduler_handler: H, fitness_calculation: Fitne
                     processing_time
                 );
                 print!("      ");
-                P::from_genes(&best_solution.solution.genome).display_genotype_by_message();
+                println!("{}", P::from_genes(&best_solution.solution.genome).display_genotype_by_message());
                 break;
             },
             Err(error) => {
@@ -176,22 +176,25 @@ mod ga_tests {
     use std::time::Duration;
     use genevo::operator::prelude::{MaximizeSelector, MultiPointCrossBreeder};
     use crate::ga::encoding::delay_encoding::{DelayMapPhenotype, DelaysGenotype};
+    use crate::ga::encoding::num_genes;
     use crate::ga::fitness::{FitnessCalculation, SchedulerHandlerTrait};
     use crate::ga::genetic_algorithm::{ConsensusMessageType, run_ga, ExtendedPhenotype, CurrentFitness};
     use crate::ga::parameters::default_mu_lambda_delays;
     use crate::ga::population_builder::build_delays_population;
 
     #[test]
+    #[ignore]
     fn test_phenotype() {
         //let genotype: DelaysGenotype = (1..81).collect_vec();
-        let genotype: DelaysGenotype = vec![959, 533, 12, 717, 406, 603, 767, 0, 304, 366, 925, 54, 854, 159, 611, 747, 839, 555, 985, 146, 678, 499, 67, 802, 991, 557, 185, 312, 557, 676, 659, 149, 963, 347, 817, 987, 451, 972, 515, 631, 174, 564, 551, 889, 665, 527, 645, 336, 977, 946, 641, 441, 113, 872, 778, 385, 878, 528, 947, 435, 913, 643, 4, 101, 472, 416, 624, 792, 925, 573, 225, 948, 862, 142, 580, 50, 742, 648, 338, 914];
+        let genotype: DelaysGenotype = vec![100u32; num_genes()];
         let phenotype = DelayMapPhenotype::from_genes(&genotype);
         println!("{:?}", phenotype.delay_map);
         println!("{:?}", phenotype.message_type_delays(&ConsensusMessageType::TMValidation));
-        phenotype.display_genotype_by_message();
+        println!("{}", phenotype.display_genotype_by_message());
     }
 
     #[test]
+    #[ignore]
     fn test_mu_lambda() {
         let params = default_mu_lambda_delays(1, 2);
         let population = build_delays_population(params.num_genes, params.min_value, params.max_value, params.population_size);
@@ -226,8 +229,8 @@ mod ga_tests {
                     Ok(delays_genotype) => match &delays_genotype[..] {
                         x => {
                             println!("Received {:?} from fitness calculation", x);
-                            // self.fitness_values.write().unwrap().insert(delays_genotype.clone(), CurrentFitness::new(Duration::from_secs(x[0] as u64)));
-                            self.fitness_values.write().unwrap().insert(delays_genotype.clone(), CurrentFitness::new(x[0]));
+                            self.fitness_values.write().unwrap().insert(delays_genotype.clone(), CurrentFitness::new(Duration::from_secs(x[0] as u64)));
+                            // self.fitness_values.write().unwrap().insert(delays_genotype.clone(), CurrentFitness::new(x[0]));
                         }
                     },
                     Err(_) => {}

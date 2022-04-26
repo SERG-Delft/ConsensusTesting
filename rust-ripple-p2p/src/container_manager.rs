@@ -3,11 +3,11 @@ use std::fs::{create_dir_all, File, read_to_string};
 use std::io::Write;
 use std::process::Command;
 use std::time::Duration;
-use chrono::{Utc};
 
 use log::{debug, error};
 use rayon::prelude::*;
 use serde::{Deserialize};
+use crate::LOG_FOLDER;
 
 pub fn start_docker_containers(peers: usize, unls: Vec<Vec<usize>>) -> Vec<NodeKeys> {
     remove_containers("validator");
@@ -46,6 +46,14 @@ pub struct NodeKeys {
 }
 
 fn get_node_keys(n: usize) -> Vec<NodeKeys> {
+    start_key_generator();
+    debug!("acquiring node keys");
+    let keys: Vec<NodeKeys> = (0..n).into_par_iter().map(|_| acquire_keys()).collect();
+    debug!("acquired {} node keys", keys.len());
+    keys
+}
+
+pub fn start_key_generator() {
     let already_running = Command::new("docker")
         .args(["ps", "--filter", "name=key_generator", "--quiet"])
         .output().unwrap().stdout;
@@ -55,10 +63,6 @@ fn get_node_keys(n: usize) -> Vec<NodeKeys> {
         start_node_with_options("key_generator", 0, false, None);
         thread::sleep(Duration::from_secs(1));
     }
-    debug!("acquiring node keys");
-    let keys: Vec<NodeKeys> = (0..n).into_par_iter().map(|_| acquire_keys()).collect();
-    debug!("acquired {} node keys", keys.len());
-    keys
 }
 
 fn acquire_keys() -> NodeKeys {
@@ -101,10 +105,8 @@ fn configure_unls(unls: Vec<Vec<usize>>, keys: &Vec<NodeKeys>) {
 
 fn create_log_folders(peers: usize) -> Vec<String> {
     let mut folders = vec![];
-    let now = Utc::now();
-    let date_string = now.format("%FT%H-%M-%S").to_string();
     for i in 0..peers {
-        let folder_name = format!("{}\\..\\logs\\{}\\validator_{}", env::current_dir().unwrap().to_str().unwrap(), date_string, i);
+        let folder_name = format!("{}\\validator_{}", *LOG_FOLDER, i);
         println!("{}", folder_name);
         match create_dir_all(&folder_name) {
             Ok(_) => folders.push(folder_name),
@@ -140,4 +142,26 @@ fn start_node_with_options(name: &str, offset: usize, expose_to_network: bool, l
     }
     command.arg("mvanmeerten/rippled-boost-cmake").output().unwrap();
     debug!("started {}", name);
+}
+
+pub fn create_account() -> AccountKeys {
+    let output = Command::new("docker").arg("exec")
+        .args(["key_generator", "/bin/sh", "-c"])
+        .args(["./rippled/my_build/rippled wallet_propose"])
+        .output().unwrap().stdout;
+    let keys = std::str::from_utf8(&output).unwrap();
+    let result: AccountKeysResult = serde_json::from_str(&keys).unwrap();
+    debug!("acquired account keys {:?}", result.result);
+    result.result
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct AccountKeys {
+    pub account_id: String,
+    pub master_seed: String,
+}
+
+#[derive(Deserialize)]
+pub struct AccountKeysResult {
+    result: AccountKeys
 }

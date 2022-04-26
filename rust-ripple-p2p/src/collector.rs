@@ -11,9 +11,11 @@ use crate::client::{ConsensusChange, PeerServerStateObject, PeerSubscriptionObje
 use crate::message_handler::RippleMessageObject;
 use chrono::{DateTime, MAX_DATETIME, Utc};
 use itertools::Itertools;
+use crate::LOG_FOLDER;
 use crate::message_handler::RippleMessageObject::TMProposeSet;
 use crate::node_state::{ConsensusPhase, MutexNodeStates};
 use crate::protos::ripple::{TMTransaction};
+use crate::test_harness::TransactionResultCode;
 
 /// Collects and writes data to files and the scheduler
 /// Execution file stores all messages sent from the proxy
@@ -33,7 +35,7 @@ impl Collector {
     ) -> Self {
         let mut subscription_files = vec![];
         for peer in 0..number_of_nodes {
-            let mut subscription_file = BufWriter::new(File::create(Path::new(format!("subscription_{}.json", peer).as_str())).expect("Opening subscription file failed"));
+            let mut subscription_file = BufWriter::new(File::create(Path::new(format!("{}\\subscription_{}.json", *LOG_FOLDER, peer).as_str())).expect("Opening subscription file failed"));
             subscription_file.write_all(String::from("[\n").as_bytes()).unwrap();
             subscription_files.push(subscription_file);
         }
@@ -70,18 +72,20 @@ impl Collector {
                     }
                     SubscriptionObject::Transaction(transaction_subscription) => {
                         // Transactions can be validated or unvalidated
+                        self.write_to_subscription_file(subscription_object.peer, json!({"Transaction": transaction_subscription}).to_string());
                         if transaction_subscription.validated {
+                            let result = TransactionResultCode::parse(&transaction_subscription.engine_result);
                             self.node_states.add_validated_transaction(
                                 subscription_object.peer as usize,
-                                transaction_subscription.transaction.txn_signature.clone().unwrap()
+                                transaction_subscription.transaction,
+                                result
                             );
                         } else {
                             self.node_states.add_unvalidated_transaction(
                                 subscription_object.peer as usize,
-                                transaction_subscription.transaction.txn_signature.clone().unwrap()
+                                transaction_subscription.transaction
                             );
                         }
-                        self.write_to_subscription_file(subscription_object.peer, json!({"Transaction": transaction_subscription}).to_string())
                     }
                     SubscriptionObject::ServerStatus(server_status) => {
                         self.write_to_subscription_file(subscription_object.peer, json!({"ServerStatus": server_status}).to_string())
@@ -93,7 +97,7 @@ impl Collector {
     }
 
     fn execution_writer(ripple_message_receiver: Receiver<Box<RippleMessage>>, node_states: Arc<MutexNodeStates>) {
-        let execution_file = File::create(Path::new("execution.txt")).expect("Opening execution file failed");
+        let execution_file = File::create(Path::new(format!("{}\\execution.txt", *LOG_FOLDER).as_str())).expect("Opening execution file failed");
         let mut execution_writer = BufWriter::new(execution_file);
         loop {
             // Write all messages sent by the scheduler to peers to "execution.txt". After delay!

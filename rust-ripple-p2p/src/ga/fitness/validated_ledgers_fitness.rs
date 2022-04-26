@@ -51,10 +51,14 @@ impl ExtendedFitness for ValidatedLedgersFitness {
         Self { value: 0 }
     }
 
-    fn run_harness(test_harness: TestHarness<'static>, node_states: Arc<MutexNodeStates>) -> Self {
+    fn run_harness(test_harness: &mut TestHarness<'static>, node_states: Arc<MutexNodeStates>) -> Self {
         let start = node_states.min_validated_ledger();
-        test_harness.schedule_transactions(node_states.clone());
-        Self::new(node_states.min_validated_ledger() - start)
+        let liveness = test_harness.schedule_transactions(node_states.clone());
+        if liveness {
+            Self::new(node_states.min_validated_ledger() - start)
+        } else {
+            Self::zero()
+        }
     }
 }
 
