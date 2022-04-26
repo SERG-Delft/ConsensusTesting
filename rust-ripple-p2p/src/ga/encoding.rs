@@ -16,7 +16,7 @@ pub(crate) fn num_genes() -> usize {
 pub trait ExtendedPhenotype<G>: Phenotype<G> + Send where G: ExtendedGenotype {
     fn from_genes(geno: &G) -> Self;
 
-    fn display_genotype_by_message(&self);
+    fn display_genotype_by_message(&self) -> String;
 }
 
 pub trait ExtendedGenotype: MultiPointCrossover + GaussianGenomeMutation + Eq + Hash + Debug + Default {}

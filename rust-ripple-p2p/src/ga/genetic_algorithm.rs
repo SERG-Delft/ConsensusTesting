@@ -139,7 +139,7 @@ pub fn run_ga<S, C, T, H, G, P>(scheduler_handler: H, fitness_calculation: Fitne
                     step.processing_time
                 );
                 println!("Best individual:");
-                P::from_genes(&best_solution.solution.genome).display_genotype_by_message();
+                println!("{}", P::from_genes(&best_solution.solution.genome).display_genotype_by_message());
                 //                println!("| population: [{}]", result.population.iter().map(|g| g.as_text())
                 //                    .collect::<Vec<String>>().join("], ["));
             },
@@ -156,7 +156,7 @@ pub fn run_ga<S, C, T, H, G, P>(scheduler_handler: H, fitness_calculation: Fitne
                     processing_time
                 );
                 print!("      ");
-                P::from_genes(&best_solution.solution.genome).display_genotype_by_message();
+                println!("{}", P::from_genes(&best_solution.solution.genome).display_genotype_by_message());
                 break;
             },
             Err(error) => {
@@ -173,6 +173,7 @@ mod ga_tests {
     use std::collections::HashMap;
     use std::sync::{Arc, RwLock};
     use std::sync::mpsc::{Receiver};
+    use std::time::Duration;
     use genevo::operator::prelude::{MaximizeSelector, MultiPointCrossBreeder};
     use crate::ga::encoding::delay_encoding::{DelayMapPhenotype, DelaysGenotype};
     use crate::ga::encoding::num_genes;
@@ -189,7 +190,7 @@ mod ga_tests {
         let phenotype = DelayMapPhenotype::from_genes(&genotype);
         println!("{:?}", phenotype.delay_map);
         println!("{:?}", phenotype.message_type_delays(&ConsensusMessageType::TMValidation));
-        phenotype.display_genotype_by_message();
+        println!("{}", phenotype.display_genotype_by_message());
     }
 
     #[test]

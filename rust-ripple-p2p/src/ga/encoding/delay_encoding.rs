@@ -67,9 +67,11 @@ impl ExtendedPhenotype<DelaysGenotype> for DelayMapPhenotype {
     }
 
     #[allow(unused)]
-    fn display_genotype_by_message(&self) {
+    fn display_genotype_by_message(&self) -> String {
+        let mut res = String::new();
         for message_type in ConsensusMessageType::VALUES {
-            println!("{:?}: {:?}", message_type, self.message_type_delays(&message_type))
+            res += format!("{:?}: {:?}\n", message_type, self.message_type_delays(&message_type)).as_str();
         }
+        res
     }
 }

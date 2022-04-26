@@ -201,7 +201,11 @@ pub trait Scheduler: Sized {
         }
         // Empty transaction queue
         while let Ok(_) = test_harness.client_receiver.try_recv() {}
-        debug!("Accounts created in ledger: {}", *ledger_lock.lock()-1);
+        let account_seqs = *ledger_lock.lock()-1;
+        debug!("Accounts created in ledger: {}", account_seqs);
+        for i in 1..test_harness.accounts.len() {
+            test_harness.accounts[i].transaction_sequence = account_seqs;
+        }
     }
 }
 

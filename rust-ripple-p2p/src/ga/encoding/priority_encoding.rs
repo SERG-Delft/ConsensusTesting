@@ -130,10 +130,12 @@ impl ExtendedPhenotype<PriorityGenotype> for PriorityMapPhenotype {
     }
 
     #[allow(unused)]
-    fn display_genotype_by_message(&self) {
+    fn display_genotype_by_message(&self) -> String {
+        let mut res = String::new();
         for message_type in ConsensusMessageType::VALUES {
-            println!("{:?}: {:?}", message_type, self.message_type_priorities(&message_type))
+            res += format!("{:?}: {:?}\n", message_type, self.message_type_priorities(&message_type)).as_str();
         }
+        res
     }
 }
 

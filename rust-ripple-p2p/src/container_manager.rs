@@ -3,11 +3,11 @@ use std::fs::{create_dir_all, File, read_to_string};
 use std::io::Write;
 use std::process::Command;
 use std::time::Duration;
-use chrono::{Utc};
 
 use log::{debug, error};
 use rayon::prelude::*;
 use serde::{Deserialize};
+use crate::LOG_FOLDER;
 
 pub fn start_docker_containers(peers: usize, unls: Vec<Vec<usize>>) -> Vec<NodeKeys> {
     remove_containers("validator");
@@ -105,10 +105,8 @@ fn configure_unls(unls: Vec<Vec<usize>>, keys: &Vec<NodeKeys>) {
 
 fn create_log_folders(peers: usize) -> Vec<String> {
     let mut folders = vec![];
-    let now = Utc::now();
-    let date_string = now.format("%FT%H-%M-%S").to_string();
     for i in 0..peers {
-        let folder_name = format!("{}\\..\\logs\\{}\\validator_{}", env::current_dir().unwrap().to_str().unwrap(), date_string, i);
+        let folder_name = format!("{}\\validator_{}", *LOG_FOLDER, i);
         println!("{}", folder_name);
         match create_dir_all(&folder_name) {
             Ok(_) => folders.push(folder_name),

@@ -10,7 +10,7 @@ use petgraph::prelude::NodeIndex;
 use crate::client::{PeerServerStateObject, ServerStateObject, Transaction, ValidatedLedger};
 use crate::collector::RippleMessage;
 use crate::ga::encoding::delay_encoding::DelaysGenotype;
-use crate::test_harness::{TestHarness, TransactionTimed};
+use crate::test_harness::{TransactionResultCode, TransactionTimed};
 
 /// Contains the state for a particular node at a particular time
 #[derive(Clone, Debug)]
@@ -20,7 +20,7 @@ pub struct NodeState {
     pub current_consensus_round: u32,
     pub last_validated_ledger: ValidatedLedger,
     pub unvalidated_transactions: Vec<Transaction>,
-    pub validated_transactions: Vec<Transaction>,
+    pub validated_transactions: Vec<(Transaction, TransactionResultCode)>,
     pub number_of_failed_consensus_rounds: u32,
     pub unreceived_message_sends: Vec<(RippleMessage, Option<DependencyNode>)>,
     pub latest_message_received: Option<DependencyNode>,
@@ -60,6 +60,7 @@ pub struct NodeStates {
     pub node_states: Vec<NodeState>,
     pub executions: Vec<RippleMessage>,
     pub dependency_graph: Graph<DependencyEvent, ()>,
+    pub current_individual: String,
     pub current_delays: DelaysGenotype,
     pub server_state_updates: Vec<bool>,
     pub highest_propose_seq: u32,
@@ -75,6 +76,7 @@ impl NodeStates {
             node_states,
             executions: vec![],
             dependency_graph: petgraph::Graph::new(),
+            current_individual: String::new(),
             current_delays: vec![],
             server_state_updates: vec![false; number_of_nodes],
             highest_propose_seq: 0,
@@ -177,6 +179,14 @@ impl NodeStates {
     pub fn add_send_dependency(&mut self, ripple_message: RippleMessage) {
         let latest_message_received = self.node_states[ripple_message.sender_index()].latest_message_received.clone();
         self.node_states[ripple_message.sender_index()].unreceived_message_sends.push((ripple_message.clone(), latest_message_received));
+    }
+
+    pub fn set_current_individual(&mut self, individual: String) {
+        self.current_individual = individual;
+    }
+
+    pub fn get_current_individual(&self) -> String {
+        self.current_individual.clone()
     }
 
     pub fn set_current_delays(&mut self, delays: DelaysGenotype) {
@@ -288,10 +298,10 @@ impl MutexNodeStates {
         self.transactions_cvar.notify_all();
     }
 
-    pub fn add_validated_transaction(&self, peer: usize, transaction: Transaction) {
+    pub fn add_validated_transaction(&self, peer: usize, transaction: Transaction, result: TransactionResultCode) {
         let mut node_lock = self.node_states.lock();
-        debug!("Added validated transaction: {:?}", TestHarness::calc_tx_idx(&node_lock.harness_transactions, &transaction));
-        node_lock.node_states[peer].validated_transactions.push(transaction);
+        debug!("Added validated transaction: {:?}", &transaction.source_tag);
+        node_lock.node_states[peer].validated_transactions.push((transaction, result));
         self.transactions_cvar.notify_all();
     }
 
@@ -301,6 +311,22 @@ impl MutexNodeStates {
 
     pub fn get_consensus_phase(&self, peer: usize) -> ConsensusPhase {
         self.node_states.lock().node_states[peer].consensus_phase.clone()
+    }
+
+    pub fn set_current_individual(&self, individual: String) {
+        self.node_states.lock().set_current_individual(individual);
+    }
+
+    pub fn get_current_individual(&self) -> String {
+        self.node_states.lock().get_current_individual()
+    }
+
+    pub fn set_current_delays(&self, delays: DelaysGenotype) {
+        self.node_states.lock().set_current_delays(delays);
+    }
+
+    pub fn get_current_delays(&self) -> DelaysGenotype {
+        self.node_states.lock().current_delays.clone()
     }
 
     pub fn get_number_of_failed_consensus_rounds(&self, peer: usize) -> u32 {
@@ -319,26 +345,28 @@ impl MutexNodeStates {
         self.node_states.lock().node_states[peer].last_validated_ledger.clone()
     }
 
-    pub fn get_max_validated_transactions(&self) -> HashSet<Transaction> {
+    pub fn get_max_validated_transactions(&self) -> HashSet<(Transaction, TransactionResultCode)> {
         self.node_states.lock().node_states.iter()
             .flat_map(|x| x.validated_transactions.clone())
             .unique()
-            .collect::<HashSet<Transaction>>()
+            .collect::<HashSet<(Transaction, TransactionResultCode)>>()
     }
 
-    pub fn get_min_validated_transactions(&self) -> HashSet<Transaction> {
+    pub fn get_min_validated_transactions(&self) -> HashSet<(Transaction, TransactionResultCode)> {
         self.node_states.lock().node_states.iter()
             .flat_map(|x| x.validated_transactions.clone())
             .counts()
             .into_iter()
             .filter(|(_tx, count)| *count == self.number_of_nodes)
             .map(|(tx, _count)| tx)
-            .collect::<HashSet<Transaction>>()
+            .collect::<HashSet<(Transaction, TransactionResultCode)>>()
     }
 
-    pub fn get_min_validated_transactions_idx(&self, transactions: &Vec<TransactionTimed>) -> Vec<usize> {
+    pub fn get_min_validated_transactions_idx(&self) -> Vec<(usize, TransactionResultCode)> {
         self.get_min_validated_transactions().iter()
-            .filter_map(|tx| TestHarness::calc_tx_idx(transactions, tx)).collect::<Vec<usize>>()
+            .filter(|tx| tx.0.source_tag.is_some())
+            .map(|tx| (tx.0.source_tag.unwrap() as usize, tx.1.clone()))
+            .collect::<Vec<(usize, TransactionResultCode)>>()
     }
 
     pub fn get_number_min_validated_transactions(&self) -> usize {
@@ -357,7 +385,7 @@ impl MutexNodeStates {
         self.node_states.lock().node_states[peer].unvalidated_transactions.clone()
     }
 
-    pub fn get_validated_transaction(&self, peer: usize) -> Vec<Transaction> {
+    pub fn get_validated_transaction(&self, peer: usize) -> Vec<(Transaction, TransactionResultCode)> {
         self.node_states.lock().node_states[peer].validated_transactions.clone()
     }
 
@@ -391,6 +419,10 @@ impl MutexNodeStates {
         self.node_states.lock().executions.clone()
     }
 
+    pub fn get_consensus_event_count(&self) -> usize {
+        self.node_states.lock().executions.len()
+    }
+
     pub fn clear_executions(&self) {
         self.node_states.lock().executions.clear();
     }
@@ -401,14 +433,6 @@ impl MutexNodeStates {
 
     pub fn get_dependency_graph(&self) -> Graph<DependencyEvent, ()> {
         self.node_states.lock().dependency_graph.clone()
-    }
-
-    pub fn set_current_delays(&self, delays: DelaysGenotype) {
-        self.node_states.lock().set_current_delays(delays);
-    }
-
-    pub fn get_current_delays(&self) -> DelaysGenotype {
-        self.node_states.lock().current_delays.clone()
     }
 
     pub fn set_server_state(&self, server_state: PeerServerStateObject) {

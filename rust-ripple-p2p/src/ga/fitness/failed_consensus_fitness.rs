@@ -53,8 +53,12 @@ impl ExtendedFitness for FailedConsensusFitness {
 
     fn run_harness(test_harness: &mut TestHarness<'static>, node_states: Arc<MutexNodeStates>) -> Self {
         node_states.clear_number_of_failed_consensus_rounds();
-        test_harness.schedule_transactions(node_states.clone());
-        Self::new(node_states.get_total_number_of_failed_consensus_rounds())
+        let liveness = test_harness.schedule_transactions(node_states.clone());
+        if liveness {
+            Self::new(node_states.get_total_number_of_failed_consensus_rounds())
+        } else {
+            Self::zero()
+        }
     }
 }
 

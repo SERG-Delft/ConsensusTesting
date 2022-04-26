@@ -142,15 +142,12 @@ impl Client<'static> {
         destination_id: &str,
         sender_address: &str,
         sequence: Option<u32>,
-        include_fee: bool
+        include_fee: usize,
+        source_tag: usize,
     ) -> Transaction
     {
         // Create payment object for payment to account
-        let amount = if include_fee {
-            amount * 10u32.pow(7) + 10
-        } else {
-            amount * 10u32.pow(7)
-        };
+        let amount = amount * 10u32.pow(7) + 10 * include_fee as u32;
         let payment = Payment {
             amount: amount.to_string(),
             destination: String::from(destination_id),
@@ -170,7 +167,7 @@ impl Client<'static> {
             account_txn_id: None,
             flags: None,
             last_ledger_sequence: None,
-            source_tag: None,
+            source_tag: Some(source_tag as u32),
             signing_pub_key: None,
             txn_signature: None,
             date: None,
@@ -433,7 +430,7 @@ pub enum SubscriptionObject {
 /// Sent by the transaction_proposed subscription stream.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct TransactionSubscription {
-    engine_result: String,
+    pub engine_result: String,
     engine_result_code: u32,
     engine_result_message: String,
     #[serde(skip_serializing_if = "Option::is_none")]

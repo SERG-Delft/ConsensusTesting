@@ -8,6 +8,7 @@ use log::{debug, error, trace};
 use parking_lot::{Condvar, Mutex};
 use tokio::sync::mpsc::Receiver as TokioReceiver;
 use crate::collector::RippleMessage;
+use crate::ga::encoding::ExtendedPhenotype;
 use crate::ga::genetic_algorithm::ConsensusMessageType;
 use crate::ga::encoding::priority_encoding::{Priority, PriorityMapPhenotype};
 use crate::message_handler::RippleMessageObject;
@@ -36,7 +37,7 @@ impl PriorityScheduler {
         let mut time_counter = 0;
         loop {
             let mut inbox_heap = inbox_lock.lock();
-            // inbox_cvar.wait_for(&mut inbox_heap, std::time::Duration::from_millis(MAX_DURATION_MILLIS as u64));
+            inbox_cvar.wait_for(&mut inbox_heap, std::time::Duration::from_millis(MAX_DURATION_MILLIS as u64));
             // inbox_cvar.wait(&mut inbox_heap);
             {
                 while inbox_heap.len() > max_inbox_size {
@@ -127,10 +128,11 @@ impl Scheduler for PriorityScheduler {
         }
     }
 
-    fn listen_to_ga(current_individual: Arc<Mutex<Self::IndividualPhenotype>>, ga_receiver: STDReceiver<Self::IndividualPhenotype>, _node_states: Arc<MutexNodeStates>) {
+    fn listen_to_ga(current_individual: Arc<Mutex<Self::IndividualPhenotype>>, ga_receiver: STDReceiver<Self::IndividualPhenotype>, node_states: Arc<MutexNodeStates>) {
         loop {
             match ga_receiver.recv() {
                 Ok(new_priority) => {
+                    node_states.set_current_individual(current_individual.lock().display_genotype_by_message());
                     *current_individual.lock() = new_priority;
                     debug!("New priorities received");
                 },

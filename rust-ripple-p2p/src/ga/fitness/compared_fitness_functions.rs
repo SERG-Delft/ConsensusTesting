@@ -94,21 +94,25 @@ impl ExtendedFitness for ComparedFitnessFunctions {
         node_states.clear_number_of_failed_consensus_rounds();
         let start_validated_ledgers = node_states.node_states.lock().min_validated_ledger();
         let start_time = Instant::now();
-        test_harness.schedule_transactions(node_states.clone());
-        let failed_consensus_fitness = node_states.get_total_number_of_failed_consensus_rounds();
-        let validated_ledgers_fitness = node_states.min_validated_ledger() - start_validated_ledgers;
-        let time_fitness = Instant::now().duration_since(start_time);
-        let delay_fitness = node_states.get_current_delays().iter().sum::<u32>();
-        let after_server_states = StateAccountFitness::update_server_states(node_states, &test_harness);
-        let state_accounting_fitness = StateAccountFitness::calculate_fitness(before_server_states, after_server_states);
-        Self::new(
-            failed_consensus_fitness,
-            validated_ledgers_fitness,
-            time_fitness,
-            delay_fitness,
-            state_accounting_fitness.not_full_duration,
-            state_accounting_fitness.not_full_transitions,
-        )
+        let liveness = test_harness.schedule_transactions(node_states.clone());
+        if liveness {
+            let failed_consensus_fitness = node_states.get_total_number_of_failed_consensus_rounds();
+            let validated_ledgers_fitness = node_states.min_validated_ledger() - start_validated_ledgers;
+            let time_fitness = Instant::now().duration_since(start_time);
+            let delay_fitness = node_states.get_current_delays().iter().sum::<u32>();
+            let after_server_states = StateAccountFitness::update_server_states(node_states, &test_harness);
+            let state_accounting_fitness = StateAccountFitness::calculate_fitness(before_server_states, after_server_states);
+            Self::new(
+                failed_consensus_fitness,
+                validated_ledgers_fitness,
+                time_fitness,
+                delay_fitness,
+                state_accounting_fitness.not_full_duration,
+                state_accounting_fitness.not_full_transitions,
+            )
+        } else {
+            Self::zero()
+        }
     }
 }
 

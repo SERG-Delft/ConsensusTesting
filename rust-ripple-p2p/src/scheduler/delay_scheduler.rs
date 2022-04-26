@@ -4,12 +4,13 @@ use tokio::sync::mpsc::{Receiver as TokioReceiver};
 use std::thread;
 use std::time::Duration;
 use chrono::Utc;
-use genevo::genetic::{Phenotype};
+use genevo::genetic::Phenotype;
 use log::{debug, error, trace};
 use parking_lot::{Condvar, Mutex};
 use crate::collector::RippleMessage;
 use crate::ga::genetic_algorithm::{ConsensusMessageType};
 use crate::ga::encoding::delay_encoding::{DelayMapPhenotype, DROP_THRESHOLD};
+use crate::ga::encoding::ExtendedPhenotype;
 use crate::message_handler::RippleMessageObject;
 use crate::node_state::MutexNodeStates;
 use crate::scheduler::{Event, P2PConnections, RMOEvent, Scheduler, SchedulerState};
@@ -97,6 +98,7 @@ impl Scheduler for DelayScheduler {
             match ga_receiver.recv() {
                 Ok(new_delays) => {
                     node_states.set_current_delays(new_delays.genes());
+                    node_states.set_current_individual(current_individual.lock().display_genotype_by_message());
                     *current_individual.lock() = new_delays;
                     debug!("New delays received");
                 },
