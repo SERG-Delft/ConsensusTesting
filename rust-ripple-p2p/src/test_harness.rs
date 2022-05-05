@@ -17,7 +17,7 @@ use crate::node_state::MutexNodeStates;
 use crate::{LOG_FOLDER, NUM_NODES};
 use crate::test_harness::TestResult::{Failed, InProgress, Success};
 
-const MAX_EVENTS_TEST: usize = 2500;
+const MAX_EVENTS_TEST: usize = 1000;
 
 /// Struct containing transactions in the test harness.
 /// Transactions are created based on the contents of "harness.txt".
@@ -209,7 +209,7 @@ impl TestHarness<'static> {
             }
             "error" => {
                 error!("Transaction error, resubmitting...");
-                let timed_tx = self.transactions.iter().find(|tx| tx.transaction == transaction).unwrap();
+                let timed_tx = self.transactions.iter().find(|tx| tx.transaction.source_tag == transaction.source_tag).unwrap();
                 Self::schedule_transaction(transaction.clone(), transaction.sequence, self.accounts[timed_tx.from].account_keys.master_seed.clone(), Duration::from_millis(200), self.client_senders[timed_tx.client_index].clone());
             }
             _ => warn!("Transaction had a result other than tesSUCCESS: {}, transaction: {:?}", status, transaction)
@@ -270,7 +270,7 @@ pub struct TransactionTimed {
 
 #[derive(Debug, Clone)]
 pub struct Account {
-    account_keys: AccountKeys,
+    pub account_keys: AccountKeys,
     pub transaction_sequence: u32,
 }
 

@@ -1,5 +1,5 @@
 # peer delay(ms) amount(xrp) from(0=genesis) to; first line contains number_of_transaction and number_of_accounts (excluding genesis) and transactions that should succeed [idx|idx(subseq)]
-5;3;[0y,1|2|3|4y]
+5;3;[0y,1|2|3|4n]
 0 0 80 0 1
 4 4000 80 1 2
 2 4000 80 1 3

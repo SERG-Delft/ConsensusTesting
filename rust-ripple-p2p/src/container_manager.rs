@@ -1,3 +1,4 @@
+#[allow(unused)]
 use std::{env, fs, thread};
 use std::fs::{create_dir_all, File, read_to_string};
 use std::io::Write;
@@ -9,6 +10,7 @@ use rayon::prelude::*;
 use serde::{Deserialize};
 use crate::LOG_FOLDER;
 
+#[allow(unused)]
 pub fn start_docker_containers(peers: usize, unls: Vec<Vec<usize>>) -> Vec<NodeKeys> {
     remove_containers("validator");
     let node_keys = get_node_keys(peers);
@@ -20,7 +22,7 @@ pub fn start_docker_containers(peers: usize, unls: Vec<Vec<usize>>) -> Vec<NodeK
     node_keys
 }
 
-fn remove_containers(name: &str) {
+pub fn remove_containers(name: &str) {
     let leftovers = Command::new("docker").arg("ps")
         .args(["--all", "--quiet"])
         .args(["--filter", "ancestor=mvanmeerten/rippled-boost-cmake"])
@@ -45,7 +47,7 @@ pub struct NodeKeys {
     pub validation_seed: String,
 }
 
-fn get_node_keys(n: usize) -> Vec<NodeKeys> {
+pub fn get_node_keys(n: usize) -> Vec<NodeKeys> {
     start_key_generator();
     debug!("acquiring node keys");
     let keys: Vec<NodeKeys> = (0..n).into_par_iter().map(|_| acquire_keys()).collect();
@@ -76,7 +78,8 @@ fn acquire_keys() -> NodeKeys {
     result.result
 }
 
-fn create_configs(peers: usize, keys: &Vec<NodeKeys>) {
+
+pub fn create_configs(peers: usize, keys: &Vec<NodeKeys>) {
     let base = read_to_string("..\\config\\rippled.cfg").unwrap();
     (0..peers).into_par_iter().for_each(|i| {
         let path = format!("..\\config\\validator_{}", i);
@@ -88,7 +91,7 @@ fn create_configs(peers: usize, keys: &Vec<NodeKeys>) {
     });
 }
 
-fn configure_unls(unls: Vec<Vec<usize>>, keys: &Vec<NodeKeys>) {
+pub fn configure_unls(unls: Vec<Vec<usize>>, keys: &Vec<NodeKeys>) {
     (0..unls.len()).into_par_iter().for_each(|i| {
         let path = format!("..\\config\\validator_{}\\validators.txt", i);
         let mut validators = "[validators]\n".to_owned();
@@ -103,7 +106,7 @@ fn configure_unls(unls: Vec<Vec<usize>>, keys: &Vec<NodeKeys>) {
     });
 }
 
-fn create_log_folders(peers: usize) -> Vec<String> {
+pub fn create_log_folders(peers: usize) -> Vec<String> {
     let mut folders = vec![];
     for i in 0..peers {
         let folder_name = format!("{}\\validator_{}", *LOG_FOLDER, i);
@@ -116,10 +119,12 @@ fn create_log_folders(peers: usize) -> Vec<String> {
     folders
 }
 
+#[allow(unused)]
 fn run_nodes(peers: usize, log_folders: Vec<String>) {
     (0..peers).into_par_iter().for_each(|i| start_node(i, &log_folders[i]));
 }
 
+#[allow(unused)]
 fn start_node(id: usize, log_folder: &str) {
     start_node_with_options(&format!("validator_{}", id), id, true, Some(log_folder));
 }
@@ -145,6 +150,7 @@ fn start_node_with_options(name: &str, offset: usize, expose_to_network: bool, l
 }
 
 pub fn create_account() -> AccountKeys {
+    start_key_generator();
     let output = Command::new("docker").arg("exec")
         .args(["key_generator", "/bin/sh", "-c"])
         .args(["./rippled/my_build/rippled wallet_propose"])

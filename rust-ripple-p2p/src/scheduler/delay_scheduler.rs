@@ -9,6 +9,7 @@ use log::{debug, error, trace};
 use parking_lot::{Condvar, Mutex};
 use crate::collector::RippleMessage;
 use crate::ga::genetic_algorithm::{ConsensusMessageType};
+#[allow(unused_imports)]
 use crate::ga::encoding::delay_encoding::{DelayMapPhenotype, DROP_THRESHOLD};
 use crate::ga::encoding::ExtendedPhenotype;
 use crate::message_handler::RippleMessageObject;
@@ -62,7 +63,10 @@ impl Scheduler for DelayScheduler {
                             RippleMessageObject::TMValidation(_) => message_type_map.get(&ConsensusMessageType::TMValidation).unwrap().clone(),
                             RippleMessageObject::TMProposeSet(proposal) => {
                                 match proposal.get_proposeSeq() {
-                                    0 => message_type_map.get(&ConsensusMessageType::TMProposeSet0).unwrap().clone(),
+                                    0 => {
+                                        // println!("Proposal Delay!!!! {}", message_type_map.get(&ConsensusMessageType::TMProposeSet0).unwrap());
+                                        message_type_map.get(&ConsensusMessageType::TMProposeSet0).unwrap().clone()
+                                    },
                                     1 => message_type_map.get(&ConsensusMessageType::TMProposeSet1).unwrap().clone(),
                                     2 => message_type_map.get(&ConsensusMessageType::TMProposeSet2).unwrap().clone(),
                                     3 => message_type_map.get(&ConsensusMessageType::TMProposeSet3).unwrap().clone(),
@@ -119,15 +123,15 @@ pub struct ScheduledEvent {}
 
 impl ScheduledEvent {
     pub(crate) fn schedule_execution(event: RMOEvent, duration: Duration, sender: STDSender<RMOEvent>) {
-        if duration.as_millis() > DROP_THRESHOLD as u128 {
-            return
-        } else {
+        // if duration.as_millis() > DROP_THRESHOLD as u128 {
+        //     return
+        // } else {
             thread::spawn(move || {
                 trace!("Sleeping for {} ms for message: {} -> {}: {:?}", duration.as_millis(), event.from, event.to, event.message);
                 thread::sleep(duration);
                 trace!("Sending event to executor: {} -> {}: {:?}", event.from, event.to, event.message);
                 sender.send(event).expect("Scheduler receiver failed");
             });
-        }
+        // }
     }
 }

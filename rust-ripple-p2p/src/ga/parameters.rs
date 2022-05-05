@@ -125,7 +125,7 @@ pub fn default_mu_lambda_priorities(mu: usize, lambda: usize) -> Parameter<Maxim
     let reinsertion_ratio = mu as f64 / lambda as f64;
     Parameter {
         population_size: lambda,
-        generation_limit: 25,
+        generation_limit: 100,
         num_individuals_per_parents: 2,
         num_crossover_points: ConsensusMessageType::VALUES.len(),
         mutation_rate: 0.05,

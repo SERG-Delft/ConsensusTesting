@@ -121,9 +121,10 @@ impl<T, G, P> SchedulerHandlerTrait for SchedulerHandler<T, G, P>
                 }
                 Err(_) => {}
             }
+            let current_phenotype = P::from_genes(&current_individual);
+            debug!("{}", current_phenotype.display_genotype_by_message());
             // Send the requested individual to the scheduler
-            debug!("Individual before send: {:?}", current_individual);
-            self.scheduler_sender.send(P::from_genes(&current_individual))
+            self.scheduler_sender.send(current_phenotype)
                 .expect("Scheduler receiver failed");
             // Receive fitness from scheduler
             match self.scheduler_receiver.recv() {

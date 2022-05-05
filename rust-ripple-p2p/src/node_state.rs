@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 use std::fmt::{Debug, Formatter};
 use itertools::{Itertools};
-use log::debug;
+use log::{trace};
 use parking_lot::{Mutex, Condvar};
 use petgraph::Graph;
 use petgraph::prelude::NodeIndex;
@@ -111,7 +111,11 @@ impl NodeStates {
         let index_hash_map = self.node_states.iter()
             .map(|state| (state.last_validated_ledger.ledger_index, &state.last_validated_ledger.ledger_hash))
             .into_group_map();
-        !index_hash_map.iter().all(|x| x.1.iter().all_equal())
+        let res = !index_hash_map.iter().all(|x| x.1.iter().all_equal());
+        if res {
+            println!("{:?}", index_hash_map);
+        }
+        res
     }
 
     /// Liveness is at risk if one or more nodes stop validating, while the rest continues
@@ -300,7 +304,7 @@ impl MutexNodeStates {
 
     pub fn add_validated_transaction(&self, peer: usize, transaction: Transaction, result: TransactionResultCode) {
         let mut node_lock = self.node_states.lock();
-        debug!("Added validated transaction: {:?}", &transaction.source_tag);
+        trace!("Added validated transaction: {:?}", &transaction.source_tag);
         node_lock.node_states[peer].validated_transactions.push((transaction, result));
         self.transactions_cvar.notify_all();
     }
@@ -490,11 +494,11 @@ mod node_states_tests {
         node_states.node_states[0].last_validated_ledger = create_validated_ledger(1, "1");
         node_states.node_states[1].last_validated_ledger = create_validated_ledger(1, "1");
         node_states.node_states[2].last_validated_ledger = create_validated_ledger(2, "2");
-        assert!(!node_states.check_for_fork());
+        assert_eq!(node_states.check_for_fork(), false);
         node_states.node_states[1].last_validated_ledger = create_validated_ledger(2, "1");
-        assert!(node_states.check_for_fork());
+        assert_eq!(node_states.check_for_fork(), true);
         node_states.node_states[2].last_validated_ledger = create_validated_ledger(3, "3");
-        assert!(!node_states.check_for_fork());
+        assert_eq!(node_states.check_for_fork(), false);
     }
 
     fn setup(peers: usize) -> NodeStates {

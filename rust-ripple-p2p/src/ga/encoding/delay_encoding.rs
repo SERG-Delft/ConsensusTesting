@@ -5,6 +5,7 @@ use crate::ga::encoding::{ExtendedGenotype, ExtendedPhenotype};
 use crate::ga::genetic_algorithm::{ConsensusMessageType};
 use crate::NUM_NODES;
 
+#[allow(unused)]
 pub const DROP_THRESHOLD: u32 = 1800;
 
 // The genotype

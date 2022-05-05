@@ -25,6 +25,7 @@ impl Client<'static> {
         subscription_collector_sender: Sender<PeerSubscriptionObject>,
         server_state_collector_sender: Sender<PeerServerStateObject>,
         test_harness_sender: Sender<(Transaction, String)>,
+        account_sender: Sender<AccountInfo>,
     ) -> Self {
         let client = ClientBuilder::new(connection)
             .unwrap()
@@ -101,6 +102,10 @@ impl Client<'static> {
                                         let engine_result = serde_json::from_value(value["result"]["engine_result"].clone()).unwrap_or_else(|_|"error".to_string());
                                         test_harness_sender.send((transaction, engine_result)).unwrap();
                                     }
+                                    Some("account_info") => match serde_json::from_value::<AccountInfo>(value["result"].clone()) {
+                                        Ok(account_info) => account_sender.send(account_info).expect("Scheduler account info receiver hung up"),
+                                        Err(err) => error!("Could not parse account info object: {}", err)
+                                    }
                                     None => match serde_json::from_value::<SubscriptionObject>(value) {
                                         Ok(subscription_object) => {
                                             subscription_collector_sender.send(PeerSubscriptionObject::new(peer, subscription_object)).unwrap();
@@ -112,6 +117,10 @@ impl Client<'static> {
                             },
                             _ => { warn!("Unknown client message from peer: {}", peer) }
                         }
+                    },
+                    OwnedMessage::Ping(ping) => {
+                        trace!("Received ping message, responding with pong");
+                        tx_1.send(Message::from(OwnedMessage::Pong(ping))).expect("Client hung up");
                     },
                     _ => warn!("Receive Loop: {:?}", message)
                 }
@@ -234,6 +243,16 @@ impl Client<'static> {
         let json = json!({
             "id": "server_state",
             "command": "server_state"
+        });
+        tx.send(Message::text(json.to_string())).unwrap();
+    }
+
+    pub fn account_info(tx: &Sender<Message>, account: String) {
+        let json = json!({
+            "id": "account_info",
+            "command": "account_info",
+            "account": account.as_str(),
+            "queue": true,
         });
         tx.send(Message::text(json.to_string())).unwrap();
     }
@@ -567,6 +586,26 @@ pub struct ServerStateObject {
     validated_ledger: Option<Ledger>,
     validation_quorum: u32,
     validator_list_expires: u32,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct AccountInfo {
+    pub account_data: AccountData,
+    validated: bool,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+#[serde(rename_all = "PascalCase")]
+pub struct AccountData {
+    account: String,
+    balance: String,
+    flags: u32,
+    ledger_entry_type: String,
+    owner_count: u32,
+    #[serde(rename = "PreviousTxnID")]
+    previous_txn_id: String,
+    previous_txn_lgr_seq: u32,
+    pub sequence: u32,
 }
 
 /// A subscription object coupled to a peer.

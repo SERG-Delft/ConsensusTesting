@@ -14,7 +14,7 @@ use std::thread;
 use parking_lot::{Mutex, Condvar};
 use byteorder::{BigEndian, ByteOrder};
 use websocket::Message;
-use crate::client::{Transaction};
+use crate::client::{AccountInfo, Transaction};
 use crate::collector::RippleMessage;
 use crate::ga::fitness::ExtendedFitness;
 use crate::ga::genetic_algorithm::{CurrentFitness, ConsensusMessageType};
@@ -32,7 +32,8 @@ pub trait Scheduler: Sized {
              ga_sender: STDSender<CurrentFitness>,
              ga_receiver: STDReceiver<Self::IndividualPhenotype>,
              client_senders: Vec<STDSender<Message<'static>>>,
-             client_receiver: STDReceiver<(Transaction, String)>
+             client_receiver: STDReceiver<(Transaction, String)>,
+             account_receiver: STDReceiver<AccountInfo>,
     )
     {
         let latest_validated_ledger_clone = self.get_state().latest_validated_ledger.clone();
@@ -46,7 +47,7 @@ pub trait Scheduler: Sized {
 
         thread::spawn(move || Self::update_current_round(node_states_clone, current_round_clone));
         thread::spawn(move || Self::update_latest_validated_ledger(node_states_clone_3, latest_validated_ledger_clone));
-        thread::spawn(move || Self::harness_controller(ga_sender, client_senders, client_receiver, latest_validated_ledger_clone_2, current_round_clone_2, run_clone, node_states_clone_2));
+        thread::spawn(move || Self::harness_controller(ga_sender, client_senders, client_receiver, account_receiver, latest_validated_ledger_clone_2, current_round_clone_2, run_clone, node_states_clone_2));
 
         // self.start_extension(receiver, ga_receiver);
         let (event_schedule_sender, event_schedule_receiver) = channel();
@@ -123,7 +124,7 @@ pub trait Scheduler: Sized {
                 *locked_ledger_index = validated_ledger_index;
                 cvar.notify_all();
             }
-            println!("Validated ledgers: {:?}, fork: {}, liveness: {}", node_states_mutex.validated_ledgers(), node_states_mutex.check_for_fork(), node_states_mutex.check_liveness());
+             println!("Validated ledgers: {:?}, fork: {}, liveness: {}", node_states_mutex.validated_ledgers(), node_states_mutex.check_for_fork(), node_states_mutex.check_liveness());
         }
     }
 
@@ -135,6 +136,7 @@ pub trait Scheduler: Sized {
         ga_sender: STDSender<CurrentFitness>,
         client_senders: Vec<STDSender<Message<'static>>>,
         client_receiver: STDReceiver<(Transaction, String)>,
+        account_receiver: STDReceiver<AccountInfo>,
         latest_validated_ledger: Arc<(Mutex<u32>, Condvar)>,
         current_round: Arc<(Mutex<u32>, Condvar)>,
         run: Arc<(Mutex<bool>, Condvar)>,
@@ -146,7 +148,7 @@ pub trait Scheduler: Sized {
         let (run_lock, run_cvar) = &*run;
         let mut test_harness = TestHarness::parse_test_harness(client_senders.clone(), client_receiver, None);
         node_states.set_harness_transactions(test_harness.transactions.clone());
-        Self::stabilize_network(&mut test_harness, node_states.clone(), latest_validated_ledger.clone());
+        Self::stabilize_network(&mut test_harness, node_states.clone(), latest_validated_ledger.clone(), account_receiver);
         // Every loop is one execution of the test harness
         loop {
             let mut ledger_number = ledger_lock.lock();
@@ -181,6 +183,7 @@ pub trait Scheduler: Sized {
         test_harness: &mut TestHarness<'static>,
         node_states: Arc<MutexNodeStates>,
         latest_validated_ledger: Arc<(Mutex<u32>, Condvar)>,
+        account_receiver: STDReceiver<AccountInfo>,
     )
     {
         let (ledger_lock, ledger_cvar) = &*latest_validated_ledger;
@@ -201,7 +204,15 @@ pub trait Scheduler: Sized {
         }
         // Empty transaction queue
         while let Ok(_) = test_harness.client_receiver.try_recv() {}
-        let account_seqs = *ledger_lock.lock()-1;
+        // Fetch account sequence numbers
+        crate::client::Client::account_info(&test_harness.client_senders[0], test_harness.accounts[1].account_keys.account_id.clone());
+        let account_seqs = match account_receiver.recv() {
+            Ok(account_info) => account_info.account_data.sequence,
+            Err(_) => {
+                error!("Client hung up");
+                0
+            }
+        };
         debug!("Accounts created in ledger: {}", account_seqs);
         for i in 1..test_harness.accounts.len() {
             test_harness.accounts[i].transaction_sequence = account_seqs;

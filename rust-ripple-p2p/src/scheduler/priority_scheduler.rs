@@ -37,8 +37,8 @@ impl PriorityScheduler {
         let mut time_counter = 0;
         loop {
             let mut inbox_heap = inbox_lock.lock();
-            inbox_cvar.wait_for(&mut inbox_heap, std::time::Duration::from_millis(MAX_DURATION_MILLIS as u64));
-            // inbox_cvar.wait(&mut inbox_heap);
+            // inbox_cvar.wait_for(&mut inbox_heap, std::time::Duration::from_millis(MAX_DURATION_MILLIS as u64));
+            inbox_cvar.wait(&mut inbox_heap);
             {
                 while inbox_heap.len() > max_inbox_size {
                     event_schedule_sender.send(inbox_heap.pop().unwrap().rmo_event).expect("Event scheduler failed");

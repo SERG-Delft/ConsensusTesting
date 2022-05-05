@@ -6,11 +6,12 @@ use std::sync::mpsc::{Sender, Receiver};
 use std::thread;
 use rand::distributions::Uniform;
 use rand::Rng;
-use crate::ga::encoding::delay_encoding::DelayMapPhenotype;
+use crate::ga::encoding::delay_encoding::{DelayMapPhenotype, DelaysGenotype};
 use crate::ga::encoding::{ExtendedPhenotype, num_genes};
 use crate::ga::fitness::ExtendedFitness;
-use crate::ga::genetic_algorithm::{CurrentFitness};
+use crate::ga::genetic_algorithm::{ConsensusMessageType, CurrentFitness};
 use crate::node_state::MutexNodeStates;
+use crate::NUM_NODES;
 
 mod compare;
 mod compare_fitness;
@@ -176,6 +177,61 @@ impl NoDelaySchedulerHandler {
     }
 }
 
+pub struct PreDeterminedDelaySchedulerHandler {
+    scheduler_sender: Sender<DelayMapPhenotype>,
+    scheduler_receiver: Receiver<CurrentFitness>,
+    number_of_tests: usize,
+}
+
+impl PreDeterminedDelaySchedulerHandler {
+    pub fn new(
+        scheduler_sender: Sender<DelayMapPhenotype>,
+        scheduler_receiver: Receiver<CurrentFitness>,
+        number_of_tests: usize,
+    ) -> Self
+    {
+        Self {
+            scheduler_sender,
+            scheduler_receiver,
+            number_of_tests,
+        }
+    }
+
+    pub fn run(&mut self) {
+        let delays: Vec<u32> = Self::create_delays();
+        for i in 0..self.number_of_tests {
+            println!("Starting test {}", i);
+            self.scheduler_sender.send(DelayMapPhenotype::from_genes(&delays)).expect("Scheduler receiver failed");
+            self.scheduler_receiver.recv().expect("Scheduler sender failed");
+        }
+        println!("Finished run. exiting...");
+        std::process::exit(0);
+    }
+
+    /// From node 1 to 0 ProposeSet0 gets 2000 delay
+    /// From node 2 to 0 ProposeSet0 gets 3000 delay
+    fn create_delays() -> DelaysGenotype {
+        let index_factor_1 = ConsensusMessageType::VALUES.len() * (*NUM_NODES-1);
+        let index_factor_2 = ConsensusMessageType::VALUES.len();
+        let mut delays = vec![0u32; num_genes()];
+        // delays[index_factor_1 * 1 + index_factor_2 * 0 + 0] = 2000;
+        let delay = 3000;
+        delays[index_factor_1 * 2 + index_factor_2 * 0 + 0] = delay;
+        delays[index_factor_1 * 2 + index_factor_2 * 1 + 0] = delay;
+        delays[index_factor_1 * 2 + index_factor_2 * 3 + 0] = delay;
+        delays[index_factor_1 * 2 + index_factor_2 * 4 + 0] = delay;
+        delays[index_factor_1 * 1 + index_factor_2 * 0 + 0] = delay;
+        delays[index_factor_1 * 1 + index_factor_2 * 2 + 0] = delay;
+        delays[index_factor_1 * 1 + index_factor_2 * 3 + 0] = delay;
+        delays[index_factor_1 * 1 + index_factor_2 * 4 + 0] = delay;
+        delays[index_factor_1 * 0 + index_factor_2 * 1 + 0] = delay;
+        delays[index_factor_1 * 0 + index_factor_2 * 2 + 0] = delay;
+        delays[index_factor_1 * 0 + index_factor_2 * 3 + 0] = delay;
+        delays[index_factor_1 * 0 + index_factor_2 * 4 + 0] = delay;
+        delays
+    }
+}
+
 #[allow(unused)]
 pub fn run_trace_graph_creation<T>(scheduler_sender: Sender<DelayMapPhenotype>, scheduler_receiver: Receiver<T>, node_states: Arc<MutexNodeStates>)
     where T: ExtendedFitness + 'static
@@ -193,5 +249,11 @@ pub fn run_fitness_comparison(scheduler_sender: Sender<DelayMapPhenotype>, sched
 #[allow(unused)]
 pub fn run_no_delays(scheduler_sender: Sender<DelayMapPhenotype>, scheduler_receiver: Receiver<CurrentFitness>, number_of_tests: usize) {
     let mut scheduler_handler = NoDelaySchedulerHandler::new(scheduler_sender, scheduler_receiver, number_of_tests);
+    thread::spawn(move || scheduler_handler.run());
+}
+
+#[allow(unused)]
+pub fn run_predetermined_delays(scheduler_sender: Sender<DelayMapPhenotype>, scheduler_receiver: Receiver<CurrentFitness>, number_of_tests: usize) {
+    let mut scheduler_handler = PreDeterminedDelaySchedulerHandler::new(scheduler_sender, scheduler_receiver, number_of_tests);
     thread::spawn(move || scheduler_handler.run());
 }
