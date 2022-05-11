@@ -11,6 +11,7 @@ use crate::client::{ConsensusChange, PeerServerStateObject, PeerSubscriptionObje
 use crate::message_handler::RippleMessageObject;
 use chrono::{DateTime, MAX_DATETIME, Utc};
 use itertools::Itertools;
+use log::error;
 use crate::LOG_FOLDER;
 use crate::message_handler::RippleMessageObject::TMProposeSet;
 use crate::node_state::{ConsensusPhase, MutexNodeStates};
@@ -97,24 +98,28 @@ impl Collector {
     }
 
     fn execution_writer(ripple_message_receiver: Receiver<Box<RippleMessage>>, node_states: Arc<MutexNodeStates>) {
-        let execution_file = File::create(Path::new(format!("{}\\execution.txt", *LOG_FOLDER).as_str())).expect("Opening execution file failed");
-        let mut execution_writer = BufWriter::new(execution_file);
+        let mut execution_file = File::create(Path::new(format!("{}\\execution.txt", *LOG_FOLDER).as_str())).expect("Opening execution file failed");
+        // let mut execution_writer = BufWriter::new(execution_file);
         loop {
             // Write all messages sent by the scheduler to peers to "execution.txt". After delay!
-            match ripple_message_receiver.recv() {
-                Ok(message) => {
-                    match &message.message {
-                        TMProposeSet(tm_propose) => {
-                            node_states.set_highest_propose_seq(tm_propose.get_proposeSeq(), message.sender_index());
-                            if tm_propose.get_proposeSeq() > 1 { println!("{}", message.to_string()) }
-                        },
-                        _ => {},
+            let mut buf = vec![];
+            for i in 0..30 {
+                match ripple_message_receiver.recv() {
+                    Ok(message) => {
+                        match &message.message {
+                            TMProposeSet(tm_propose) => {
+                                node_states.set_highest_propose_seq(tm_propose.get_proposeSeq(), message.sender_index());
+                                if tm_propose.get_proposeSeq() > 1 { error!("{}", message.to_string()) }
+                            },
+                            _ => {},
+                        }
+                        buf.extend(message.to_string().as_bytes());
+                        // execution_writer.flush().unwrap();
                     }
-                    execution_writer.write_all(message.to_string().as_bytes()).unwrap();
-                    execution_writer.flush().unwrap();
+                    _ => {}
                 }
-                _ => {}
             }
+            execution_file.write_all(&buf).unwrap();
         }
     }
 
@@ -196,12 +201,12 @@ impl Display for RippleMessage {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         // Use the ripple_epoch (seconds since 2000-01-01T00:00:00+00:00) for easier cross-referencing with ripple logs
         // TODO: Store actual time and perhaps node_state information at time of send. (This is after delay!)
-        let ripple_epoch = DateTime::parse_from_rfc3339("2000-01-01T00:00:00+00:00").unwrap();
+        // let ripple_epoch = DateTime::parse_from_rfc3339("2000-01-01T00:00:00+00:00").unwrap();
         let from_node_buf = &self.from_node;
         let to_node_buf = &self.to_node;
-        let time_since = self.timestamp.signed_duration_since(ripple_epoch).num_seconds();
+        // let time_since = self.timestamp.signed_duration_since(ripple_epoch).num_seconds();
         let message_buf = self.message.to_string();
-        write!(f, "{} {} -> {} sent {}\n", time_since, from_node_buf, to_node_buf, message_buf)
+        write!(f, "{} {} -> {} sent {}\n", self.timestamp, from_node_buf, to_node_buf, message_buf)
     }
 }
 
