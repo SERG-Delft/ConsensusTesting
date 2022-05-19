@@ -10,9 +10,10 @@ use tokio::sync::mpsc::{Receiver as TokioReceiver, Sender as TokioSender};
 
 use crate::client::SubscriptionObject;
 use crate::collector::RippleMessage;
-use crate::deserialization::deserialize;
+use crate::container_manager::NodeKeys;
+use crate::deserialization::{parse_canonical_binary_format};
 use crate::message_handler::{invoke_protocol_message, RippleMessageObject};
-use crate::message_handler::RippleMessageObject::{TMTransaction, TMValidation};
+use crate::message_handler::RippleMessageObject::{TMTransaction, TMValidation, TMProposeSet, TMHaveTransactionSet};
 
 type P2PConnections = HashMap<usize, HashMap<usize, PeerChannel>>;
 
@@ -21,11 +22,12 @@ pub struct Scheduler {
     collector_sender: STDSender<Box<RippleMessage>>,
     stable: Arc<Mutex<bool>>,
     latest_validated_ledger: Arc<Mutex<u32>>,
+    node_keys: Vec<NodeKeys>
 }
 
 impl Scheduler {
-    pub fn new(p2p_connections: P2PConnections, collector_sender: STDSender<Box<RippleMessage>>) -> Self {
-        Scheduler { p2p_connections, collector_sender, stable: Arc::new(Mutex::new(false)), latest_validated_ledger: Arc::new(Mutex::new(0)) }
+    pub fn new(p2p_connections: P2PConnections, collector_sender: STDSender<Box<RippleMessage>>, node_keys: Vec<NodeKeys>) -> Self {
+        Scheduler { p2p_connections, collector_sender, stable: Arc::new(Mutex::new(false)), latest_validated_ledger: Arc::new(Mutex::new(0)), node_keys }
     }
 
     pub fn start(self, mut receiver: TokioReceiver<Event>, collector_receiver: STDReceiver<SubscriptionObject>) {
@@ -43,15 +45,29 @@ impl Scheduler {
     fn execute_event(&self, event: Event) {
         let mut rmo: RippleMessageObject = invoke_protocol_message(BigEndian::read_u16(&event.message[4..6]), &event.message[6..]);
         match rmo {
-            TMTransaction(_) => {
-                deserialize(&rmo);
-                println!("[{}->{}] {}", event.from + 1, event.to + 1, rmo);
+            TMHaveTransactionSet(_) => {
+                if event.from == 3 { return () }
+            }
+            TMTransaction(ref mut trx) => {
+                if event.from == 3 {
+                    trx.set_rawTransaction(hex::decode(parse_canonical_binary_format(trx.get_rawTransaction(), &self.node_keys[event.from].validation_seed)).unwrap())
+                }
+                // println!("[{}->{}] {}", event.from + 1, event.to + 1, rmo);
             }
             TMValidation(_) => {
+                if event.from == 3 { return () }
+                // println!("[{}->{}] {}", event.from + 1, event.to + 1, rmo);
+            }
+            TMProposeSet(ref mut proposal) => {
+                if event.from == 3 && !proposal.get_currentTxHash().starts_with(&[0]) {
+                    proposal.set_currentTxHash(hex::decode("E803E1999369975AED1BFD2444A3552A73383C03A2004CB784CE07E13EBD7D7C").unwrap());
+                    proposal.set_signature(hex::decode("304502210098316a375896e681cf2fe8ff38dd54ee47aa1722dfe67d91079c795eb64eabb302202240ab9f1010af36549efebe8f185a7e8d4cd84a01c223e344d8174928c9523e").unwrap());
+                }
                 // println!("[{}->{}] {}", event.from + 1, event.to + 1, rmo);
             }
             _ => ()
         }
+        println!("[{}->{}] {}", event.from + 1, event.to + 1, rmo);
         self.p2p_connections.get(&event.to).unwrap().get(&event.from).unwrap().send(event.message);
         // match rmo {
         //     RippleMessageObject::TMTransaction(_) => {

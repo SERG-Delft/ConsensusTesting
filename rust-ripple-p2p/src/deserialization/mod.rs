@@ -3,7 +3,9 @@ use std::convert::TryFrom;
 use std::fs::File;
 use std::io::Read;
 use std::str::FromStr;
+use hex::encode;
 use json::{JsonValue, object};
+use ripple_keypairs::{PrivateKey, Seed};
 use rippled_binary_codec::serialize::serialize_tx;
 use serde_json::Value;
 
@@ -16,157 +18,159 @@ use crate::protos::ripple::{TMLedgerInfoType, TMLedgerNode};
 mod blob_iterator;
 mod types;
 
-#[allow(unused)]
-pub fn deserialize(message: &RippleMessageObject) {
-    match message {
-        RippleMessageObject::TMTransaction(transaction) => {
-            parse_canonical_binary_format(transaction.get_rawTransaction());
-        }
-        RippleMessageObject::TMValidation(validation) => {
-            parse_canonical_binary_format(validation.get_validation());
-        }
-        RippleMessageObject::TMLedgerData(ledger_data) => {
-            let parse = match ledger_data.get_field_type() {
-                TMLedgerInfoType::liBASE => { parse_ledger_base_nodes }
-                TMLedgerInfoType::liTX_NODE => { parse_ledger_transaction_nodes }
-                TMLedgerInfoType::liAS_NODE => { parse_ledger_account_state_nodes }
-                TMLedgerInfoType::liTS_CANDIDATE => { parse_ledger_ts_candidate_nodes }
-            };
-            parse(ledger_data.get_nodes())
-        }
-        _ => {}
-    }
-}
+// #[allow(unused)]
+// pub fn deserialize(message: &RippleMessageObject) -> Vec<u8> {
+//     match message {
+//         RippleMessageObject::TMTransaction(transaction) => {
+//             parse_canonical_binary_format(transaction.get_rawTransaction(), )
+//         }
+//         // RippleMessageObject::TMValidation(validation) => {
+//         //     parse_canonical_binary_format(validation.get_validation(), )
+//         // }
+//         // RippleMessageObject::TMLedgerData(ledger_data) => {
+//         //     let parse = match ledger_data.get_field_type() {
+//         //         TMLedgerInfoType::liBASE => { parse_ledger_base_nodes }
+//         //         TMLedgerInfoType::liTX_NODE => { parse_ledger_transaction_nodes }
+//         //         TMLedgerInfoType::liAS_NODE => { parse_ledger_account_state_nodes }
+//         //         TMLedgerInfoType::liTS_CANDIDATE => { parse_ledger_ts_candidate_nodes }
+//         //     };
+//         //     parse(ledger_data.get_nodes())
+//         // }
+//         _ => {
+//             vec!(0)
+//         }
+//     }
+// }
 
-pub fn deserialize_validation(blob: &[u8]) -> ParsedValidation {
-    let mut parsed_validation = ParsedValidation::default();
-    let deserialization_result = parse_canonical_binary_format(blob);
-    for field in deserialization_result {
-        match field.type_name.as_str() {
-            "Cookie" => parsed_validation.cookie = match field.field {
-                SerializationField::U64(value) => value.value,
-                _ => 0
-            },
-            "hash" => parsed_validation.hash = match field.field {
-                SerializationField::H256(value) => format!("{:x?}", value.hash),
-                _ => "".to_string()
-            },
-            "ConsensusHash" => parsed_validation.consensus_hash = match field.field {
-                SerializationField::H256(value) => format!("{:x?}", value.hash),
-                _ => "".to_string()
-            },
-            "ValidatedHash" => parsed_validation.validated_hash = match field.field {
-                SerializationField::H256(value) => format!("{:x?}", value.hash),
-                _ => "".to_string()
-            },
-            "SigningPubKey" => parsed_validation.signing_pub_key = match field.field {
-                SerializationField::Blob(value) => value,
-                _ => "".to_string()
-            },
-            "Signature" => parsed_validation.signature = match field.field {
-                SerializationField::Blob(value) => value,
-                _ => "".to_string()
-            },
-            "Flags" => parsed_validation.flags = match field.field {
-                SerializationField::U32(value) => value.value,
-                _ => 0
-            },
-            "LedgerSequence" => parsed_validation.ledger_sequence = match field.field {
-                SerializationField::U32(value) => value.value,
-                _ => 0
-            },
-            "SigningTime" => parsed_validation.signing_time = match field.field {
-                SerializationField::U32(value) => value.value,
-                _ => 0
-            },
-            _ => {}
-        }
-    }
-    // println!("{:?}", parsed_validation);
-    parsed_validation
-}
+// pub fn deserialize_validation(blob: &[u8]) -> ParsedValidation {
+//     let mut parsed_validation = ParsedValidation::default();
+//     let deserialization_result = parse_canonical_binary_format(blob);
+//     for field in deserialization_result {
+//         match field.type_name.as_str() {
+//             "Cookie" => parsed_validation.cookie = match field.field {
+//                 SerializationField::U64(value) => value.value,
+//                 _ => 0
+//             },
+//             "hash" => parsed_validation.hash = match field.field {
+//                 SerializationField::H256(value) => format!("{:x?}", value.hash),
+//                 _ => "".to_string()
+//             },
+//             "ConsensusHash" => parsed_validation.consensus_hash = match field.field {
+//                 SerializationField::H256(value) => format!("{:x?}", value.hash),
+//                 _ => "".to_string()
+//             },
+//             "ValidatedHash" => parsed_validation.validated_hash = match field.field {
+//                 SerializationField::H256(value) => format!("{:x?}", value.hash),
+//                 _ => "".to_string()
+//             },
+//             "SigningPubKey" => parsed_validation.signing_pub_key = match field.field {
+//                 SerializationField::Blob(value) => value,
+//                 _ => "".to_string()
+//             },
+//             "Signature" => parsed_validation.signature = match field.field {
+//                 SerializationField::Blob(value) => value,
+//                 _ => "".to_string()
+//             },
+//             "Flags" => parsed_validation.flags = match field.field {
+//                 SerializationField::U32(value) => value.value,
+//                 _ => 0
+//             },
+//             "LedgerSequence" => parsed_validation.ledger_sequence = match field.field {
+//                 SerializationField::U32(value) => value.value,
+//                 _ => 0
+//             },
+//             "SigningTime" => parsed_validation.signing_time = match field.field {
+//                 SerializationField::U32(value) => value.value,
+//                 _ => 0
+//             },
+//             _ => {}
+//         }
+//     }
+//     // println!("{:?}", parsed_validation);
+//     parsed_validation
+// }
 
-fn parse_ledger_base_nodes(nodes: &[TMLedgerNode]) {
-    let header_node = nodes.get(0).expect("has to have at least one node");
-    println!("#{:?} node id", header_node.get_nodeid());
-    let mut blob = BlobIterator::new(header_node.get_nodedata());
-    println!("- Seq: {}", UInt32::parse(&mut blob));
-    println!("- Drops: {}", UInt64::parse(&mut blob));
-    println!("- Parent Hash: {}", Hash256::parse(&mut blob));
-    println!("- Tx Hash: {}", Hash256::parse(&mut blob));
-    println!("- Account Hash: {}", Hash256::parse(&mut blob));
-    println!("- Parent Close Time: {}", UInt32::parse(&mut blob));
-    println!("- Close Time: {}", UInt32::parse(&mut blob));
-    println!("- Close Time Resolution: {}", UInt8::parse(&mut blob));
-    println!("- Close Flags: {}", UInt8::parse(&mut blob));
-    // println!("- Hash: {}", Hash256::parse(&mut blob)); not included
-    if blob.has_next() {
-        panic!("more to parse... {}", blob.len())
-    }
-    if nodes.len() > 1 {
-        parse_ledger_node_from_wire(nodes.get(1).unwrap())
-    }
-    if nodes.len() > 2 {
-        parse_ledger_node_from_wire(nodes.get(1).unwrap())
-    }
-    if nodes.len() > 3 {
-        panic!("more to parse...")
-    }
-}
+// fn parse_ledger_base_nodes(nodes: &[TMLedgerNode]) {
+//     let header_node = nodes.get(0).expect("has to have at least one node");
+//     println!("#{:?} node id", header_node.get_nodeid());
+//     let mut blob = BlobIterator::new(header_node.get_nodedata());
+//     println!("- Seq: {}", UInt32::parse(&mut blob));
+//     println!("- Drops: {}", UInt64::parse(&mut blob));
+//     println!("- Parent Hash: {}", Hash256::parse(&mut blob));
+//     println!("- Tx Hash: {}", Hash256::parse(&mut blob));
+//     println!("- Account Hash: {}", Hash256::parse(&mut blob));
+//     println!("- Parent Close Time: {}", UInt32::parse(&mut blob));
+//     println!("- Close Time: {}", UInt32::parse(&mut blob));
+//     println!("- Close Time Resolution: {}", UInt8::parse(&mut blob));
+//     println!("- Close Flags: {}", UInt8::parse(&mut blob));
+//     // println!("- Hash: {}", Hash256::parse(&mut blob)); not included
+//     if blob.has_next() {
+//         panic!("more to parse... {}", blob.len())
+//     }
+//     if nodes.len() > 1 {
+//         parse_ledger_node_from_wire(nodes.get(1).unwrap())
+//     }
+//     if nodes.len() > 2 {
+//         parse_ledger_node_from_wire(nodes.get(1).unwrap())
+//     }
+//     if nodes.len() > 3 {
+//         panic!("more to parse...")
+//     }
+// }
 
-fn parse_ledger_transaction_nodes(nodes: &[TMLedgerNode]) {
-    for node in nodes {
-        parse_ledger_node_from_wire(node)
-    }
-}
+// fn parse_ledger_transaction_nodes(nodes: &[TMLedgerNode]) {
+//     for node in nodes {
+//         parse_ledger_node_from_wire(node)
+//     }
+// }
+//
+// fn parse_ledger_account_state_nodes(nodes: &[TMLedgerNode]) {
+//     for node in nodes {
+//         parse_ledger_node_from_wire(node)
+//     }
+// }
 
-fn parse_ledger_account_state_nodes(nodes: &[TMLedgerNode]) {
-    for node in nodes {
-        parse_ledger_node_from_wire(node)
-    }
-}
+// fn parse_ledger_ts_candidate_nodes(nodes: &[TMLedgerNode]) {
+//     for node in nodes {
+//         parse_ledger_node_from_wire(node)
+//     }
+// }
 
-fn parse_ledger_ts_candidate_nodes(nodes: &[TMLedgerNode]) {
-    for node in nodes {
-        parse_ledger_node_from_wire(node)
-    }
-}
+// fn parse_ledger_node_from_wire(node: &TMLedgerNode) {
+//     println!("#{:?} node id", node.get_nodeid());
+//     let mut blob_iterator = BlobIterator::new(node.get_nodedata());
+//     match blob_iterator.last_byte() {
+//         0 => { // wireTypeTransaction
+//             parse_canonical_binary_format_with_iterator(blob_iterator);
+//         }
+//         1 => { // wireTypeAccountState
+//             println!("- Hash: {}", Hash256::parse(&mut BlobIterator::new(blob_iterator.last_n_bytes(32))));
+//             parse_canonical_binary_format_with_iterator(blob_iterator);
+//         }
+//         2 => { // wireTypeInner
+//             panic!("not implemented")
+//         }
+//         3 => { // wireTypeCompressedInner
+//             while blob_iterator.has_next() {
+//                 let hash = Hash256::parse(&mut blob_iterator);
+//                 let branch = UInt8::parse(&mut blob_iterator);
+//                 println!("- branch #{} has {}", branch, hash)
+//             }
+//         }
+//         4 => { // wireTypeTransactionWithMeta
+//             println!("- Hash: {}", Hash256::parse(&mut BlobIterator::new(blob_iterator.last_n_bytes(32))));
+//             println!("- More unparsed data available!")
+//         }
+//         _ => { panic!("unknown wire type") }
+//     }
+// }
 
-fn parse_ledger_node_from_wire(node: &TMLedgerNode) {
-    println!("#{:?} node id", node.get_nodeid());
-    let mut blob_iterator = BlobIterator::new(node.get_nodedata());
-    match blob_iterator.last_byte() {
-        0 => { // wireTypeTransaction
-            parse_canonical_binary_format_with_iterator(blob_iterator);
-        }
-        1 => { // wireTypeAccountState
-            println!("- Hash: {}", Hash256::parse(&mut BlobIterator::new(blob_iterator.last_n_bytes(32))));
-            parse_canonical_binary_format_with_iterator(blob_iterator);
-        }
-        2 => { // wireTypeInner
-            panic!("not implemented")
-        }
-        3 => { // wireTypeCompressedInner
-            while blob_iterator.has_next() {
-                let hash = Hash256::parse(&mut blob_iterator);
-                let branch = UInt8::parse(&mut blob_iterator);
-                println!("- branch #{} has {}", branch, hash)
-            }
-        }
-        4 => { // wireTypeTransactionWithMeta
-            println!("- Hash: {}", Hash256::parse(&mut BlobIterator::new(blob_iterator.last_n_bytes(32))));
-            println!("- More unparsed data available!")
-        }
-        _ => { panic!("unknown wire type") }
-    }
-}
-
-fn parse_canonical_binary_format(blob: &[u8]) -> Vec<SerializationTypeValue> {
+pub fn parse_canonical_binary_format(blob: &[u8], x: &String) -> Vec<u8> {
     let iterator = BlobIterator::new(blob);
-    parse_canonical_binary_format_with_iterator(iterator)
+    parse_canonical_binary_format_with_iterator(iterator, x)
 }
 
-fn parse_canonical_binary_format_with_iterator(mut blob_iterator: BlobIterator) -> Vec<SerializationTypeValue> {
+fn parse_canonical_binary_format_with_iterator(mut blob_iterator: BlobIterator, pkey: &String) -> Vec<u8> {
     let mut json = object!{};
     let mut contents = vec![];
     // println!("New validation");
@@ -195,13 +199,13 @@ fn parse_canonical_binary_format_with_iterator(mut blob_iterator: BlobIterator) 
             }
             "Hash256" => {
                 let field = Hash256::parse(&mut blob_iterator);
-                println!("- {}: {}", type_name, field);
+                // println!("- {}: {}", type_name, field);
                 json[&type_name] = format!("{:x?}", field.hash).into();
                 contents.push(SerializationTypeValue { field: SerializationField::H256(field), type_name });
             }
             "Amount" => {
                 let field = Amount::parse(&mut blob_iterator);
-                println!("- {}: {}", &type_name, &field);
+                // println!("- {}: {}", &type_name, &field);
                 json[&type_name] = field.amount.to_string().into();
                 contents.push(SerializationTypeValue { field: SerializationField::Amount(field), type_name });
             }
@@ -226,15 +230,17 @@ fn parse_canonical_binary_format_with_iterator(mut blob_iterator: BlobIterator) 
         }
     }
     println!("{}", json);
-    println!("{:?}", mutate_and_serialize_json(json));
-    contents
+    // println!("{:?}", mutate_and_serialize_json(json));
+    mutate_and_serialize_json(json, pkey)
 }
 
-fn mutate_and_serialize_json(mut deserialized_transaction: JsonValue) -> Vec<u8> {
+fn mutate_and_serialize_json(mut deserialized_transaction: JsonValue, pkey: &String) -> Vec<u8> {
+    println!("before {}", deserialized_transaction);
 
     // mutate the amount
     let amount = deserialized_transaction["Amount"].as_str().unwrap();
-    let mutated_amount = u64::from_str(amount).unwrap() + 100;
+    let mutated_amount = u64::from_str(amount).unwrap() + 100000;
+    // let mutated_amount = u64::from_str(amount).unwrap();
     deserialized_transaction["Amount"] = JsonValue::from(mutated_amount.to_string());
 
     // map the transaction type to its name (based on definitions.json)
@@ -248,15 +254,27 @@ fn mutate_and_serialize_json(mut deserialized_transaction: JsonValue) -> Vec<u8>
 
     // map the signing public key
     let encoded_signing_key = hex::encode_upper(deserialized_transaction["SigningPubKey"].as_str().unwrap());
-    deserialized_transaction["SigningPubKey"] = JsonValue::from(encoded_signing_key);
+    deserialized_transaction["SigningPubKey"] = JsonValue::from("0330E7FC9D56BB25D6893BA3F317AE5BCF33B3291BD63DB32654A313222F7FD020");
+
+    println!("pre {}", deserialized_transaction);
+
+    // let serial_tx = serialize_tx(deserialized_transaction.to_string(), true).expect("could not serialize tx for signing");
+    // let (pk, publick) = "snoPBrXtMeMyMHUVTgbuqAfg1SUTb".parse::<Seed>().unwrap().derive_keypair().unwrap();
+    // let signature = pk.sign(&serial_tx).to_string();
+
+
+    // let encoded_signing_key = hex::encode_upper(deserialized_transaction["SigningPubKey"].as_str().unwrap());
+    // deserialized_transaction["SigningPubKey"] = JsonValue::from(publick.to_string());
 
     // map the txn signature
     let encoded_txt_signature = hex::encode_upper(deserialized_transaction["TxnSignature"].as_str().unwrap());
-    deserialized_transaction["TxnSignature"] = JsonValue::from(encoded_txt_signature);
+    deserialized_transaction["TxnSignature"] = JsonValue::from("3045022100f1d8aa686f6241a5f39106ffda94aa218118d385b58a00e633425d882b17205902200b38092d3f990359928f393485dc352cd0f3c22e4559280354fb423bc7f08bec");
 
     // println!("{}", deserialized_transaction["SigningPubKey"]);
     // println!("{}", deserialized_transaction["TxnSignature"]);
     // println!("{}", deserialized_transaction.to_string());
+
+    println!("after  {}", deserialized_transaction);
 
     return match serialize_tx(deserialized_transaction.to_string(), false) {
         Some(string) => { serialize_tx(deserialized_transaction.to_string(), false).unwrap().as_bytes().to_vec() }
@@ -264,30 +282,30 @@ fn mutate_and_serialize_json(mut deserialized_transaction: JsonValue) -> Vec<u8>
     }
 }
 
-fn mutate_transaction(mut contents: Vec<SerializationTypeValue>) -> Vec<SerializationTypeValue> {
-
-    let mutated_contents = contents.into_iter().
-        map(|x| {
-            match x {
-                SerializationTypeValue { field, type_name } if (type_name == String::from("Amount")) => {
-
-                    let mutated_field = match field {
-                        SerializationField::Amount(current_amount) => {
-                            let mutated_amount = current_amount.amount + 100;
-                            SerializationField::Amount(Amount{ amount: mutated_amount })
-                        }
-                        _ => { field }
-                    };
-
-                    SerializationTypeValue { field: mutated_field, type_name: String::from("Amount") }
-                }
-                _ => { x }
-            }
-        })
-        .collect();
-
-    mutated_contents
-}
+// fn mutate_transaction(mut contents: Vec<SerializationTypeValue>) -> Vec<SerializationTypeValue> {
+//
+//     let mutated_contents = contents.into_iter().
+//         map(|x| {
+//             match x {
+//                 SerializationTypeValue { field, type_name } if (type_name == String::from("Amount")) => {
+//
+//                     let mutated_field = match field {
+//                         SerializationField::Amount(current_amount) => {
+//                             let mutated_amount = current_amount.amount + 100;
+//                             SerializationField::Amount(Amount{ amount: mutated_amount })
+//                         }
+//                         _ => { field }
+//                     };
+//
+//                     SerializationTypeValue { field: mutated_field, type_name: String::from("Amount") }
+//                 }
+//                 _ => { x }
+//             }
+//         })
+//         .collect();
+//
+//     mutated_contents
+// }
 
 fn decode_type_code(type_code: u8) -> &'static str {
     return match type_code {

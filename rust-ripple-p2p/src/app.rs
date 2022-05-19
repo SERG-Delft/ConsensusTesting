@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::net::{SocketAddr, Ipv4Addr, IpAddr};
 use std::thread;
+use std::thread::sleep;
+use std::time::Duration;
 
 use log::*;
 use itertools::Itertools;
@@ -83,7 +85,7 @@ impl App {
                 scheduler_peer_channels.entry(j).or_insert(HashMap::new()).insert(i, PeerChannel::new(tx_scheduler_j));
             }
 
-            let scheduler = Scheduler::new(scheduler_peer_channels, collector_tx);
+            let scheduler = Scheduler::new(scheduler_peer_channels, collector_tx, self.node_keys.clone());
             let scheduler_thread = thread::spawn(move || {
                 scheduler.start(scheduler_receiver, scheduler_state_rx);
             });
@@ -129,25 +131,31 @@ impl App {
         for i in 0..self.peers {
             if i < 5 {
                 let _client = Client::new(i, format!("ws://127.0.0.1:600{}", 5+i).as_str(), subscription_tx.clone());
+                // if i == 0 {
+                //     let tx = Client::create_payment_transaction(_AMOUNT, _ACCOUNT_ID, _GENESIS_ADDRESS);
+                //     Client::sign_and_submit(&_client.sender_channel, "waddup", &tx, _GENESIS_SEED)
+                // }
+                // if i == 0 {
+                //     let sender_clone = _client.sender_channel.clone();
+                //     threads.push(thread::spawn(move || {
+                //         let mut counter = 0;
+                //         // Send payment transaction every 10 seconds
+                //         loop {
+                //             sleep(Duration::from_secs(10));
+                //             Client::sign_and_submit(
+                //                 &sender_clone,
+                //                 format!("Ripple{}: {}", i, &*counter.to_string()).as_str(),
+                //                 &Client::create_payment_transaction(_AMOUNT, _ACCOUNT_ID, _GENESIS_ADDRESS),
+                //                 _GENESIS_SEED
+                //             );
+                //             counter += 1;
+                //         }
+                //     }));
+                // }
             }
             else {
                 let _client = Client::new(i, format!("ws://127.0.0.1:60{}", 5+i).as_str(), subscription_tx.clone());
             }
-            // let sender_clone = client.sender_channel.clone();
-            // threads.push(thread::spawn(move || {
-            //     let mut counter = 0;
-            //     // Send payment transaction every 10 seconds
-            //     loop {
-            //         sleep(Duration::from_secs(10));
-            //         Client::sign_and_submit(
-            //             &sender_clone,
-            //             format!("Ripple{}: {}", i, &*counter.to_string()).as_str(),
-            //             &Client::create_payment_transaction(_AMOUNT, _ACCOUNT_ID, _GENESIS_ADDRESS),
-            //             _GENESIS_SEED
-            //         );
-            //         counter += 1;
-            //     }
-            // }));
         }
 
         for tokio_task in tokio_tasks {

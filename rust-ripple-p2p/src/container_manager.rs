@@ -36,7 +36,7 @@ struct NodeKeysResult {
     pub result: NodeKeys,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct NodeKeys {
     pub validation_key: String,
     pub validation_private_key: String,

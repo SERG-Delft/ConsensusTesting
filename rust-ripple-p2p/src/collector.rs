@@ -64,7 +64,7 @@ impl Collector {
             match self.subscription_receiver.try_recv() {
                 Ok(subscription_object) => match subscription_object.subscription_object {
                     SubscriptionObject::ValidatedLedger(ledger) => {
-                        println!("Ledger {} is validated", ledger.ledger_index);
+                        println!("Ledger {} is validated with {} txns", ledger.ledger_index, ledger.txn_count);
                         self.write_to_subscription_file(subscription_object.peer, json!({"LedgerValidated": ledger}).to_string());
                         self.scheduler_sender.send(SubscriptionObject::ValidatedLedger(ledger.clone())).expect("Scheduler send failed");
                     }

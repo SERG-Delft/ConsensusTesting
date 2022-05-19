@@ -1,7 +1,7 @@
 use std::fmt::{Debug, Display, Formatter};
 use crate::protos::ripple::{TMManifest, TMPing, TMCluster, TMEndpoints, TMTransaction, TMGetLedger, TMLedgerData, TMProposeSet, TMStatusChange, TMHaveTransactionSet, TMValidation, TMGetObjectByHash, TMGetShardInfo, TMShardInfo, TMGetPeerShardInfo, TMPeerShardInfo, TMValidatorList};
 use serde_json;
-use crate::deserialization::{deserialize_validation};
+// use crate::deserialization::{deserialize_validation};
 
 /// Deserialize message
 pub fn invoke_protocol_message(message_type: u16, payload: &[u8]) -> RippleMessageObject {
@@ -91,8 +91,8 @@ pub struct ParsedValidation {
     pub signing_time: u32,
 }
 
-impl ParsedValidation {
-    pub fn new(validation: &TMValidation) -> Self {
-        deserialize_validation(validation.get_validation().clone())
-    }
-}
+// impl ParsedValidation {
+//     pub fn new(validation: &TMValidation) -> Self {
+//         deserialize_validation(validation.get_validation().clone())
+//     }
+// }

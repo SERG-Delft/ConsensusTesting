@@ -6,6 +6,22 @@ use serde::{Serialize, Deserialize};
 use std::thread::JoinHandle;
 use log::*;
 
+const _NODE_PRIVATE_KEY: &str = "e55dc8f3741ac9668dbe858409e5d64f5ce88380f7228eccfe82b92b2c7848ba";
+const _NODE_PUBLIC_KEY_BASE58: &str = "n9KAa2zVWjPHgfzsE3iZ8HAbzJtPrnoh4H2M2HgE7dfqtvyEb1KJ";
+// Account and its keys to send transaction to
+const _ACCOUNT_ID: &str = "rE4DHSdcXafD7DkpJuFCAvc3CvsgXHjmEJ";
+const _MASTER_KEY: &str = "BUSY MARS SLED SNUG OBOE REID SUNK NEW GYM LAD LICE FEAT";
+const _MASTER_SEED: &str = "saNSJMEBKisBr6phJtGXUcV85RBZ3";
+const _MASTER_SEED_HEX: &str = "FDDE6A91607445E59C6F7CF07AF7B661";
+const _PUBLIC_KEY_HEX: &str = "03137FF01C82A1CF507CC243EBF629A99F2256FA43BCB7A458F638AF9A5488CD87";
+const _PUBLIC_KEY: &str = "aBQsqGF1HEduKrHrSVzNE5yeCTJTGgrsKgyjNLgabS2Rkq7CgZiq";
+
+// Genesis account with initial supply of XRP
+const _GENESIS_SEED: &str = "snoPBrXtMeMyMHUVTgbuqAfg1SUTb";
+const _GENESIS_ADDRESS: &str = "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh";
+
+const _AMOUNT: u32 = 2u32.pow(31);
+
 #[allow(unused)]
 pub struct Client<'a> {
     peer: u16,
@@ -52,6 +68,9 @@ impl Client<'static> {
             }
         });
 
+        // println!("{}", connection);
+        let sender_clone = tx.clone();
+        let is_byzantine = connection.ends_with("8");
         let receive_loop = thread::spawn(move || {
             // Receive loop
             for message in receiver.incoming_messages() {
@@ -68,6 +87,19 @@ impl Client<'static> {
                     OwnedMessage::Text(text) => {
                         match serde_json::from_str::<SubscriptionObject>(text.as_str()) {
                             Ok(subscription_object) => {
+                                match &subscription_object {
+                                    SubscriptionObject::ValidatedLedger(vl) => {
+                                        if vl.ledger_index == 5 && is_byzantine {
+                                            Client::sign_and_submit(
+                                                &sender_clone,
+                                                format!("Ripple TXN").as_str(),
+                                                &Client::create_payment_transaction(200000000, _ACCOUNT_ID, _GENESIS_ADDRESS),
+                                                _GENESIS_SEED
+                                            );
+                                        }
+                                    }
+                                    _ => ()
+                                }
                                 subscription_collector_sender.send(PeerSubscriptionObject::new(peer, subscription_object)).unwrap()
                             },
                             Err(_) => { warn!("Could not parse") }
@@ -170,7 +202,7 @@ impl Client<'static> {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "PascalCase")]
 pub struct Transaction {
     #[serde(rename = "Account")]
@@ -197,7 +229,7 @@ pub struct Transaction {
     pub data: Option<Payment>
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub enum TransactionType {
     Payment,
     OfferCreate,
@@ -216,7 +248,7 @@ pub enum TransactionType {
     DepositPreauth
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Payment  {
     #[serde(rename = "Amount")]
     pub amount: u32,
@@ -232,7 +264,7 @@ pub struct Payment  {
     pub deliver_min: Option<u32>
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ValidatedLedger {
     #[serde(skip_serializing)]
     pub fee_base: u32,
@@ -251,7 +283,7 @@ pub struct ValidatedLedger {
 }
 
 #[allow(unused)]
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ReceivedValidation {
     #[serde(skip_serializing_if = "Option::is_none")]
     amendments: Option<Vec<String>>,
@@ -275,7 +307,7 @@ pub struct ReceivedValidation {
     validation_public_key: String
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum PeerStatusEvent {
     #[serde(rename = "CLOSING_LEDGER")]
     ClosingLedger,
@@ -287,7 +319,7 @@ pub enum PeerStatusEvent {
     LostSync
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct PeerStatusChange {
     action: PeerStatusEvent,
     date: u32,
@@ -301,12 +333,12 @@ pub struct PeerStatusChange {
     ledger_index_min: Option<u32>,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ConsensusChange {
     consensus: String
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(tag = "type")]
 pub enum SubscriptionObject {
     #[serde(rename = "ledgerClosed")]
