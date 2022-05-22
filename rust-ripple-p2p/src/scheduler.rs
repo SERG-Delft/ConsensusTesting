@@ -6,6 +6,7 @@ use std::thread;
 use byteorder::{BigEndian, ByteOrder};
 use chrono::Utc;
 use log::error;
+use protobuf::Message;
 use tokio::sync::mpsc::{Receiver as TokioReceiver, Sender as TokioSender};
 
 use crate::client::SubscriptionObject;
@@ -42,32 +43,35 @@ impl Scheduler {
         }
     }
 
-    fn execute_event(&self, event: Event) {
+    fn execute_event(&self, mut event: Event) {
         let mut rmo: RippleMessageObject = invoke_protocol_message(BigEndian::read_u16(&event.message[4..6]), &event.message[6..]);
         match rmo {
             TMHaveTransactionSet(_) => {
-                if event.from == 3 { return () }
+                // if event.from == 3 { return () }
             }
             TMTransaction(ref mut trx) => {
                 if event.from == 3 {
-                    trx.set_rawTransaction(hex::decode(parse_canonical_binary_format(trx.get_rawTransaction(), &self.node_keys[event.from].validation_seed)).unwrap())
+                    // println!("pre  {}", hex::encode(&event.message));
+                    trx.set_rawTransaction(hex::decode(parse_canonical_binary_format(trx.get_rawTransaction())).unwrap());
+                    // println!("post {}", hex::encode([&event.message[0..6], &trx.write_to_bytes().unwrap()].concat()));
+                    event.message = [&event.message[0..6], &trx.write_to_bytes().unwrap()].concat();
                 }
-                // println!("[{}->{}] {}", event.from + 1, event.to + 1, rmo);
+                println!("[{}->{}] {}", event.from + 1, event.to + 1, rmo);
             }
             TMValidation(_) => {
-                if event.from == 3 { return () }
+                // if event.from == 3 { return () }
                 // println!("[{}->{}] {}", event.from + 1, event.to + 1, rmo);
             }
             TMProposeSet(ref mut proposal) => {
                 if event.from == 3 && !proposal.get_currentTxHash().starts_with(&[0]) {
                     proposal.set_currentTxHash(hex::decode("E803E1999369975AED1BFD2444A3552A73383C03A2004CB784CE07E13EBD7D7C").unwrap());
-                    proposal.set_signature(hex::decode("304502210098316a375896e681cf2fe8ff38dd54ee47aa1722dfe67d91079c795eb64eabb302202240ab9f1010af36549efebe8f185a7e8d4cd84a01c223e344d8174928c9523e").unwrap());
+                    proposal.set_signature(hex::decode("3045022100a36058cae09aa725515fa94363372f2542a70015ee7cff640d6690b5f552575902207be2137c73559c788f8eaab50c29bdae8b525191b9d7641d3e3690561cdd721a").unwrap());
                 }
-                // println!("[{}->{}] {}", event.from + 1, event.to + 1, rmo);
+                println!("[{}->{}] {}", event.from + 1, event.to + 1, rmo);
             }
             _ => ()
         }
-        println!("[{}->{}] {}", event.from + 1, event.to + 1, rmo);
+        // println!("[{}->{}] {}", event.from + 1, event.to + 1, rmo);
         self.p2p_connections.get(&event.to).unwrap().get(&event.from).unwrap().send(event.message);
         // match rmo {
         //     RippleMessageObject::TMTransaction(_) => {

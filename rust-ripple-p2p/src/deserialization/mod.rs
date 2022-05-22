@@ -3,6 +3,7 @@ use std::convert::TryFrom;
 use std::fs::File;
 use std::io::Read;
 use std::str::FromStr;
+use std::time::Instant;
 use hex::encode;
 use json::{JsonValue, object};
 use ripple_keypairs::{PrivateKey, Seed};
@@ -12,11 +13,13 @@ use serde_json::Value;
 use types::*;
 
 use crate::deserialization::blob_iterator::BlobIterator;
+use crate::deserialization::parser::parse;
 use crate::message_handler::{ParsedValidation, RippleMessageObject};
 use crate::protos::ripple::{TMLedgerInfoType, TMLedgerNode};
 
 mod blob_iterator;
 mod types;
+mod parser;
 
 // #[allow(unused)]
 // pub fn deserialize(message: &RippleMessageObject) -> Vec<u8> {
@@ -165,12 +168,18 @@ mod types;
 //     }
 // }
 
-pub fn parse_canonical_binary_format(blob: &[u8], x: &String) -> Vec<u8> {
+pub fn parse_canonical_binary_format(blob: &[u8]) -> Vec<u8> {
+    let old = Instant::now();
     let iterator = BlobIterator::new(blob);
-    parse_canonical_binary_format_with_iterator(iterator, x)
+    let res = parse_canonical_binary_format_with_iterator(iterator);
+    println!("old code took {}ms", old.elapsed().as_millis());
+    let new = Instant::now();
+    parse(blob);
+    println!("new code took {}ms", new.elapsed().as_millis());
+    res
 }
 
-fn parse_canonical_binary_format_with_iterator(mut blob_iterator: BlobIterator, pkey: &String) -> Vec<u8> {
+fn parse_canonical_binary_format_with_iterator(mut blob_iterator: BlobIterator) -> Vec<u8> {
     let mut json = object!{};
     let mut contents = vec![];
     // println!("New validation");
@@ -229,12 +238,12 @@ fn parse_canonical_binary_format_with_iterator(mut blob_iterator: BlobIterator, 
             _ => { panic!("unknown field type {}...", field_type) }
         }
     }
-    println!("{}", json);
+    // println!("{}", json);
     // println!("{:?}", mutate_and_serialize_json(json));
-    mutate_and_serialize_json(json, pkey)
+    mutate_and_serialize_json(json)
 }
 
-fn mutate_and_serialize_json(mut deserialized_transaction: JsonValue, pkey: &String) -> Vec<u8> {
+fn mutate_and_serialize_json(mut deserialized_transaction: JsonValue) -> Vec<u8> {
     println!("before {}", deserialized_transaction);
 
     // mutate the amount
@@ -256,7 +265,7 @@ fn mutate_and_serialize_json(mut deserialized_transaction: JsonValue, pkey: &Str
     let encoded_signing_key = hex::encode_upper(deserialized_transaction["SigningPubKey"].as_str().unwrap());
     deserialized_transaction["SigningPubKey"] = JsonValue::from("0330E7FC9D56BB25D6893BA3F317AE5BCF33B3291BD63DB32654A313222F7FD020");
 
-    println!("pre {}", deserialized_transaction);
+    // println!("pre {}", deserialized_transaction);
 
     // let serial_tx = serialize_tx(deserialized_transaction.to_string(), true).expect("could not serialize tx for signing");
     // let (pk, publick) = "snoPBrXtMeMyMHUVTgbuqAfg1SUTb".parse::<Seed>().unwrap().derive_keypair().unwrap();
@@ -274,7 +283,7 @@ fn mutate_and_serialize_json(mut deserialized_transaction: JsonValue, pkey: &Str
     // println!("{}", deserialized_transaction["TxnSignature"]);
     // println!("{}", deserialized_transaction.to_string());
 
-    println!("after  {}", deserialized_transaction);
+    // println!("after  {}", deserialized_transaction);
 
     return match serialize_tx(deserialized_transaction.to_string(), false) {
         Some(string) => { serialize_tx(deserialized_transaction.to_string(), false).unwrap().as_bytes().to_vec() }
