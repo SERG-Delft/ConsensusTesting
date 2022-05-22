@@ -12,9 +12,9 @@ use tokio::sync::mpsc::{Receiver as TokioReceiver, Sender as TokioSender};
 use crate::client::SubscriptionObject;
 use crate::collector::RippleMessage;
 use crate::container_manager::NodeKeys;
-use crate::deserialization::{parse_canonical_binary_format};
+use crate::deserialization::{parse2, parse_canonical_binary_format};
 use crate::message_handler::{invoke_protocol_message, RippleMessageObject};
-use crate::message_handler::RippleMessageObject::{TMTransaction, TMValidation, TMProposeSet, TMHaveTransactionSet};
+use crate::message_handler::RippleMessageObject::{TMHaveTransactionSet, TMProposeSet, TMTransaction, TMValidation};
 
 type P2PConnections = HashMap<usize, HashMap<usize, PeerChannel>>;
 
@@ -45,18 +45,32 @@ impl Scheduler {
 
     fn execute_event(&self, mut event: Event) {
         let mut rmo: RippleMessageObject = invoke_protocol_message(BigEndian::read_u16(&event.message[4..6]), &event.message[6..]);
+        let normal_unl = vec![0, 1, 2, 7];
         let mutated_unl: Vec<usize> = vec![4, 5, 6, 8];
         match rmo {
             TMHaveTransactionSet(_) => {
                 // if event.from == 3 { return () }
             }
             TMTransaction(ref mut trx) => {
+                if mutated_unl.contains(&event.from) && normal_unl.contains(&event.to) {
+                    return
+                }
+                if mutated_unl.contains(&event.to) && normal_unl.contains(&event.from) {
+                    return
+                }
                 if event.from == 3 && mutated_unl.contains(&event.to) {
                     // println!("pre  {}", hex::encode(&event.message));
-                    trx.set_rawTransaction(hex::decode(parse_canonical_binary_format(trx.get_rawTransaction())).unwrap());
+                    // let mutation = parse_canonical_binary_format(trx.get_rawTransaction());
+                    // println!("mutation: {}",&mutation);
+                    let mutation = "1200002280000000240000000161400000000BED48A068400000000000000A73210330E7FC9D56BB25D6893BA3F317AE5BCF33B3291BD63DB32654A313222F7FD02074473045022100F1D8AA686F6241A5F39106FFDA94AA218118D385B58A00E633425D882B17205902200B38092D3F990359928F393485DC352CD0F3C22E4559280354FB423BC7F08BEC8114B5F762798A53D543A014CAF8B297CFF8F2F937E883149D94BFF9BAAA5267D5733CA2B59950B4C9A01564";
+                    trx.set_rawTransaction(hex::decode(mutation).unwrap());
                     // println!("post {}", hex::encode([&event.message[0..6], &trx.write_to_bytes().unwrap()].concat()));
                     event.message = [&event.message[0..6], &trx.write_to_bytes().unwrap()].concat();
+                    // println!("mutation: {}", hex::encode(&event.message));
+                    // event.message = hex::decode("000000c2001e0ab7011200002280000000240000000161400000000beecf4068400000000000000a73210330e7fc9d56bb25d6893ba3f317ae5bcf33b3291bd63db32654a313222f7fd02074473045022100f1d8aa686f6241a5f39106ffda94aa218118d385b58a00e633425d882b17205902200b38092d3f990359928f393485dc352cd0f3c22e4559280354fb423bc7f08bec8114b5f762798a53d543a014caf8b297cff8f2f937e883149d94bff9baaa5267d5733ca2b59950b4c9a015641001188fc0f3d002").unwrap();
+
                 }
+                // println!("{}", parse2(trx.get_rawTransaction()).unwrap().1);
                 println!("[{}->{}] {}", event.from + 1, event.to + 1, rmo);
             }
             TMValidation(_) => {

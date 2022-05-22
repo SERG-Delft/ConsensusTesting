@@ -7,6 +7,7 @@ use std::time::Instant;
 use hex::encode;
 use json::{JsonValue, object};
 use lazy_static::lazy_static;
+use nom::IResult;
 use ripple_keypairs::{PrivateKey, Seed};
 use rippled_binary_codec::serialize::serialize_tx;
 use serde_json::Value;
@@ -21,6 +22,10 @@ use crate::protos::ripple::{TMLedgerInfoType, TMLedgerNode};
 mod blob_iterator;
 mod types;
 mod parser;
+
+pub fn parse2(input: &[u8]) -> IResult<&[u8], JsonValue> {
+    parse(input)
+}
 
 lazy_static!(
     static ref TRANSACTION_TYPES: HashMap<i64, String> = read_transaction_types();
@@ -173,16 +178,19 @@ lazy_static!(
 //     }
 // }
 
-pub fn parse_canonical_binary_format(blob: &[u8]) -> Vec<u8> {
+pub fn parse_canonical_binary_format(blob: &[u8]) -> String {
     // let iterator = BlobIterator::new(blob);
     // let res = parse_canonical_binary_format_with_iterator(iterator);
-    // let time = Instant::now();
-    let res = parse(blob).unwrap().1;
-    // println!("timing {}ms", time.elapsed().as_millis());
+    let time = Instant::now();
+    let json = parse(blob).unwrap().1;
+    println!("parsing took {}ms", time.elapsed().as_millis());
+    let timemut = Instant::now();
+    let res = mutate_and_serialize_json(json);
+    println!("mutatio took {}ms", timemut.elapsed().as_millis());
     res
 }
 
-fn parse_canonical_binary_format_with_iterator(mut blob_iterator: BlobIterator) -> Vec<u8> {
+fn parse_canonical_binary_format_with_iterator(mut blob_iterator: BlobIterator) -> String {
     let mut json = object!{};
     let mut contents = vec![];
     // println!("New validation");
@@ -246,7 +254,7 @@ fn parse_canonical_binary_format_with_iterator(mut blob_iterator: BlobIterator) 
     mutate_and_serialize_json(json)
 }
 
-fn mutate_and_serialize_json(mut deserialized_transaction: JsonValue) -> Vec<u8> {
+fn mutate_and_serialize_json(mut deserialized_transaction: JsonValue) -> String {
     println!("before {}", deserialized_transaction["Amount"]);
 
     // mutate the amount
@@ -292,7 +300,7 @@ fn mutate_and_serialize_json(mut deserialized_transaction: JsonValue) -> Vec<u8>
     //     Some(string) => { serialize_tx(deserialized_transaction.to_string(), false).unwrap().as_bytes().to_vec() }
     //     None => { panic!("could not serialize") }
     // }
-    serialize_tx(deserialized_transaction.to_string(), false).unwrap().as_bytes().to_vec()
+    serialize_tx(deserialized_transaction.to_string(), false).unwrap()
 }
 
 // fn mutate_transaction(mut contents: Vec<SerializationTypeValue>) -> Vec<SerializationTypeValue> {

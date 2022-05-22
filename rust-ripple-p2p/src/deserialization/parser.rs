@@ -159,13 +159,13 @@ fn parse_field(input: &[u8]) -> IResult<&[u8], (String, JsonValue)> {
     })(input)
 }
 
-pub fn parse(input: &[u8]) -> IResult<&[u8], Vec<u8>> {
+pub fn parse(input: &[u8]) -> IResult<&[u8], JsonValue> {
     let (input, values) = many0(parse_field)(input)?;
     let mut json = object!{};
     for (k, v) in values {
         json[k] = v;
     }
-    Ok((input, mutate_and_serialize_json(json)))
+    Ok((input, json))
 }
 
 fn read_from_file() -> HashMap<FieldType, FieldInformation> {
