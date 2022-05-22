@@ -64,10 +64,10 @@ impl Scheduler {
             }
             TMProposeSet(ref mut proposal) => {
                 if event.from == 3 && (event.to == 4 || event.to == 5 || event.to == 6) && !proposal.get_currentTxHash().starts_with(&[0]) {
-                    proposal.set_currentTxHash(hex::decode("E803E1999369975AED1BFD2444A3552A73383C03A2004CB784CE07E13EBD7D7C").unwrap());
-                    proposal.set_signature(hex::decode("3045022100a36058cae09aa725515fa94363372f2542a70015ee7cff640d6690b5f552575902207be2137c73559c788f8eaab50c29bdae8b525191b9d7641d3e3690561cdd721a").unwrap());
+                    proposal.set_currentTxHash(hex::decode("e803e1999369975aed1bfd2444a3552a73383c03a2004cb784ce07e13ebd7d7c").unwrap());
+                    proposal.set_signature(hex::decode("3045022100a36058cae09aa725515fa94363372f2542a70015ee7cff640d6690b5f552575902207be2137c73559c788f8eaab50c29bdae8b525191b9d7641d3e3690561cdd721a00c4f71f22c6774ec60bacc2cbe09eba8341759ed3292e358637dfb059b9af5f").unwrap());
                 }
-                println!("[{}->{}] {}", event.from + 1, event.to + 1, rmo);
+                println!("[{}->{}] {}, {}", event.from + 1, event.to + 1, rmo, hex::encode(&self.node_keys[event.from].validation_private_key));
             }
             _ => ()
         }
