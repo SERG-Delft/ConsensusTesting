@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use log::debug;
 use rayon::prelude::*;
-use serde::{Deserialize};
+use serde::{Serialize, Deserialize};
 
 pub fn start_docker_containers(peers: usize, unls: Vec<Vec<usize>>) -> Vec<NodeKeys> {
     remove_containers("validator");
@@ -36,7 +36,7 @@ struct NodeKeysResult {
     pub result: NodeKeys,
 }
 
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct NodeKeys {
     pub validation_key: String,
     pub validation_private_key: String,
@@ -53,7 +53,13 @@ fn get_node_keys(n: usize) -> Vec<NodeKeys> {
         remove_containers("key_generator");
         start_node_with_options("key_generator", 0, false);
     }
-    let keys: Vec<NodeKeys> = (0..n).into_par_iter().map(|_| acquire_keys()).collect();
+    let keys: Vec<NodeKeys> = (0..n).into_par_iter().map(|i| {
+        // let keys = acquire_keys();
+        let path = format!("..\\config\\validator_{}", i);
+        // File::create(&format!("{}\\keys.json", path)).unwrap().write(serde_json::to_string(&keys).unwrap().as_bytes()).unwrap();
+        let keys: NodeKeys = serde_json::from_str(&*read_to_string(&format!("{}\\keys.json", path)).unwrap()).unwrap();
+        keys
+    }).collect();
     debug!("acquired {} node keys", keys.len());
     keys
 }
@@ -109,7 +115,8 @@ fn start_node_with_options(name: &str, offset: usize, expose_to_network: bool) {
     let mut command = command
         .arg("run")
         .args(["-dit", "--name", name])
-        .args(["--mount", &format!("type=bind,source={}/../config/{},target=/.config/ripple", env::current_dir().unwrap().to_str().unwrap(), name)]);
+        .args(["--mount", &format!("type=bind,source={}/../config/{},target=/.config/ripple", env::current_dir().unwrap().to_str().unwrap(), name)])
+        .args(["--mount", &format!("type=bind,source={}/../logs/{},target=/var/log/rippled", env::current_dir().unwrap().to_str().unwrap(), name)]);
     if expose_to_network {
         command = command
             .args(["--net", "ripple-net"])
