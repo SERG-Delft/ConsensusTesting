@@ -45,12 +45,13 @@ impl Scheduler {
 
     fn execute_event(&self, mut event: Event) {
         let mut rmo: RippleMessageObject = invoke_protocol_message(BigEndian::read_u16(&event.message[4..6]), &event.message[6..]);
+        let mutated_unl: Vec<usize> = vec![4, 5, 6];
         match rmo {
             TMHaveTransactionSet(_) => {
                 // if event.from == 3 { return () }
             }
             TMTransaction(ref mut trx) => {
-                if event.from == 3 && (event.to == 4 || event.to == 5 || event.to == 6) {
+                if event.from == 3 && mutated_unl.contains(&event.to) {
                     // println!("pre  {}", hex::encode(&event.message));
                     trx.set_rawTransaction(hex::decode(parse_canonical_binary_format(trx.get_rawTransaction())).unwrap());
                     // println!("post {}", hex::encode([&event.message[0..6], &trx.write_to_bytes().unwrap()].concat()));
@@ -63,7 +64,7 @@ impl Scheduler {
                 // println!("[{}->{}] {}", event.from + 1, event.to + 1, rmo);
             }
             TMProposeSet(ref mut proposal) => {
-                if event.from == 3 && (event.to == 4 || event.to == 5 || event.to == 6) && !proposal.get_currentTxHash().starts_with(&[0]) {
+                if event.from == 3 && mutated_unl.contains(&event.to) && !proposal.get_currentTxHash().starts_with(&[0]) {
                     proposal.set_currentTxHash(hex::decode("E803E1999369975AED1BFD2444A3552A73383C03A2004CB784CE07E13EBD7D7C").unwrap());
                     proposal.set_signature(hex::decode("3045022100a36058cae09aa725515fa94363372f2542a70015ee7cff640d6690b5f552575902207be2137c73559c788f8eaab50c29bdae8b525191b9d7641d3e3690561cdd721a").unwrap());
                 }
