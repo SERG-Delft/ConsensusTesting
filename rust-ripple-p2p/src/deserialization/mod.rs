@@ -169,13 +169,9 @@ mod parser;
 // }
 
 pub fn parse_canonical_binary_format(blob: &[u8]) -> Vec<u8> {
-    let old = Instant::now();
     let iterator = BlobIterator::new(blob);
     let res = parse_canonical_binary_format_with_iterator(iterator);
-    println!("old code took {}ms", old.elapsed().as_millis());
-    let new = Instant::now();
-    parse(blob);
-    println!("new code took {}ms", new.elapsed().as_millis());
+    // parse(blob);
     res
 }
 
