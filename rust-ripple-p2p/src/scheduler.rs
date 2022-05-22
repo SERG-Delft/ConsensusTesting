@@ -45,7 +45,7 @@ impl Scheduler {
 
     fn execute_event(&self, mut event: Event) {
         let mut rmo: RippleMessageObject = invoke_protocol_message(BigEndian::read_u16(&event.message[4..6]), &event.message[6..]);
-        let mutated_unl: Vec<usize> = vec![4, 5, 6];
+        let mutated_unl: Vec<usize> = vec![4, 5, 6, 8];
         match rmo {
             TMHaveTransactionSet(_) => {
                 // if event.from == 3 { return () }
