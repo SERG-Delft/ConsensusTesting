@@ -71,7 +71,7 @@ impl Scheduler {
 
                 }
                 // println!("{}", parse2(trx.get_rawTransaction()).unwrap().1);
-                println!("[{}->{}] {}", event.from + 1, event.to + 1, rmo);
+                // println!("[{}->{}] {}", event.from + 1, event.to + 1, rmo);
             }
             TMValidation(_) => {
                 // if event.from == 3 { return () }
@@ -82,7 +82,7 @@ impl Scheduler {
                     proposal.set_currentTxHash(hex::decode("E803E1999369975AED1BFD2444A3552A73383C03A2004CB784CE07E13EBD7D7C").unwrap());
                     proposal.set_signature(hex::decode("3045022100a36058cae09aa725515fa94363372f2542a70015ee7cff640d6690b5f552575902207be2137c73559c788f8eaab50c29bdae8b525191b9d7641d3e3690561cdd721a").unwrap());
                 }
-                println!("[{}->{}] {}, {}", event.from + 1, event.to + 1, rmo, hex::encode(&self.node_keys[event.from].validation_private_key));
+                // println!("[{}->{}] {}, {}", event.from + 1, event.to + 1, rmo, hex::encode(&self.node_keys[event.from].validation_private_key));
             }
             _ => ()
         }

@@ -19,8 +19,8 @@ out/
 
 db/proxy/*
 db/validator*/*
-logs/proxy/*
-logs/validator*/*
+logs_backup/proxy/*
+logs_backup/validator*/*
 config/validator*/rippled.cfg
 config/validator*/validators.txt
 rust-ripple-p2p/execution.txt
