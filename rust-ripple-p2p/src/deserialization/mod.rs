@@ -6,6 +6,7 @@ use std::str::FromStr;
 use std::time::Instant;
 use hex::encode;
 use json::{JsonValue, object};
+use lazy_static::lazy_static;
 use ripple_keypairs::{PrivateKey, Seed};
 use rippled_binary_codec::serialize::serialize_tx;
 use serde_json::Value;
@@ -20,6 +21,10 @@ use crate::protos::ripple::{TMLedgerInfoType, TMLedgerNode};
 mod blob_iterator;
 mod types;
 mod parser;
+
+lazy_static!(
+    static ref TRANSACTION_TYPES: HashMap<i64, String> = read_transaction_types();
+);
 
 // #[allow(unused)]
 // pub fn deserialize(message: &RippleMessageObject) -> Vec<u8> {
@@ -169,9 +174,11 @@ mod parser;
 // }
 
 pub fn parse_canonical_binary_format(blob: &[u8]) -> Vec<u8> {
-    let iterator = BlobIterator::new(blob);
-    let res = parse_canonical_binary_format_with_iterator(iterator);
-    // parse(blob);
+    // let iterator = BlobIterator::new(blob);
+    // let res = parse_canonical_binary_format_with_iterator(iterator);
+    // let time = Instant::now();
+    let res = parse(blob).unwrap().1;
+    // println!("timing {}ms", time.elapsed().as_millis());
     res
 }
 
@@ -240,7 +247,7 @@ fn parse_canonical_binary_format_with_iterator(mut blob_iterator: BlobIterator) 
 }
 
 fn mutate_and_serialize_json(mut deserialized_transaction: JsonValue) -> Vec<u8> {
-    println!("before {}", deserialized_transaction);
+    println!("before {}", deserialized_transaction["Amount"]);
 
     // mutate the amount
     let amount = deserialized_transaction["Amount"].as_str().unwrap();
@@ -249,16 +256,16 @@ fn mutate_and_serialize_json(mut deserialized_transaction: JsonValue) -> Vec<u8>
     deserialized_transaction["Amount"] = JsonValue::from(mutated_amount.to_string());
 
     // map the transaction type to its name (based on definitions.json)
-    let transaction_types = read_transaction_types();
-    let current_key = deserialized_transaction["TransactionType"].as_i64().unwrap();
-    let transaction_type = match transaction_types.get(&current_key) {
-        Some(transaction) => { transaction.to_string() }
-        None => { "Invalid".to_string() }
-    };
-    deserialized_transaction["TransactionType"] = JsonValue::from(transaction_type);
+    // let transaction_types = read_transaction_types();
+    // let current_key = deserialized_transaction["TransactionType"].as_i64().unwrap();
+    // let transaction_type = match TRANSACTION_TYPES.get(&current_key) {
+    //     Some(transaction) => { transaction.to_string() }
+    //     None => { "Invalid".to_string() }
+    // };
+    deserialized_transaction["TransactionType"] = JsonValue::from("Payment");
 
     // map the signing public key
-    let encoded_signing_key = hex::encode_upper(deserialized_transaction["SigningPubKey"].as_str().unwrap());
+    // let encoded_signing_key = hex::encode_upper(deserialized_transaction["SigningPubKey"].as_str().unwrap());
     deserialized_transaction["SigningPubKey"] = JsonValue::from("0330E7FC9D56BB25D6893BA3F317AE5BCF33B3291BD63DB32654A313222F7FD020");
 
     // println!("pre {}", deserialized_transaction);
@@ -272,7 +279,7 @@ fn mutate_and_serialize_json(mut deserialized_transaction: JsonValue) -> Vec<u8>
     // deserialized_transaction["SigningPubKey"] = JsonValue::from(publick.to_string());
 
     // map the txn signature
-    let encoded_txt_signature = hex::encode_upper(deserialized_transaction["TxnSignature"].as_str().unwrap());
+    // let encoded_txt_signature = hex::encode_upper(deserialized_transaction["TxnSignature"].as_str().unwrap());
     deserialized_transaction["TxnSignature"] = JsonValue::from("3045022100f1d8aa686f6241a5f39106ffda94aa218118d385b58a00e633425d882b17205902200b38092d3f990359928f393485dc352cd0f3c22e4559280354fb423bc7f08bec");
 
     // println!("{}", deserialized_transaction["SigningPubKey"]);
@@ -281,10 +288,11 @@ fn mutate_and_serialize_json(mut deserialized_transaction: JsonValue) -> Vec<u8>
 
     // println!("after  {}", deserialized_transaction);
 
-    return match serialize_tx(deserialized_transaction.to_string(), false) {
-        Some(string) => { serialize_tx(deserialized_transaction.to_string(), false).unwrap().as_bytes().to_vec() }
-        None => { panic!("could not serialize") }
-    }
+    // return match serialize_tx(deserialized_transaction.to_string(), false) {
+    //     Some(string) => { serialize_tx(deserialized_transaction.to_string(), false).unwrap().as_bytes().to_vec() }
+    //     None => { panic!("could not serialize") }
+    // }
+    serialize_tx(deserialized_transaction.to_string(), false).unwrap().as_bytes().to_vec()
 }
 
 // fn mutate_transaction(mut contents: Vec<SerializationTypeValue>) -> Vec<SerializationTypeValue> {
