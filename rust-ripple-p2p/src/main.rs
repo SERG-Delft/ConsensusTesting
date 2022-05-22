@@ -37,16 +37,21 @@ fn main() {
     env_logger::Builder::new().parse_default_env().init();
 
     let bug_unls: Vec<Vec<usize>> = vec![
-        vec![0, 1, 2, 3, 4],
-        vec![0, 1, 2, 3, 4],
-        vec![0, 1, 2, 3, 4, 5, 6],
-        vec![0, 1, 2, 3, 4, 5, 6],
-        vec![0, 1, 2, 3, 4, 5, 6],
-        vec![2, 3, 4, 5, 6],
-        vec![2, 3, 4, 5, 6]
+        vec![0, 1, 2, 3, 7], // 0
+        vec![0, 1, 2, 3, 7], // 1
+        vec![0, 1, 2, 3, 7], // 2
+        vec![0, 1, 2, 3, 4, 5, 6, 7, 8], // 3
+        vec![3, 4, 5, 6, 8], // 4
+        vec![3, 4, 5, 6, 8], // 5
+        vec![3, 4, 5, 6, 8], // 6
+        vec![0, 1, 2, 3, 7],
+        vec![3, 4, 5, 6, 8],
     ];
 
     let node_keys = start_docker_containers(n, bug_unls);
+    for k in &node_keys {
+        println!("node key {}", k.validation_public_key);
+    }
 
     let app = app::App::new(n as u16, only_subscribe, node_keys);
 

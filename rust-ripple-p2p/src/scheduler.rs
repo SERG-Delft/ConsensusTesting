@@ -64,7 +64,7 @@ impl Scheduler {
                 // println!("[{}->{}] {}", event.from + 1, event.to + 1, rmo);
             }
             TMProposeSet(ref mut proposal) => {
-                if event.from == 3 && mutated_unl.contains(&event.to) && !proposal.get_currentTxHash().starts_with(&[0]) {
+                if event.from == 3 && mutated_unl.contains(&event.to) && !proposal.get_currentTxHash().starts_with(&[0]) && proposal.get_nodePubKey()[1] == 149 {
                     proposal.set_currentTxHash(hex::decode("E803E1999369975AED1BFD2444A3552A73383C03A2004CB784CE07E13EBD7D7C").unwrap());
                     proposal.set_signature(hex::decode("3045022100a36058cae09aa725515fa94363372f2542a70015ee7cff640d6690b5f552575902207be2137c73559c788f8eaab50c29bdae8b525191b9d7641d3e3690561cdd721a").unwrap());
                 }

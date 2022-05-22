@@ -1,6 +1,7 @@
 use std::{env, fs, thread};
 use std::fs::{File, read_to_string};
 use std::io::Write;
+use std::path::Path;
 use std::process::Command;
 use std::str::from_utf8;
 use std::time::Duration;
@@ -54,11 +55,15 @@ fn get_node_keys(n: usize) -> Vec<NodeKeys> {
         start_node_with_options("key_generator", 0, false);
     }
     let keys: Vec<NodeKeys> = (0..n).into_par_iter().map(|i| {
-        // let keys = acquire_keys();
         let path = format!("..\\config\\validator_{}", i);
-        // File::create(&format!("{}\\keys.json", path)).unwrap().write(serde_json::to_string(&keys).unwrap().as_bytes()).unwrap();
-        let keys: NodeKeys = serde_json::from_str(&*read_to_string(&format!("{}\\keys.json", path)).unwrap()).unwrap();
-        keys
+        if Path::new(&format!("{}\\keys.json", path)).exists() {
+            let keys: NodeKeys = serde_json::from_str(&*read_to_string(&format!("{}\\keys.json", path)).unwrap()).unwrap();
+            keys
+        } else {
+            let keys = acquire_keys();
+            File::create(&format!("{}\\keys.json", path)).unwrap().write(serde_json::to_string(&keys).unwrap().as_bytes()).unwrap();
+            keys
+        }
     }).collect();
     debug!("acquired {} node keys", keys.len());
     keys
