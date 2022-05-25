@@ -103,7 +103,7 @@ impl Collector {
         loop {
             // Write all messages sent by the scheduler to peers to "execution.txt". After delay!
             let mut buf = vec![];
-            for i in 0..30 {
+            for _ in 0..30 {
                 match ripple_message_receiver.recv() {
                     Ok(message) => {
                         match &message.message {

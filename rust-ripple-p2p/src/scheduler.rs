@@ -2,7 +2,7 @@ pub mod delay_scheduler;
 pub mod priority_scheduler;
 
 use std::cmp::Ordering;
-use log::{debug, error};
+use log::{debug, error, trace};
 use std::collections::{HashMap};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
@@ -16,10 +16,12 @@ use byteorder::{BigEndian, ByteOrder};
 use websocket::Message;
 use crate::client::{AccountInfo, Transaction};
 use crate::collector::RippleMessage;
+use crate::consensus_properties::ConsensusProperties;
 use crate::ga::fitness::ExtendedFitness;
 use crate::ga::genetic_algorithm::{CurrentFitness, ConsensusMessageType};
-use crate::message_handler::{parse_protocol_message, RippleMessageObject, rmo_to_bytes};
+use crate::message_handler::{parse_protocol_message, ParsedValidation, RippleMessageObject, rmo_to_bytes};
 use crate::node_state::{MutexNodeStates};
+use crate::NodeKeys;
 use crate::test_harness::TestHarness;
 
 type P2PConnections = HashMap<usize, HashMap<usize, PeerChannel>>;
@@ -34,6 +36,7 @@ pub trait Scheduler: Sized {
              client_senders: Vec<STDSender<Message<'static>>>,
              client_receiver: STDReceiver<(Transaction, String)>,
              account_receiver: STDReceiver<AccountInfo>,
+             balance_receiver: STDReceiver<u32>,
     )
     {
         let latest_validated_ledger_clone = self.get_state().latest_validated_ledger.clone();
@@ -47,7 +50,7 @@ pub trait Scheduler: Sized {
 
         thread::spawn(move || Self::update_current_round(node_states_clone, current_round_clone));
         thread::spawn(move || Self::update_latest_validated_ledger(node_states_clone_3, latest_validated_ledger_clone));
-        thread::spawn(move || Self::harness_controller(ga_sender, client_senders, client_receiver, account_receiver, latest_validated_ledger_clone_2, current_round_clone_2, run_clone, node_states_clone_2));
+        thread::spawn(move || Self::harness_controller(ga_sender, client_senders, client_receiver, account_receiver, balance_receiver,latest_validated_ledger_clone_2, current_round_clone_2, run_clone, node_states_clone_2));
 
         // self.start_extension(receiver, ga_receiver);
         let (event_schedule_sender, event_schedule_receiver) = channel();
@@ -83,9 +86,20 @@ pub trait Scheduler: Sized {
         self.get_state().collector_sender.send(collector_message.clone()).expect("Collector receiver failed");
         let (ref run_lock, ref _run_cvar) = &*self.get_state().run;
         if *run_lock.lock() {
-            match event.message {
-                RippleMessageObject::TMTransaction(_) | RippleMessageObject::TMProposeSet(_) | RippleMessageObject::TMStatusChange(_) | RippleMessageObject::TMHaveTransactionSet(_) => self.get_state().node_states.add_execution(collector_message.as_ref().clone()),
-                _ => {}
+            if Self::is_consensus_rmo(&event.message) {
+                self.get_state().node_states.add_execution(collector_message.as_ref().clone());
+                if Self::is_own_message(&event.message, &self.get_state().node_keys[event.from].validation_public_key) {
+                    match &event.message {
+                        RippleMessageObject::TMStatusChange(status_change) => {
+                            ConsensusProperties::check_proposal_integrity_property(&self.get_state().node_states, &status_change, event.from);
+                        }
+                        RippleMessageObject::TMValidation(validation) => {
+                            let parsed_validation = ParsedValidation::new(validation);
+                            ConsensusProperties::check_validation_integrity_property(&self.get_state().node_states, parsed_validation, event.from);
+                        }
+                        _ => {}
+                    }
+                }
             }
         }
         self.get_state().p2p_connections.get(&event.to).unwrap().get(&event.from).unwrap().send(event);
@@ -93,6 +107,35 @@ pub trait Scheduler: Sized {
 
     fn is_consensus_rmo(rmo: &RippleMessageObject) -> bool {
         ConsensusMessageType::RMO_MESSAGE_TYPE.contains(&rmo.message_type())
+    }
+
+    fn is_own_message(rmo: &RippleMessageObject, sender_pub_key: &str) -> bool {
+        match rmo.node_pub_key() {
+            Some(message_pub_key) => {
+                sender_pub_key == &message_pub_key
+            }
+            None => true
+        }
+    }
+
+    /// Update round number based on ledgerAccept message.
+    /// The node has accepted the new ledger and is building/validating that ledger
+    /// We consider the node to have moved on to the next round
+    fn check_message_for_round_update(rmo_event: &RMOEvent, node_states: &Arc<MutexNodeStates>) {
+        match rmo_event.message {
+            crate::message_handler::RippleMessageObject::TMStatusChange(ref status_change) => {
+                if status_change.has_newEvent() {
+                    match status_change.get_newEvent() {
+                        crate::protos::ripple::NodeEvent::neACCEPTED_LEDGER => {
+                            trace!("Setting node {}'s round to {}", rmo_event.from, status_change.get_ledgerSeq() + 1);
+                            node_states.set_current_round(rmo_event.from, status_change.get_ledgerSeq() + 1)
+                        }
+                        _ => {}
+                    }
+                }
+            },
+            _ => {}
+        }
     }
 
     /// Update the current round if a message is received with a higher ledger sequence number
@@ -137,6 +180,7 @@ pub trait Scheduler: Sized {
         client_senders: Vec<STDSender<Message<'static>>>,
         client_receiver: STDReceiver<(Transaction, String)>,
         account_receiver: STDReceiver<AccountInfo>,
+        balance_receiver: STDReceiver<u32>,
         latest_validated_ledger: Arc<(Mutex<u32>, Condvar)>,
         current_round: Arc<(Mutex<u32>, Condvar)>,
         run: Arc<(Mutex<bool>, Condvar)>,
@@ -146,7 +190,7 @@ pub trait Scheduler: Sized {
         let (ledger_lock, ledger_cvar) = &*latest_validated_ledger;
         let (round_lock, round_cvar) = &*current_round;
         let (run_lock, run_cvar) = &*run;
-        let mut test_harness = TestHarness::parse_test_harness(client_senders.clone(), client_receiver, None);
+        let mut test_harness = TestHarness::parse_test_harness(client_senders.clone(), client_receiver, balance_receiver, None);
         node_states.set_harness_transactions(test_harness.transactions.clone());
         Self::stabilize_network(&mut test_harness, node_states.clone(), latest_validated_ledger.clone(), account_receiver);
         // Every loop is one execution of the test harness
@@ -166,6 +210,7 @@ pub trait Scheduler: Sized {
                 // Start test as a node starts a new round
                 if *round_number > first_round {
                     drop(round_number);
+                    test_harness.setup_balances(&node_states);
                     *run_lock.lock() = true;
                     println!("Starting test harness run");
                     run_cvar.notify_all();
@@ -205,7 +250,7 @@ pub trait Scheduler: Sized {
         // Empty transaction queue
         while let Ok(_) = test_harness.client_receiver.try_recv() {}
         // Fetch account sequence numbers
-        crate::client::Client::account_info(&test_harness.client_senders[0], test_harness.accounts[1].account_keys.account_id.clone());
+        crate::client::Client::account_info("account_info", &test_harness.client_senders[0], test_harness.accounts[1].account_keys.account_id.clone());
         let account_seqs = match account_receiver.recv() {
             Ok(account_info) => account_info.account_data.sequence,
             Err(_) => {
@@ -227,10 +272,11 @@ pub struct SchedulerState {
     pub latest_validated_ledger: Arc<(Mutex<u32>, Condvar)>,
     pub current_round: Arc<(Mutex<u32>, Condvar)>,
     pub node_states: Arc<MutexNodeStates>,
+    pub node_keys: Vec<NodeKeys>,
 }
 
 impl SchedulerState {
-    pub fn new(p2p_connections: P2PConnections, collector_sender: STDSender<Box<RippleMessage>>, node_states: Arc<MutexNodeStates>) -> Self {
+    pub fn new(p2p_connections: P2PConnections, collector_sender: STDSender<Box<RippleMessage>>, node_states: Arc<MutexNodeStates>, node_keys: Vec<NodeKeys>) -> Self {
         SchedulerState {
             p2p_connections,
             collector_sender,
@@ -238,6 +284,7 @@ impl SchedulerState {
             latest_validated_ledger: Arc::new((Mutex::new(0), Condvar::new())),
             current_round: Arc::new((Mutex::new(0), Condvar::new())),
             node_states,
+            node_keys,
         }
     }
 }

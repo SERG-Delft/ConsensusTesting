@@ -197,7 +197,7 @@ fn parse_canonical_binary_format_with_iterator(mut blob_iterator: BlobIterator) 
             "Blob" => {
                 let field = Blob::parse(&mut blob_iterator);
                 // println!("- {}: {}", type_name, field);
-                contents.push(SerializationTypeValue { field: SerializationField::Blob(format!("{:x?}", field.blob)), type_name });
+                contents.push(SerializationTypeValue { field: SerializationField::Blob(hex::encode(field.blob)), type_name });
             }
             "AccountID" => {
                 let field = AccountID::parse(&mut blob_iterator);

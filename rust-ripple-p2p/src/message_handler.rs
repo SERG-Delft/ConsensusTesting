@@ -1,6 +1,7 @@
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
 use byteorder::{BigEndian, ByteOrder};
+use openssl::sha::sha256;
 use crate::protos::ripple::{TMManifest, TMPing, TMCluster, TMEndpoints, TMTransaction, TMGetLedger, TMLedgerData, TMProposeSet, TMStatusChange, TMHaveTransactionSet, TMValidation, TMGetObjectByHash, TMGetShardInfo, TMShardInfo, TMGetPeerShardInfo, TMPeerShardInfo, TMValidatorList};
 use serde_json;
 use crate::deserialization::{deserialize_validation};
@@ -111,6 +112,31 @@ impl RippleMessageObject {
             RippleMessageObject::TMValidatorList(_) => "ValidatorList",
         }
     }
+
+    pub fn node_pub_key(&self) -> Option<String> {
+        match self {
+            RippleMessageObject::TMProposeSet(propose_set) => {
+                let type_prefixed_key = [&[28u8], propose_set.get_nodePubKey()].concat();
+                let checksum = sha256(&sha256(&type_prefixed_key));
+                let propose_key = [&type_prefixed_key, &checksum[..4]].concat();
+                let node_key = bs58::encode(propose_key.clone())
+                    .with_alphabet(bs58::Alphabet::RIPPLE)
+                    .into_string();
+                Some(node_key)
+            },
+            RippleMessageObject::TMValidation(validation) => {
+                let signing_pub_key = hex::decode(ParsedValidation::new(validation).signing_pub_key).unwrap();
+                let type_prefixed_key = [&[28u8], signing_pub_key.as_slice()].concat();
+                let checksum = sha256(&sha256(&type_prefixed_key));
+                let key = [&type_prefixed_key, &checksum[..4]].concat();
+                let node_key = bs58::encode(key.clone())
+                    .with_alphabet(bs58::Alphabet::RIPPLE)
+                    .into_string();
+                Some(node_key)
+            },
+            _ => None
+        }
+    }
 }
 
 impl Hash for RippleMessageObject {
@@ -153,11 +179,14 @@ impl Display for RippleMessageObject {
     }
 }
 
-#[derive(Default, serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq)]
+#[derive(Default, serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq, Hash)]
 pub struct ParsedValidation {
     pub ledger_sequence: u32,
+    // Hash of the previously validated ledger, aka the ledger this node believes is the previous sequence
     pub validated_hash: String,
+    // ledger hash
     pub hash: String,
+    // Hash of the consensus transaction set
     pub consensus_hash: String,
     pub cookie: u64,
     pub signing_pub_key: String,

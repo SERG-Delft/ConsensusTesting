@@ -96,7 +96,7 @@ mod graph_comparisons {
 
     #[test]
     #[ignore]
-    fn trace_comparison() {
+    fn delay_trace_comparison() {
         let graphs = import_graphs("trace_graphs.txt", 20);
         let number_of_different_delays = 4;
         let number_of_runs_per_delay = 5;
@@ -112,7 +112,7 @@ mod graph_comparisons {
         println!("{:?}", distances);
 
         let zero_traces = 0..number_of_runs_per_delay;
-        let one_traces = number_of_runs_per_delay..2*number_of_runs_per_delay;
+        let one_traces = 1*number_of_runs_per_delay..2*number_of_runs_per_delay;
         let rand_1_traces = 2*number_of_runs_per_delay..3*number_of_runs_per_delay;
         let rand_2_traces = 3*number_of_runs_per_delay..4*number_of_runs_per_delay;
 
@@ -144,6 +144,49 @@ mod graph_comparisons {
         println!("rand1 delay -> rand1 delay = {} +- {}", rand1_to_rand1_sims.iter().map(|x| x.1).sum::<f32>() / rand1_to_rand1_sims.len() as f32, calculate_std(&rand1_to_rand1_sims));
         println!("rand1 delay -> rand2 delay = {} +- {}", rand1_to_rand2_sims.iter().map(|x| x.1).sum::<f32>() / rand1_to_rand2_sims.len() as f32, calculate_std(&rand1_to_rand2_sims));
         println!("rand2 delay -> rand2 delay = {} +- {}", rand2_to_rand2_sims.iter().map(|x| x.1).sum::<f32>() / rand2_to_rand2_sims.len() as f32, calculate_std(&rand2_to_rand2_sims));
+    }
+
+    #[test]
+    #[ignore]
+    fn priority_trace_comparison() {
+        let graphs = import_graphs("priority_trace_graphs.txt", 15);
+        let number_of_different_delays = 3;
+        let number_of_runs_per_delay = 5;
+        println!("{}", number_of_different_delays);
+        let graph_pairs = (0..graphs.len()).into_iter().combinations(2);
+        let mut distances = HashMap::new();
+        for graph_pair in graph_pairs.into_iter() {
+            let graph1 = graphs[graph_pair[0] as usize].clone();
+            let graph2 = graphs[graph_pair[1] as usize].clone();
+            let distance = ged::approximate_edit_distance::approximate_hed_graph_edit_distance(graph1.1, graph2.1, DistanceScoring::Normalized);
+            distances.insert(graph_pair, distance);
+        }
+        println!("{:?}", distances);
+
+        let zero_traces = 0..number_of_runs_per_delay;
+        let rand_1_traces = 1*number_of_runs_per_delay..2*number_of_runs_per_delay;
+        let rand_2_traces = 2*number_of_runs_per_delay..3*number_of_runs_per_delay;
+
+        println!("{:?}, {:?}, {:?}, {:?}", number_of_runs_per_delay, zero_traces, rand_1_traces, rand_2_traces);
+
+        let zero_to_zero_sims = get_similar_similarities(&distances, &zero_traces);
+        let rand1_to_rand1_sims = get_similar_similarities(&distances, &rand_1_traces);
+        let rand2_to_rand2_sims = get_similar_similarities(&distances, &rand_2_traces);
+        let zero_to_rand1_sims = get_different_similarities(&distances, &zero_traces, &rand_1_traces);
+        let zero_to_rand2_sims = get_different_similarities(&distances, &zero_traces, &rand_2_traces);
+        let rand1_to_rand2_sims = get_different_similarities(&distances, &rand_1_traces, &rand_2_traces);
+
+        let mut distances_list = distances.iter().map(|x| ((x.0[0], x.0[1]), *x.1)).collect::<Vec<((usize, usize), f32)>>();
+        distances_list.sort_unstable_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+        for distance in distances_list.iter() {
+            println!("{:?}", distance);
+        }
+        println!("0 priority -> 0 priority = {} +- {}", zero_to_zero_sims.iter().map(|x| x.1).sum::<f32>() / zero_to_zero_sims.len() as f32, calculate_std(&zero_to_zero_sims));
+        println!("0 priority -> rand1 priority = {} +- {}", zero_to_rand1_sims.iter().map(|x| x.1).sum::<f32>() / zero_to_rand1_sims.len() as f32, calculate_std(&zero_to_rand1_sims));
+        println!("0 priority -> rand2 priority = {} +- {}", zero_to_rand2_sims.iter().map(|x| x.1).sum::<f32>() / zero_to_rand2_sims.len() as f32, calculate_std(&zero_to_rand2_sims));
+        println!("rand1 priority -> rand1 priority = {} +- {}", rand1_to_rand1_sims.iter().map(|x| x.1).sum::<f32>() / rand1_to_rand1_sims.len() as f32, calculate_std(&rand1_to_rand1_sims));
+        println!("rand1 priority -> rand2 priority = {} +- {}", rand1_to_rand2_sims.iter().map(|x| x.1).sum::<f32>() / rand1_to_rand2_sims.len() as f32, calculate_std(&rand1_to_rand2_sims));
+        println!("rand2 priority -> rand2 priority = {} +- {}", rand2_to_rand2_sims.iter().map(|x| x.1).sum::<f32>() / rand2_to_rand2_sims.len() as f32, calculate_std(&rand2_to_rand2_sims));
     }
 
     fn import_graphs(filename: &str, num_graphs: usize) -> Vec<(String, Graph<DependencyEvent, ()>)> {

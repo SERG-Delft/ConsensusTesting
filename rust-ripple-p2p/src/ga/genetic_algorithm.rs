@@ -41,11 +41,13 @@ pub enum ConsensusMessageType {
     TMValidation,
     TMTransaction,
     TMHaveTransactionSet,
+    TMGetLedger,
+    TMLedgerData
 }
 
 impl ConsensusMessageType {
-    pub const VALUES: [Self; 11] = [Self::TMProposeSet0, Self::TMProposeSet1, Self::TMProposeSet2, Self::TMProposeSet3, Self::TMProposeSet4, Self::TMProposeSet5, Self::TMProposeSetBowOut, Self::TMStatusChange, Self::TMValidation, Self::TMTransaction, Self::TMHaveTransactionSet];
-    pub const RMO_MESSAGE_TYPE: [&'static str; 5] = ["ProposeSet", "StatusChange", "Validation", "Transaction", "HaveTransactionSet"];
+    pub const VALUES: [Self; 13] = [Self::TMProposeSet0, Self::TMProposeSet1, Self::TMProposeSet2, Self::TMProposeSet3, Self::TMProposeSet4, Self::TMProposeSet5, Self::TMProposeSetBowOut, Self::TMStatusChange, Self::TMValidation, Self::TMTransaction, Self::TMHaveTransactionSet, Self::TMGetLedger, Self::TMLedgerData];
+    pub const RMO_MESSAGE_TYPE: [&'static str; 7] = ["ProposeSet", "StatusChange", "Validation", "Transaction", "HaveTransactionSet", "GetLedger", "LedgerData"];
 }
 
 /// Run the genetic algorithm

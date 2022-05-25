@@ -13,6 +13,7 @@ use crate::ga::genetic_algorithm::ConsensusMessageType;
 use crate::ga::encoding::priority_encoding::{Priority, PriorityMapPhenotype};
 use crate::message_handler::RippleMessageObject;
 use crate::node_state::MutexNodeStates;
+use crate::NodeKeys;
 use crate::scheduler::{Event, P2PConnections, RMOEvent, Scheduler, SchedulerState};
 
 pub struct PriorityScheduler {
@@ -24,9 +25,9 @@ const MAX_DURATION_MILLIS: i64 = 30;
 
 impl PriorityScheduler {
     #[allow(unused)]
-    pub fn new(p2p_connections: P2PConnections, collector_sender: STDSender<Box<RippleMessage>>, node_states: Arc<MutexNodeStates>) -> Self {
+    pub fn new(p2p_connections: P2PConnections, collector_sender: STDSender<Box<RippleMessage>>, node_states: Arc<MutexNodeStates>, node_keys: Vec<NodeKeys>) -> Self {
         PriorityScheduler {
-            state: SchedulerState::new(p2p_connections, collector_sender, node_states)
+            state: SchedulerState::new(p2p_connections, collector_sender, node_states, node_keys)
         }
     }
 
@@ -86,6 +87,7 @@ impl Scheduler for PriorityScheduler {
             match receiver.blocking_recv() {
                 Some(event) => {
                     let rmo_event = RMOEvent::from(&event);
+                    Self::check_message_for_round_update(&rmo_event, &node_states);
                     // If the network is ready to apply the test case, collect messages in inbox, else immediately relay
                     if *run_lock.lock() {
                         if Self::is_consensus_rmo(&rmo_event.message) {
@@ -109,6 +111,8 @@ impl Scheduler for PriorityScheduler {
                                 RippleMessageObject::TMStatusChange(_) => message_type_map.get(&ConsensusMessageType::TMStatusChange).unwrap(),
                                 RippleMessageObject::TMHaveTransactionSet(_) => message_type_map.get(&ConsensusMessageType::TMHaveTransactionSet).unwrap(),
                                 RippleMessageObject::TMTransaction(_) => message_type_map.get(&ConsensusMessageType::TMTransaction).unwrap(),
+                                RippleMessageObject::TMLedgerData(_) => message_type_map.get(&ConsensusMessageType::TMLedgerData).unwrap(),
+                                RippleMessageObject::TMGetLedger(_) => message_type_map.get(&ConsensusMessageType::TMGetLedger).unwrap(),
                                 _ => &Priority(0f32)
                             };
                             inbox_lock.lock().push(OrderedRMOEvent::new(rmo_event, *priority));

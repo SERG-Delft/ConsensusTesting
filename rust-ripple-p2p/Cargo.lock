@@ -1811,6 +1811,7 @@ dependencies = [
  "protobuf",
  "protobuf-codegen-pure",
  "rand 0.8.4",
+ "rand_chacha 0.3.1",
  "rand_distr",
  "rayon",
  "ripemd160",

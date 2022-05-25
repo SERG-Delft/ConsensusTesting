@@ -26,6 +26,7 @@ impl Client<'static> {
         server_state_collector_sender: Sender<PeerServerStateObject>,
         test_harness_sender: Sender<(Transaction, String)>,
         account_sender: Sender<AccountInfo>,
+        balance_sender: Sender<u32>,
     ) -> Self {
         let client = ClientBuilder::new(connection)
             .unwrap()
@@ -104,6 +105,12 @@ impl Client<'static> {
                                     }
                                     Some("account_info") => match serde_json::from_value::<AccountInfo>(value["result"].clone()) {
                                         Ok(account_info) => account_sender.send(account_info).expect("Scheduler account info receiver hung up"),
+                                        Err(err) => error!("Could not parse account info object: {}", err)
+                                    }
+                                    Some("setup_balance") => match serde_json::from_value::<AccountInfo>(value["result"].clone()) {
+                                        Ok(account_info) => balance_sender.send(account_info.account_data.balance.parse::<u32>()
+                                            .expect("Balance from client not u32"))
+                                            .expect("Scheduler account info receiver hung up"),
                                         Err(err) => error!("Could not parse account info object: {}", err)
                                     }
                                     None => match serde_json::from_value::<SubscriptionObject>(value) {
@@ -247,9 +254,9 @@ impl Client<'static> {
         tx.send(Message::text(json.to_string())).unwrap();
     }
 
-    pub fn account_info(tx: &Sender<Message>, account: String) {
+    pub fn account_info(id: &str, tx: &Sender<Message>, account: String) {
         let json = json!({
-            "id": "account_info",
+            "id": id,
             "command": "account_info",
             "account": account.as_str(),
             "queue": true,

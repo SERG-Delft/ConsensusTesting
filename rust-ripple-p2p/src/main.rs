@@ -25,6 +25,7 @@ mod trace_comparisons;
 mod deserialization;
 mod container_manager;
 mod executable_manager;
+mod consensus_properties;
 
 type AnyError = Box<dyn std::error::Error + Send + Sync>;
 type AnyResult<T> = Result<T, AnyError>;
@@ -46,9 +47,9 @@ fn main() {
     let unls: Vec<Vec<usize>> = get_unls(n, UnlType::Full);
     println!("Unls: {:?}", unls);
 
-    // let node_keys = start_docker_containers(n, unls);
+    let node_keys = start_docker_containers(n, unls);
     // let node_keys = get_static_node_keys();
-    let node_keys = start_executables(n, unls);
+    // let node_keys = start_executables(n, unls);
 
     let app = app::App::new(n as u16, node_keys);
 

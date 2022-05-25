@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Formatter};
 use itertools::{Itertools};
 use log::{trace};
@@ -10,6 +10,8 @@ use petgraph::prelude::NodeIndex;
 use crate::client::{PeerServerStateObject, ServerStateObject, Transaction, ValidatedLedger};
 use crate::collector::RippleMessage;
 use crate::ga::encoding::delay_encoding::DelaysGenotype;
+use crate::message_handler::ParsedValidation;
+use crate::protos::ripple::TMStatusChange;
 use crate::test_harness::{TransactionResultCode, TransactionTimed};
 
 /// Contains the state for a particular node at a particular time
@@ -19,6 +21,8 @@ pub struct NodeState {
     pub consensus_phase: ConsensusPhase,
     pub current_consensus_round: u32,
     pub last_validated_ledger: ValidatedLedger,
+    pub validations_sent: HashMap<usize, ParsedValidation>,
+    pub consensus_transaction_sets: HashMap<usize, TMStatusChange>,
     pub unvalidated_transactions: Vec<Transaction>,
     pub validated_transactions: Vec<(Transaction, TransactionResultCode)>,
     pub number_of_failed_consensus_rounds: u32,
@@ -35,6 +39,8 @@ impl NodeState {
             consensus_phase: ConsensusPhase::Open,
             current_consensus_round: 3,
             last_validated_ledger: ValidatedLedger::default(),
+            validations_sent: HashMap::new(),
+            consensus_transaction_sets: HashMap::new(),
             unvalidated_transactions: vec![],
             validated_transactions: vec![],
             number_of_failed_consensus_rounds: 0,
@@ -181,6 +187,7 @@ impl NodeStates {
     }
 
     pub fn add_send_dependency(&mut self, ripple_message: RippleMessage) {
+        // Update trace graph
         let latest_message_received = self.node_states[ripple_message.sender_index()].latest_message_received.clone();
         self.node_states[ripple_message.sender_index()].unreceived_message_sends.push((ripple_message.clone(), latest_message_received));
     }
@@ -232,6 +239,21 @@ impl NodeStates {
     fn set_harness_transactions(&mut self, harness_transactions: Vec<TransactionTimed>) {
         self.harness_transactions = harness_transactions;
     }
+
+    pub(crate) fn add_sent_validation(&mut self, ledger_seq: usize, validation: ParsedValidation, peer: usize) -> Option<ParsedValidation> {
+        self.node_states[peer].validations_sent.insert(ledger_seq, validation)
+    }
+
+    pub(crate) fn add_consensus_transaction_set(&mut self, ledger_seq: usize, status_change: TMStatusChange, peer: usize) -> Option<TMStatusChange> {
+        self.node_states[peer].consensus_transaction_sets.insert(ledger_seq, status_change)
+    }
+
+    fn clear_consensus_property_data(&mut self) {
+        for i in 0..self.node_states.len() {
+            self.node_states[i].validations_sent.clear();
+            self.node_states[i].consensus_transaction_sets.clear();
+        }
+    }
 }
 
 /// Wrap NodeStates in a Mutex with Condvars for convenient access in the rest of the program.
@@ -270,16 +292,12 @@ impl MutexNodeStates {
     pub fn set_consensus_phase(&self, peer: usize, new_phase: ConsensusPhase) {
         let current_phase = self.node_states.lock().node_states[peer].consensus_phase.clone();
         if new_phase == ConsensusPhase::Open {
-            let old_round = self.get_current_round(peer);
-            self.set_current_round(peer, old_round + 1);
             if current_phase != ConsensusPhase::Accepted {
                 self.node_states.lock().node_states[peer].number_of_failed_consensus_rounds += 1;
                 println!("Failed consensus round peer {}: establish -> open", peer);
             }
         } else if new_phase == ConsensusPhase::Establish && current_phase != ConsensusPhase::Open {
             self.node_states.lock().node_states[peer].number_of_failed_consensus_rounds += 1;
-            let old_round = self.get_current_round(peer);
-            self.set_current_round(peer, old_round + 1);
             println!("Failed consensus round peer {}: accepted -> establish", peer);
         }
         self.node_states.lock().node_states[peer].consensus_phase = new_phase;
@@ -463,6 +481,10 @@ impl MutexNodeStates {
 
     pub fn set_harness_transactions(&self, harness_transactions: Vec<TransactionTimed>) {
         self.node_states.lock().set_harness_transactions(harness_transactions);
+    }
+
+    pub fn clear_consensus_property_data(&self) {
+        self.node_states.lock().clear_consensus_property_data()
     }
 }
 

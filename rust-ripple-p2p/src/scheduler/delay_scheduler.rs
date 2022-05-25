@@ -14,6 +14,7 @@ use crate::ga::encoding::delay_encoding::{DelayMapPhenotype, DROP_THRESHOLD};
 use crate::ga::encoding::ExtendedPhenotype;
 use crate::message_handler::RippleMessageObject;
 use crate::node_state::MutexNodeStates;
+use crate::NodeKeys;
 use crate::scheduler::{Event, P2PConnections, RMOEvent, Scheduler, SchedulerState};
 
 /// Scheduler module responsible for scheduling execution of events (message receivals in peers)
@@ -27,9 +28,9 @@ pub struct DelayScheduler {
 
 impl DelayScheduler {
     #[allow(unused)]
-    pub fn new(p2p_connections: P2PConnections, collector_sender: STDSender<Box<RippleMessage>>, node_states: Arc<MutexNodeStates>) -> Self {
+    pub fn new(p2p_connections: P2PConnections, collector_sender: STDSender<Box<RippleMessage>>, node_states: Arc<MutexNodeStates>, node_keys: Vec<NodeKeys>) -> Self {
         DelayScheduler {
-            state: SchedulerState::new(p2p_connections, collector_sender, node_states)
+            state: SchedulerState::new(p2p_connections, collector_sender, node_states, node_keys)
         }
     }
 }
@@ -52,6 +53,7 @@ impl Scheduler for DelayScheduler {
             match receiver.blocking_recv() {
                 Some(event) => {
                     let rmo_event = RMOEvent::from(&event);
+                    Self::check_message_for_round_update(&rmo_event, &node_states);
                     let ms: u32;
                     // If the network is ready to apply the test case, determine delay of message, else delay = 0
                     if *run_lock.lock() {
@@ -79,6 +81,8 @@ impl Scheduler for DelayScheduler {
                             RippleMessageObject::TMStatusChange(_) => message_type_map.get(&ConsensusMessageType::TMStatusChange).unwrap().clone(),
                             RippleMessageObject::TMHaveTransactionSet(_) => message_type_map.get(&ConsensusMessageType::TMHaveTransactionSet).unwrap().clone(),
                             RippleMessageObject::TMTransaction(_) => message_type_map.get(&ConsensusMessageType::TMTransaction).unwrap().clone(),
+                            RippleMessageObject::TMLedgerData(_) => message_type_map.get(&ConsensusMessageType::TMLedgerData).unwrap().clone(),
+                            RippleMessageObject::TMGetLedger(_) => message_type_map.get(&ConsensusMessageType::TMGetLedger).unwrap().clone(),
                             _ => 0
                         };
                     } else {

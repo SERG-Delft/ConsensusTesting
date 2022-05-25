@@ -141,9 +141,13 @@ impl ExtendedPhenotype<PriorityGenotype> for PriorityMapPhenotype {
 
 #[cfg(test)]
 mod test_priority_encoding {
-    use std::collections::BinaryHeap;
-    use crate::ga::encoding::priority_encoding::Priority;
+    use std::collections::binary_heap::BinaryHeap;
+    use itertools::Itertools;
+    use crate::ga::encoding::{ExtendedPhenotype, num_genes};
+    use crate::ga::encoding::priority_encoding::{Priority, PriorityMapPhenotype};
+    use crate::ga::genetic_algorithm::ConsensusMessageType;
     use crate::message_handler::RippleMessageObject;
+    use crate::NUM_NODES;
     use crate::protos::ripple::TMStatusChange;
     use crate::scheduler::priority_scheduler::OrderedRMOEvent;
     use crate::scheduler::RMOEvent;
@@ -168,5 +172,12 @@ mod test_priority_encoding {
         assert_eq!(rmo_event_2, inbox.pop().unwrap());
         assert_eq!(None, inbox.peek());
         assert_eq!(None, inbox.pop());
+    }
+
+    #[test]
+    fn test_arbitrary_hashmap_order() {
+        let priority_genotype: Vec<Priority> = (0..num_genes()).map(|x| Priority(x as f32)).collect_vec();
+        let priority_map = PriorityMapPhenotype::from_genes(&priority_genotype);
+        println!("{}", priority_map.display_genotype_by_message());
     }
 }

@@ -17,7 +17,7 @@ use crate::node_state::MutexNodeStates;
 use crate::{LOG_FOLDER, NUM_NODES};
 use crate::test_harness::TestResult::{Failed, InProgress, Success};
 
-const MAX_EVENTS_TEST: usize = 1000;
+const MAX_EVENTS_TEST: usize = 10000;
 
 /// Struct containing transactions in the test harness.
 /// Transactions are created based on the contents of "harness.txt".
@@ -27,8 +27,10 @@ const MAX_EVENTS_TEST: usize = 1000;
 pub struct TestHarness<'a> {
     pub transactions: Vec<TransactionTimed>,
     pub accounts: Vec<Account>,
+    pub starting_balances: Vec<(usize, u32)>,
     pub client_senders: Vec<Sender<Message<'a>>>,
     pub client_receiver: Receiver<(Transaction, String)>,
+    pub balance_receiver: Receiver<u32>,
     pub succeeded_transactions: HashSet<Transaction>,
     pub unfunded_transactions: HashSet<Transaction>,
     pub transaction_results: Vec<TransactionResult>,
@@ -38,14 +40,14 @@ pub struct TestHarness<'a> {
 impl TestHarness<'static> {
     // Parse the test harness file
     // execution_sequence is the sequence number of this test harness execution. Used for providing correct sequence numbers to transactions
-    pub fn parse_test_harness(client_senders: Vec<Sender<Message<'static>>>, client_receiver: Receiver<(Transaction, String)>, file_name: Option<&str>) -> Self {
+    pub fn parse_test_harness(client_senders: Vec<Sender<Message<'static>>>, client_receiver: Receiver<(Transaction, String)>, balance_receiver: Receiver<u32>, file_name: Option<&str>) -> Self {
         let file = match file_name {
             None => File::open("harness.txt").unwrap(),
             Some(file_name) => File::open(file_name).unwrap(),
         };
         let buf_reader = BufReader::new(file);
         let lines = buf_reader.lines().map(|l| l.unwrap()).collect_vec();
-        let (number_of_transactions, number_of_accounts, transaction_results): (usize, usize, Vec<TransactionResult>) = Self::parse_first_line(&lines[1]);
+        let (number_of_transactions, number_of_accounts, number_of_starting_balances, transaction_results): (usize, usize, usize, Vec<TransactionResult>) = Self::parse_first_line(&lines[1]);
         let genesis_account = Account::new(
             AccountKeys { account_id: String::from("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh"), master_seed: String::from("snoPBrXtMeMyMHUVTgbuqAfg1SUTb") },
             1
@@ -55,17 +57,23 @@ impl TestHarness<'static> {
             let account = crate::container_manager::create_account();
             accounts.push(Account::new(account, 0));
         }
+        let mut starting_balances = vec![];
+        for i in 0..number_of_starting_balances {
+            starting_balances.push(Self::parse_starting_balance(&lines[i+2]))
+        }
         let mut transactions = vec![];
         for i in 0..number_of_transactions {
             let subsequent_seq = transaction_results.iter().find(|tx| tx.transaction_indices.contains(&i)).unwrap().subsequent_seq;
-            let transaction_timed = Self::parse_transaction(&lines[i+2], &mut accounts, subsequent_seq, number_of_transactions, i);
+            let transaction_timed = Self::parse_transaction(&lines[i+number_of_starting_balances+2], &mut accounts, subsequent_seq, number_of_transactions, i);
             transactions.push(transaction_timed);
         }
         Self {
             transactions,
             accounts,
+            starting_balances,
             client_senders,
             client_receiver,
+            balance_receiver,
             succeeded_transactions: HashSet::new(),
             unfunded_transactions: HashSet::new(),
             transaction_results,
@@ -77,20 +85,29 @@ impl TestHarness<'static> {
         }
     }
 
-    fn parse_first_line(line: &str) -> (usize, usize, Vec<TransactionResult>) {
+    fn parse_first_line(line: &str) -> (usize, usize, usize, Vec<TransactionResult>) {
         let split = line.split(";").collect_vec();
-        if let &[number_of_transaction, number_of_accounts, transaction_results] = &*split {
+        if let &[number_of_transaction, number_of_accounts, number_of_starting_balances, transaction_results] = &*split {
             let cleaned_transaction_results_string = transaction_results.replace(&['[', ']'], "");
             let indiv_tx_results = cleaned_transaction_results_string.split(",").collect_vec();
             let transaction_results_parsed = Self::parse_tx_results(indiv_tx_results);
             let number_of_transactions = usize::from_str(number_of_transaction).expect("Number of transactions is not usize");
+            let number_of_accounts = usize::from_str(number_of_accounts).expect("Number of accounts is not usize");
+            let number_of_starting_balances = usize::from_str(number_of_starting_balances).expect("Number of starting balances is not usize");
             if transaction_results_parsed.iter().map(|res| res.transaction_indices.len()).sum::<usize>() != number_of_transactions {
                 panic!("All transactions should be present in transaction result conditions");
             }
-            (number_of_transactions, usize::from_str(number_of_accounts).unwrap(), transaction_results_parsed)
+            (number_of_transactions, number_of_accounts, number_of_starting_balances, transaction_results_parsed)
         } else {
             panic!("First line of harness.txt should contain 3 items ; separated")
         }
+    }
+
+    fn parse_starting_balance(line: &str) -> (usize, u32) {
+        let split = line.split_whitespace().collect_vec();
+        let account_idx = split[0].parse::<usize>().expect("From account index needs to be of usize");
+        let balance = split[1].parse::<u32>().expect("Balance needs to of u32");
+        (account_idx, balance)
     }
 
     fn parse_tx_results(transactions: Vec<&str>) -> Vec<TransactionResult> {
@@ -114,6 +131,51 @@ impl TestHarness<'static> {
         TransactionTimed { transaction, from, delay, client_index, subsequent_seq }
     }
 
+    pub(crate) fn setup_balances(&mut self, node_states: &Arc<MutexNodeStates>) {
+        debug!("Setting up balances");
+        node_states.clear_transactions();
+        for i in 0..self.starting_balances.len() {
+            let account_idx = self.starting_balances[i].0;
+            Client::account_info("setup_balance", &self.client_senders[0], self.accounts[account_idx].account_keys.account_id.clone());
+        }
+        // We assume the client responds in order...
+        for i in 0..self.starting_balances.len() {
+            let account_idx = self.starting_balances[i].0;
+            let current_balance = match self.balance_receiver.recv() {
+                Ok(balance) => balance / 10u32.pow(7),
+                Err(_) => panic!("dddd"),
+            };
+            let difference: i64 = (self.starting_balances[i].1 - current_balance + 20) as i64;
+            if difference >= 0 {
+                let transaction = Client::create_payment_transaction(
+                    difference as u32,
+                    &self.accounts[account_idx].account_keys.account_id,
+                    &self.accounts[0].account_keys.account_id,
+                    None,
+                    self.transactions.len(),
+                    usize::MAX,
+                );
+                Client::sign_and_submit(&self.client_senders[0], "setup_balance_result", &transaction, &self.accounts[0].account_keys.master_seed);
+            } else {
+                let sequence = self.accounts[account_idx].sequence();
+                let transaction = Client::create_payment_transaction(
+                    -difference as u32,
+                    &self.accounts[0].account_keys.account_id,
+                    &self.accounts[account_idx].account_keys.account_id,
+                    Some(sequence),
+                    0,
+                    usize::MAX,
+                );
+                Client::sign_and_submit(&self.client_senders[0], "setup_balance_result", &transaction, &self.accounts[account_idx].account_keys.master_seed);
+            }
+        }
+        debug!("Waiting for balances to be set up");
+        while node_states.get_number_min_validated_transactions() < self.starting_balances.len() {
+            node_states.transactions_cvar.wait(&mut node_states.node_states.lock());
+        }
+        debug!("Done setting up balances")
+    }
+
     /// Schedule transactions and wait for them to be validated correctly
     /// If the transactions are not validated correctly after MAX_EVENTS_TEST events have executed,
     /// Return false, so the fitness function knows this
@@ -121,6 +183,7 @@ impl TestHarness<'static> {
     pub fn schedule_transactions(&mut self, node_states: Arc<MutexNodeStates>) -> bool {
         node_states.clear_transactions();
         node_states.clear_executions();
+        node_states.clear_consensus_property_data();
         let number_of_transactions = self.transactions.len();
         let mut cloned_transactions: Vec<Transaction> = self.transactions.iter().map(|tx| tx.transaction.clone()).collect();
         let mut accounts_to_increment_seq = HashSet::new();
@@ -206,6 +269,12 @@ impl TestHarness<'static> {
             "tecUNFUNDED_PAYMENT" => {
                 debug!("Unfunded payment returned: {}, transaction: {:?}", status, transaction);
                 self.unfunded_transactions.insert(transaction);
+            },
+            "tefINVARIANT_FAILED" => {
+                error!("Invariant failed, excluded from ledger");
+            },
+            "tecINVARIANT_FAILED" => {
+                error!("Invariant failed, included in ledger");
             }
             "error" => {
                 error!("Transaction error, resubmitting...");
@@ -304,7 +373,8 @@ impl TransactionResult {
     }
 
     pub fn result_is_met(&self, validated_transactions: &Vec<(usize, TransactionResultCode)>, unfunded_payment_idxs: &Vec<usize>) -> TestResult {
-        let matched_transactions = validated_transactions.iter().filter(|tx| self.transaction_indices.contains(&tx.0)).collect_vec();
+        let matched_transactions = validated_transactions.iter()
+            .filter(|tx| self.transaction_indices.contains(&tx.0)).collect_vec();
         match self.subsequent_seq {
             true => {
                 let grouped_transactions = matched_transactions.iter().counts_by(|tx| &tx.1);
@@ -343,6 +413,9 @@ impl TransactionResult {
         validated_transactions: &Vec<(usize, TransactionResultCode)>,
         unfunded_payment_idxs: &Vec<usize>
     ) -> TestResult {
+        if validated_transactions.iter().any(|(_tx, code)| code == &TransactionResultCode::TecInvariantFailed) {
+            return Failed;
+        }
         let actual_results = expected_results.iter().map(|result| result.result_is_met(&validated_transactions, &unfunded_payment_idxs)).collect_vec();
         let mut result = InProgress;
         if actual_results.iter().all(|x| *x == Success) {
@@ -362,6 +435,7 @@ pub enum TransactionResultCode {
     TesSuccess,
     TecUnfundedPayment,
     TefPastSeq,
+    TecInvariantFailed,
     Other,
 }
 
@@ -371,6 +445,7 @@ impl TransactionResultCode {
             "tesSUCCESS" => Self::TesSuccess,
             "tecUNFUNDED_PAYMENT" => Self::TecUnfundedPayment,
             "tefPAST_SEQ" => Self::TefPastSeq,
+            "tecINVARIANT_FAILED" => Self::TecInvariantFailed,
             _ => {
                 error!("Got other result code!");
                 Self::Other
@@ -414,8 +489,10 @@ mod harness_tests {
         let (tx_1, rx_1) = channel();
         let (tx_2, rx_2) = channel();
         let (_client_tx, client_rx) = channel();
+        let (_balance_tx, balance_rx) = channel();
         let (_expected_client_tx, expected_client_rx) = channel();
-        let mut actual_harness = TestHarness::parse_test_harness(vec![tx_1.clone(), tx_2.clone()], client_rx, Some("harness_test.txt"));
+        let (_expected_balance_tx, expected_balance_rx) = channel();
+        let mut actual_harness = TestHarness::parse_test_harness(vec![tx_1.clone(), tx_2.clone()], client_rx, balance_rx, Some("harness_test.txt"));
         for i in 1..actual_harness.accounts.len() {
             actual_harness.accounts[i].transaction_sequence = 1;
         }
@@ -445,7 +522,7 @@ mod harness_tests {
         let expected_transaction_results = vec![TransactionResult::new(vec![0], true), TransactionResult::new(vec![1,2], true)];
         let dir = tempfile::tempdir().unwrap();
         let failure_test = File::create(dir.path().join("failure_test.txt")).unwrap();
-        let expected_harness = TestHarness { transactions, accounts, client_senders: vec![tx_1.clone(), tx_2.clone()], client_receiver: expected_client_rx, succeeded_transactions: HashSet::new(), unfunded_transactions: HashSet::new(), transaction_results: expected_transaction_results, failure_writer: BufWriter::new(failure_test) };
+        let expected_harness = TestHarness { transactions, accounts, starting_balances: vec![], client_senders: vec![tx_1.clone(), tx_2.clone()], client_receiver: expected_client_rx, balance_receiver: expected_balance_rx, succeeded_transactions: HashSet::new(), unfunded_transactions: HashSet::new(), transaction_results: expected_transaction_results, failure_writer: BufWriter::new(failure_test) };
         (actual_harness, expected_harness, vec![rx_1, rx_2])
     }
 
@@ -491,7 +568,7 @@ mod harness_tests {
 
     #[test]
     fn test_parse_first_line() {
-        let (number_of_transaction, number_of_accounts, transaction_results) = TestHarness::parse_first_line("3;3;[0y,1|2y]");
+        let (number_of_transaction, number_of_accounts, _number_of_balance_setups, transaction_results) = TestHarness::parse_first_line("3;3;1;[0y,1|2y]");
         assert_eq!(number_of_transaction, 3);
         assert_eq!(number_of_accounts, 3);
         let expected_transaction_results = vec![TransactionResult::new(vec![0], true), TransactionResult::new(vec![1,2], true)];
@@ -500,7 +577,7 @@ mod harness_tests {
 
     #[test]
     fn test_check_transaction_results() {
-        let (_number_of_transaction, _number_of_accounts, transaction_results) = TestHarness::parse_first_line("3;3;[0y,1|2y]");
+        let (_number_of_transaction, _number_of_accounts, _number_of_starting_balances, transaction_results) = TestHarness::parse_first_line("3;3;[0y,1|2y]");
         let zero_success = (0, TransactionResultCode::TesSuccess);
         let zero_cost = (0, TransactionResultCode::TecUnfundedPayment);
         let one_success = (1, TransactionResultCode::TesSuccess);
@@ -523,7 +600,7 @@ mod harness_tests {
 
     #[test]
     fn test_check_transaction_results_2() {
-        let (_number_of_transaction, _number_of_accounts, transaction_results) = TestHarness::parse_first_line("5;3;[0y,1|2|3|4y]");
+        let (_number_of_transaction, _number_of_accounts, _number_of_starting_balances, transaction_results) = TestHarness::parse_first_line("5;3;[0y,1|2|3|4y]");
         let zero_success = (0, TransactionResultCode::TesSuccess);
         let one_success = (1, TransactionResultCode::TesSuccess);
         let two_cost = (2, TransactionResultCode::TecUnfundedPayment);
