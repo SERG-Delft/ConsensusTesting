@@ -7,6 +7,7 @@ use serde_json::json;
 use crate::client::{PeerSubscriptionObject, SubscriptionObject};
 use crate::message_handler::RippleMessageObject;
 use chrono::{DateTime, Utc};
+use crate::container_manager::NodeKeys;
 
 /// Collects and writes data to files
 /// Execution file stores all messages sent from the proxy
@@ -17,7 +18,7 @@ pub struct Collector {
     control_receiver: Receiver<String>,
     scheduler_sender: Sender<SubscriptionObject>,
     execution_file: BufWriter<File>,
-    subscription_files: Vec<BufWriter<File>>,
+    subscription_files: Vec<BufWriter<File>>
 }
 
 impl Collector {
@@ -110,7 +111,23 @@ impl Display for RippleMessage {
                 let from_node_buf = &self.from_node;
                 let to_node_buf = &self.to_node;
                 let time_since = self.timestamp.signed_duration_since(ripple_epoch).num_seconds();
-                write!(f, "{} [{}->{}] ProposeSet<{} proposes {}, seq={}>\n", time_since, from_node_buf, to_node_buf, self.message.node_pub_key().get_or_insert("".to_string()), hex::encode(&proposal.get_currentTxHash()), proposal.get_proposeSeq())
+                let pub_key = self.message.node_pub_key();
+                let node = match pub_key {
+                    Some(ref key) => {
+                        match key.as_str() {
+                            "n9KkgT2SFxpQGic7peyokvkXcAmNLFob1AZXeErMFHxJ71q5MGaK" => "0",
+                            "n9M6ouZU7cLwRHPiVZjgJdEgrVyx2uv9euZzepdb34wDoj1RP5uS" => "1",
+                            "n9LJhBqLGTjPQa2KJtJmkHUubaHs1Y1ENYKZVmzZYhNb7GXh9m4j" => "2",
+                            "n9KgN4axJo1WC3fjFoUSkJ4gtZX4Pk2jPZzGR5CE9ddo16ewAPjN" => "3",
+                            "n9MsRMobdfpGvpXeGb3F6bm7WZbCiPrxzc1qBPP7wQox3NJzs5j2" => "4",
+                            "n9JFX46v3d3WgQW8DJQeBwqTk8vaCR7LufApEy65J1eK4X7dZbR3" => "5",
+                            "n9LFueHyYVJSyDArog2qtR42NixmeGxpaqFEFFp1xjxGU9aYRDZc" => "6",
+                            _ => { key.as_str().clone() }
+                        }
+                    }
+                    None => panic!("needs node key")
+                };
+                write!(f, "{} [{}->{}] ProposeSet<{} proposes {}, seq={}>\n", time_since, from_node_buf, to_node_buf, node, hex::encode(&proposal.get_currentTxHash()), proposal.get_proposeSeq())
             }
             _ => {
                 let ripple_epoch = DateTime::parse_from_rfc3339("2000-01-01T00:00:00+00:00").unwrap();
