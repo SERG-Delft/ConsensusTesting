@@ -1,4 +1,5 @@
 use std::fmt::{Debug, Display, Formatter};
+use openssl::sha::sha256;
 use crate::protos::ripple::{TMManifest, TMPing, TMCluster, TMEndpoints, TMTransaction, TMGetLedger, TMLedgerData, TMProposeSet, TMStatusChange, TMHaveTransactionSet, TMValidation, TMGetObjectByHash, TMGetShardInfo, TMShardInfo, TMGetPeerShardInfo, TMPeerShardInfo, TMValidatorList};
 use serde_json;
 // use crate::deserialization::{deserialize_validation};
@@ -51,6 +52,33 @@ pub enum RippleMessageObject {
     TMGetPeerShardInfo(TMGetPeerShardInfo),
     TMPeerShardInfo(TMPeerShardInfo),
     TMValidatorList(TMValidatorList)
+}
+
+impl RippleMessageObject {
+    pub fn node_pub_key(&self) -> Option<String> {
+        match self {
+            RippleMessageObject::TMProposeSet(propose_set) => {
+                let type_prefixed_key = [&[28u8], propose_set.get_nodePubKey()].concat();
+                let checksum = sha256(&sha256(&type_prefixed_key));
+                let propose_key = [&type_prefixed_key, &checksum[..4]].concat();
+                let node_key = bs58::encode(propose_key.clone())
+                    .with_alphabet(bs58::Alphabet::RIPPLE)
+                    .into_string();
+                Some(node_key)
+            },
+            // RippleMessageObject::TMValidation(validation) => {
+            //     let signing_pub_key = hex::decode(ParsedValidation::new(validation).signing_pub_key).unwrap();
+            //     let type_prefixed_key = [&[28u8], signing_pub_key.as_slice()].concat();
+            //     let checksum = sha256(&sha256(&type_prefixed_key));
+            //     let key = [&type_prefixed_key, &checksum[..4]].concat();
+            //     let node_key = bs58::encode(key.clone())
+            //         .with_alphabet(bs58::Alphabet::RIPPLE)
+            //         .into_string();
+            //     Some(node_key)
+            // },
+            _ => None
+        }
+    }
 }
 
 impl Display for RippleMessageObject {

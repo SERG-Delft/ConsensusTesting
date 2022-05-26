@@ -104,11 +104,22 @@ impl RippleMessage {
 
 impl Display for RippleMessage {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let ripple_epoch = DateTime::parse_from_rfc3339("2000-01-01T00:00:00+00:00").unwrap();
-        let from_node_buf = &self.from_node;
-        let to_node_buf = &self.to_node;
-        let time_since = self.timestamp.signed_duration_since(ripple_epoch).num_seconds();
-        let message_buf = self.message.to_string();
-        write!(f, "{} {} -> {} sent {}\n", time_since, from_node_buf, to_node_buf, message_buf)
+        match &self.message {
+            RippleMessageObject::TMProposeSet(proposal) => {
+                let ripple_epoch = DateTime::parse_from_rfc3339("2000-01-01T00:00:00+00:00").unwrap();
+                let from_node_buf = &self.from_node;
+                let to_node_buf = &self.to_node;
+                let time_since = self.timestamp.signed_duration_since(ripple_epoch).num_seconds();
+                write!(f, "{} [{}->{}] ProposeSet<{} proposes {}, seq={}>\n", time_since, from_node_buf, to_node_buf, self.message.node_pub_key().get_or_insert("".to_string()), hex::encode(&proposal.get_currentTxHash()), proposal.get_proposeSeq())
+            }
+            _ => {
+                let ripple_epoch = DateTime::parse_from_rfc3339("2000-01-01T00:00:00+00:00").unwrap();
+                let from_node_buf = &self.from_node;
+                let to_node_buf = &self.to_node;
+                let time_since = self.timestamp.signed_duration_since(ripple_epoch).num_seconds();
+                let message_buf = self.message.to_string();
+                write!(f, "{} {} {} -> {} sent {}\n", time_since, self.message.node_pub_key().get_or_insert("".to_string()),  from_node_buf, to_node_buf, message_buf)
+            }
+        }
     }
 }

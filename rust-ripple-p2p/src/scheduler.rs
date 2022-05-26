@@ -52,12 +52,12 @@ impl Scheduler {
                 // if event.from == 3 { return () }
             }
             TMTransaction(ref mut trx) => {
-                if mutated_unl.contains(&event.from) && normal_unl.contains(&event.to) {
-                    return
-                }
-                if mutated_unl.contains(&event.to) && normal_unl.contains(&event.from) {
-                    return
-                }
+                // if mutated_unl.contains(&event.from) && normal_unl.contains(&event.to) {
+                //     return
+                // }
+                // if mutated_unl.contains(&event.to) && normal_unl.contains(&event.from) {
+                //     return
+                // }
                 if event.from == 3 && mutated_unl.contains(&event.to) {
                     // println!("pre  {}", hex::encode(&event.message));
                     // let mutation = parse_canonical_binary_format(trx.get_rawTransaction());
@@ -82,12 +82,15 @@ impl Scheduler {
                     proposal.set_currentTxHash(hex::decode("E803E1999369975AED1BFD2444A3552A73383C03A2004CB784CE07E13EBD7D7C").unwrap());
                     proposal.set_signature(hex::decode("3045022100a36058cae09aa725515fa94363372f2542a70015ee7cff640d6690b5f552575902207be2137c73559c788f8eaab50c29bdae8b525191b9d7641d3e3690561cdd721a").unwrap());
                 }
-                // println!("[{}->{}] {}, {}", event.from + 1, event.to + 1, rmo, hex::encode(&self.node_keys[event.from].validation_private_key));
+                // println!("[{}->{}] propose {}", event.from + 1, event.to + 1, hex::encode(proposal.get_currentTxHash()));
             }
             _ => ()
         }
         // println!("[{}->{}] {}", event.from + 1, event.to + 1, rmo);
         self.p2p_connections.get(&event.to).unwrap().get(&event.from).unwrap().send(event.message);
+        let collector_message = RippleMessage::new(event.from.to_string(),
+                                                   event.to.to_string(), Utc::now(), rmo);
+        self.collector_sender.send(collector_message).expect("Collector receiver failed");
         // match rmo {
         //     RippleMessageObject::TMTransaction(_) => {
         //         let bin = deserialize(&mut rmo, event.from, event.to);
