@@ -219,7 +219,7 @@ impl PeerConnection {
                     "Current buffer: {}",
                     String::from_utf8_lossy(buf.bytes()).trim()
                 );
-                panic!("socket closed");
+                panic!("socket from {} to {} closed", from, to);
             }
             let bytes = buf.bytes();
             if bytes[0] & 0x80 != 0 {

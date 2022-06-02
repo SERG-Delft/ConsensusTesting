@@ -16,7 +16,7 @@ pub fn start_docker_containers(peers: usize, unls: Vec<Vec<usize>>) -> Vec<NodeK
     create_configs(peers, &node_keys);
     configure_unls(unls, &node_keys);
     run_nodes(peers);
-    thread::sleep(Duration::from_secs(1));
+    thread::sleep(Duration::from_secs(2));
     node_keys
 }
 

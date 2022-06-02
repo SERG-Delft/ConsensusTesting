@@ -7,7 +7,11 @@ use serde_json::json;
 use crate::client::{PeerSubscriptionObject, SubscriptionObject};
 use crate::message_handler::RippleMessageObject;
 use chrono::{DateTime, Utc};
+use hex::ToHex;
+use openssl::hash::MessageDigest;
+use openssl::sha::sha256;
 use crate::container_manager::NodeKeys;
+use crate::deserialization::parse2;
 
 /// Collects and writes data to files
 /// Execution file stores all messages sent from the proxy
@@ -106,6 +110,40 @@ impl RippleMessage {
 impl Display for RippleMessage {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match &self.message {
+            RippleMessageObject::TMValidation(validation) => {
+                let ripple_epoch = DateTime::parse_from_rfc3339("2000-01-01T00:00:00+00:00").unwrap();
+                let from_node_buf = &self.from_node;
+                let to_node_buf = &self.to_node;
+                let time_since = self.timestamp.signed_duration_since(ripple_epoch).num_seconds();
+                // write!(f, "{}\n", hex::encode(validation.get_validation()));
+                let parsed = parse2(validation.get_validation()).unwrap().1;
+                // let pub_key = self.message.node_pub_key();
+                let type_prefixed_key = [&[28u8], hex::decode(parsed["SigningPubKey"].as_str().unwrap()).unwrap().as_slice()].concat();
+                let checksum = sha256(&sha256(&type_prefixed_key));
+                let key = [&type_prefixed_key, &checksum[..4]].concat();
+                let node_key = Some(bs58::encode(key.clone())
+                    .with_alphabet(bs58::Alphabet::RIPPLE)
+                    .into_string());
+                let node = match node_key {
+                    Some(ref key) => {
+                        match key.as_str() {
+                            "n9KkgT2SFxpQGic7peyokvkXcAmNLFob1AZXeErMFHxJ71q5MGaK" => "0",
+                            "n9M6ouZU7cLwRHPiVZjgJdEgrVyx2uv9euZzepdb34wDoj1RP5uS" => "1",
+                            "n9LJhBqLGTjPQa2KJtJmkHUubaHs1Y1ENYKZVmzZYhNb7GXh9m4j" => "2",
+                            "n9KgN4axJo1WC3fjFoUSkJ4gtZX4Pk2jPZzGR5CE9ddo16ewAPjN" => "3",
+                            "n9MsRMobdfpGvpXeGb3F6bm7WZbCiPrxzc1qBPP7wQox3NJzs5j2" => "4",
+                            "n9JFX46v3d3WgQW8DJQeBwqTk8vaCR7LufApEy65J1eK4X7dZbR3" => "5",
+                            "n9LFueHyYVJSyDArog2qtR42NixmeGxpaqFEFFp1xjxGU9aYRDZc" => "6",
+                            _ => { key.as_str().clone() }
+                        }
+                    }
+                    None => panic!("needs node key")
+                };
+                // println!("{} {}", hex::encode(proposal.get_nodePubKey()), node);
+                // let digest: String = openssl::hash::hash(MessageDigest::ripemd160(), &sha256(proposal.get_nodePubKey())).unwrap().encode_hex_upper();
+                // write!(f, "{} {} {} -> {} sent {}\n", time_since, self.message.node_pub_key().get_or_insert("".to_string()),  from_node_buf, to_node_buf, self.message.to_string());
+                write!(f, "{} [{}->{}] Validation {} validates {}\n", time_since, from_node_buf, to_node_buf, node, parsed.to_string())
+            }
             RippleMessageObject::TMProposeSet(proposal) => {
                 let ripple_epoch = DateTime::parse_from_rfc3339("2000-01-01T00:00:00+00:00").unwrap();
                 let from_node_buf = &self.from_node;
@@ -127,7 +165,10 @@ impl Display for RippleMessage {
                     }
                     None => panic!("needs node key")
                 };
-                write!(f, "{} [{}->{}] ProposeSet<{} proposes {}, seq={}>\n", time_since, from_node_buf, to_node_buf, node, hex::encode(&proposal.get_currentTxHash()), proposal.get_proposeSeq())
+                // println!("{} {}", hex::encode(proposal.get_nodePubKey()), node);
+                let digest: String = openssl::hash::hash(MessageDigest::ripemd160(), &sha256(proposal.get_nodePubKey())).unwrap().encode_hex_upper();
+                // write!(f, "{} {} {} -> {} sent {}\n", time_since, self.message.node_pub_key().get_or_insert("".to_string()),  from_node_buf, to_node_buf, self.message.to_string());
+                write!(f, "{} [{}->{}] ProposeSet<{} proposes {}, seq={}, prev={}>\n", time_since, from_node_buf, to_node_buf, node, hex::encode(&proposal.get_currentTxHash()[..2]), proposal.get_proposeSeq(), hex::encode(proposal.get_previousledger()))
             }
             _ => {
                 let ripple_epoch = DateTime::parse_from_rfc3339("2000-01-01T00:00:00+00:00").unwrap();
@@ -135,7 +176,8 @@ impl Display for RippleMessage {
                 let to_node_buf = &self.to_node;
                 let time_since = self.timestamp.signed_duration_since(ripple_epoch).num_seconds();
                 let message_buf = self.message.to_string();
-                write!(f, "{} {} {} -> {} sent {}\n", time_since, self.message.node_pub_key().get_or_insert("".to_string()),  from_node_buf, to_node_buf, message_buf)
+                // write!(f, "")
+                write!(f, "{} {} [{}->{}] sent {}\n", time_since, self.message.node_pub_key().get_or_insert("".to_string()),  from_node_buf, to_node_buf, message_buf)
             }
         }
     }
