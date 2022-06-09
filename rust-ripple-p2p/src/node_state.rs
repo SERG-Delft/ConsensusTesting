@@ -3,7 +3,7 @@
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Formatter};
 use itertools::{Itertools};
-use log::{trace};
+use log::{error, trace};
 use parking_lot::{Mutex, Condvar};
 use petgraph::Graph;
 use petgraph::prelude::NodeIndex;
@@ -21,8 +21,11 @@ pub struct NodeState {
     pub consensus_phase: ConsensusPhase,
     pub current_consensus_round: u32,
     pub last_validated_ledger: ValidatedLedger,
+    pub validated_ledgers: HashMap<usize, ValidatedLedger>,
     pub validations_sent: HashMap<usize, ParsedValidation>,
-    pub consensus_transaction_sets: HashMap<usize, TMStatusChange>,
+    pub consensus_constructed_ledgers: HashMap<usize, TMStatusChange>,
+    pub consensus_transaction_sets: HashMap<usize, Vec<u8>>,
+    pub proposed_tx_sets: HashMap<usize, HashSet<Vec<u8>>>,
     pub unvalidated_transactions: Vec<Transaction>,
     pub validated_transactions: Vec<(Transaction, TransactionResultCode)>,
     pub number_of_failed_consensus_rounds: u32,
@@ -39,8 +42,11 @@ impl NodeState {
             consensus_phase: ConsensusPhase::Open,
             current_consensus_round: 3,
             last_validated_ledger: ValidatedLedger::default(),
+            validated_ledgers: HashMap::new(),
             validations_sent: HashMap::new(),
+            consensus_constructed_ledgers: HashMap::new(),
             consensus_transaction_sets: HashMap::new(),
+            proposed_tx_sets: HashMap::new(),
             unvalidated_transactions: vec![],
             validated_transactions: vec![],
             number_of_failed_consensus_rounds: 0,
@@ -240,18 +246,34 @@ impl NodeStates {
         self.harness_transactions = harness_transactions;
     }
 
-    pub(crate) fn add_sent_validation(&mut self, ledger_seq: usize, validation: ParsedValidation, peer: usize) -> Option<ParsedValidation> {
-        self.node_states[peer].validations_sent.insert(ledger_seq, validation)
+    pub(crate) fn add_sent_validation(&mut self, validation: ParsedValidation, peer: usize) -> Option<ParsedValidation> {
+        self.node_states[peer].consensus_transaction_sets.insert(validation.ledger_sequence as usize, hex::decode(&validation.consensus_hash).unwrap());
+        self.node_states[peer].validations_sent.insert(validation.ledger_sequence as usize, validation)
     }
 
-    pub(crate) fn add_consensus_transaction_set(&mut self, ledger_seq: usize, status_change: TMStatusChange, peer: usize) -> Option<TMStatusChange> {
-        self.node_states[peer].consensus_transaction_sets.insert(ledger_seq, status_change)
+    pub(crate) fn add_consensus_constructed_ledger(&mut self, status_change: TMStatusChange, peer: usize) -> Option<TMStatusChange> {
+        self.node_states[peer].consensus_constructed_ledgers.insert(status_change.get_ledgerSeq() as usize, status_change)
+    }
+
+    pub(crate) fn add_proposed_tx_set(&mut self, tx_set: &[u8], peer: usize) {
+        let seq = self.node_states[peer].current_consensus_round as usize;
+        if !self.node_states[peer].proposed_tx_sets.contains_key(&seq) {
+            self.node_states[peer].proposed_tx_sets.insert(seq, HashSet::new());
+        }
+        match self.node_states[peer].proposed_tx_sets.get_mut(&seq) {
+            None => error!("Just added an empty set and it disappeared"),
+            Some(set) => {
+                set.insert(tx_set.to_vec());
+            },
+        }
     }
 
     fn clear_consensus_property_data(&mut self) {
         for i in 0..self.node_states.len() {
             self.node_states[i].validations_sent.clear();
+            self.node_states[i].consensus_constructed_ledgers.clear();
             self.node_states[i].consensus_transaction_sets.clear();
+            self.node_states[i].validated_ledgers.clear();
         }
     }
 }
@@ -305,7 +327,9 @@ impl MutexNodeStates {
     }
 
     pub fn set_validated_ledger(&self, peer: usize, new_validated_ledger: ValidatedLedger) {
-        self.node_states.lock().node_states[peer].last_validated_ledger = new_validated_ledger;
+        let mut node_states = self.node_states.lock();
+        node_states.node_states[peer].last_validated_ledger = new_validated_ledger.clone();
+        node_states.node_states[peer].validated_ledgers.insert(new_validated_ledger.ledger_index as usize, new_validated_ledger);
         self.validated_ledger_cvar.notify_all();
     }
 

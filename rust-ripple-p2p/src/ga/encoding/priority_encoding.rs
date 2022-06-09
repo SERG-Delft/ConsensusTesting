@@ -145,9 +145,7 @@ mod test_priority_encoding {
     use itertools::Itertools;
     use crate::ga::encoding::{ExtendedPhenotype, num_genes};
     use crate::ga::encoding::priority_encoding::{Priority, PriorityMapPhenotype};
-    use crate::ga::genetic_algorithm::ConsensusMessageType;
     use crate::message_handler::RippleMessageObject;
-    use crate::NUM_NODES;
     use crate::protos::ripple::TMStatusChange;
     use crate::scheduler::priority_scheduler::OrderedRMOEvent;
     use crate::scheduler::RMOEvent;

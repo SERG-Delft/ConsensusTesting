@@ -4,13 +4,14 @@ use std::path::Path;
 use std::sync::Arc;
 use std::sync::mpsc::{Sender, Receiver};
 use std::thread;
+use itertools::chain;
 use rand::distributions::Uniform;
 use rand::Rng;
 use rand_chacha::ChaCha8Rng;
 use rand_chacha::rand_core::SeedableRng;
 use crate::ga::encoding::delay_encoding::{DelayMapPhenotype, DelaysGenotype};
 use crate::ga::encoding::{ExtendedPhenotype, num_genes};
-use crate::ga::encoding::priority_encoding::{Priority, PriorityGenotype, PriorityMapPhenotype};
+use crate::ga::encoding::priority_encoding::{Priority, PriorityMapPhenotype};
 use crate::ga::fitness::ExtendedFitness;
 use crate::ga::genetic_algorithm::{ConsensusMessageType, CurrentFitness};
 use crate::node_state::MutexNodeStates;
@@ -281,26 +282,24 @@ impl PreDeterminedDelaySchedulerHandler {
         std::process::exit(0);
     }
 
-    /// From node 1 to 0 ProposeSet0 gets 2000 delay
-    /// From node 2 to 0 ProposeSet0 gets 3000 delay
     fn create_delays() -> DelaysGenotype {
         let index_factor_1 = ConsensusMessageType::VALUES.len() * (*NUM_NODES-1);
         let index_factor_2 = ConsensusMessageType::VALUES.len();
         let mut delays = vec![0u32; num_genes()];
-        // delays[index_factor_1 * 1 + index_factor_2 * 0 + 0] = 2000;
-        let delay = 3000;
-        delays[index_factor_1 * 2 + index_factor_2 * 0 + 0] = delay;
-        delays[index_factor_1 * 2 + index_factor_2 * 1 + 0] = delay;
-        delays[index_factor_1 * 2 + index_factor_2 * 3 + 0] = delay;
-        delays[index_factor_1 * 2 + index_factor_2 * 4 + 0] = delay;
-        delays[index_factor_1 * 1 + index_factor_2 * 0 + 0] = delay;
-        delays[index_factor_1 * 1 + index_factor_2 * 2 + 0] = delay;
-        delays[index_factor_1 * 1 + index_factor_2 * 3 + 0] = delay;
-        delays[index_factor_1 * 1 + index_factor_2 * 4 + 0] = delay;
-        delays[index_factor_1 * 0 + index_factor_2 * 1 + 0] = delay;
-        delays[index_factor_1 * 0 + index_factor_2 * 2 + 0] = delay;
-        delays[index_factor_1 * 0 + index_factor_2 * 3 + 0] = delay;
-        delays[index_factor_1 * 0 + index_factor_2 * 4 + 0] = delay;
+        let ledger_data_index = 12;
+        let get_ledger_index = 11;
+        let transaction_index = 9;
+        let ledger_data_delay = 6000;
+        let get_ledger_delay = 0;
+        let transaction_delay = 0;
+        for i in 0..*NUM_NODES {
+            for (j, _) in chain(0..i, i+1..*NUM_NODES).enumerate() {
+                delays[index_factor_1 * i + index_factor_2 * j + ledger_data_index] = ledger_data_delay;
+                delays[index_factor_1 * i + index_factor_2 * j + get_ledger_index] = get_ledger_delay;
+                delays[index_factor_1 * i + index_factor_2 * j + transaction_index] = transaction_delay;
+            }
+        }
+        println!("{}", DelayMapPhenotype::from_genes(&delays).display_genotype_by_message());
         delays
     }
 }

@@ -343,7 +343,7 @@ pub struct Payment  {
 }
 
 /// A validated ledger struct received from the ledger subscription stream
-#[derive(Serialize, Deserialize, Clone, Default, Debug)]
+#[derive(Serialize, Deserialize, Clone, Default, Debug, PartialEq)]
 pub struct ValidatedLedger {
     pub fee_base: u32,
     pub fee_ref: u32,

@@ -15,6 +15,7 @@ use crate::client::{Client, Transaction};
 use crate::container_manager::AccountKeys;
 use crate::node_state::MutexNodeStates;
 use crate::{LOG_FOLDER, NUM_NODES};
+use crate::consensus_properties::ConsensusProperties;
 use crate::test_harness::TestResult::{Failed, InProgress, Success};
 
 const MAX_EVENTS_TEST: usize = 10000;
@@ -225,6 +226,8 @@ impl TestHarness<'static> {
             test_result = TransactionResult::check_transaction_results(&self.transaction_results, &min_validated_transactions, &unfunded_payment_idxs);
         }
         debug!("events during test: {}", node_states.get_consensus_event_count());
+        ConsensusProperties::check_validity_properties(&node_states);
+        ConsensusProperties::check_agreement_properties(&node_states);
         if test_result == Failed {
             self.handle_test_failure(node_states.clone());
         }

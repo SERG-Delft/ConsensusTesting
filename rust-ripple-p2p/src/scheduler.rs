@@ -11,6 +11,7 @@ use chrono::Utc;
 use tokio::sync::mpsc::{Sender as TokioSender, Receiver as TokioReceiver};
 use std::sync::mpsc::{Sender as STDSender, Receiver as STDReceiver, channel};
 use std::thread;
+use std::time::Duration;
 use parking_lot::{Mutex, Condvar};
 use byteorder::{BigEndian, ByteOrder};
 use websocket::Message;
@@ -97,6 +98,9 @@ pub trait Scheduler: Sized {
                             let parsed_validation = ParsedValidation::new(validation);
                             ConsensusProperties::check_validation_integrity_property(&self.get_state().node_states, parsed_validation, event.from);
                         }
+                        RippleMessageObject::TMProposeSet(proposal) => {
+                            self.get_state().node_states.node_states.lock().add_proposed_tx_set(proposal.get_currentTxHash(), event.from);
+                        }
                         _ => {}
                     }
                 }
@@ -156,9 +160,16 @@ pub trait Scheduler: Sized {
 
     /// Update the latest validated ledger if all nodes have validated a next ledger
     fn update_latest_validated_ledger(node_states: Arc<MutexNodeStates>, latest_validated_ledger: Arc<(Mutex<u32>, Condvar)>) {
+        let mut liveness = true;
         loop {
             let mut node_states_mutex = node_states.node_states.lock();
-            node_states.validated_ledger_cvar.wait(&mut node_states_mutex);
+            // Liveness check!
+            let now = Utc::now();
+            node_states.validated_ledger_cvar.wait_for(&mut node_states_mutex, Duration::from_secs(65));
+            if Utc::now() - chrono::Duration::seconds(65) >= now {
+                error!("Liveness bug");
+                liveness = false;
+            }
             let validated_ledger_index = node_states_mutex.min_validated_ledger();
             let (ref lock, ref cvar) = &*latest_validated_ledger;
             let mut locked_ledger_index = lock.lock();
@@ -167,7 +178,7 @@ pub trait Scheduler: Sized {
                 *locked_ledger_index = validated_ledger_index;
                 cvar.notify_all();
             }
-             println!("Validated ledgers: {:?}, fork: {}, liveness: {}", node_states_mutex.validated_ledgers(), node_states_mutex.check_for_fork(), node_states_mutex.check_liveness());
+             println!("Validated ledgers: {:?}, fork: {}, liveness: {}", node_states_mutex.validated_ledgers(), node_states_mutex.check_for_fork(), liveness);
         }
     }
 

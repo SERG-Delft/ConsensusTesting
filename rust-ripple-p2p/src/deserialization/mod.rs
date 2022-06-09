@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
+use lazy_static::lazy_static;
 
 use types::*;
 
@@ -10,6 +11,10 @@ use crate::protos::ripple::{TMLedgerInfoType, TMLedgerNode};
 
 mod blob_iterator;
 mod types;
+
+lazy_static! {
+    pub static ref ALL_VALUES: serde_json::Value = read_file_to_values();
+}
 
 #[allow(unused)]
 pub fn deserialize(message: &RippleMessageObject) {
@@ -47,7 +52,7 @@ pub fn deserialize_validation(blob: &[u8]) -> ParsedValidation {
                 _ => "".to_string()
             },
             "ConsensusHash" => parsed_validation.consensus_hash = match field.field {
-                SerializationField::H256(value) => format!("{:x?}", value.hash),
+                SerializationField::H256(value) => hex::encode(value.hash),//format!("{:x?}", value.hash),
                 _ => "".to_string()
             },
             "ValidatedHash" => parsed_validation.validated_hash = match field.field {
@@ -276,6 +281,12 @@ fn get_type_field_code(blob: &mut BlobIterator) -> (u8, u8) {
     };
 }
 
+pub fn read_file_to_values() -> serde_json::Value{
+    let mut data = String::new();
+    let mut file = File::open("src/deserialization/definitions.json").expect("Getting the file did not work.");
+    file.read_to_string(&mut data).expect("Reading from file did not work.");
+    serde_json::from_str(&*data).expect("Parsing the data did not work.")
+}
 
 ///
 ///
@@ -285,13 +296,9 @@ fn get_type_field_code(blob: &mut BlobIterator) -> (u8, u8) {
 ///
 ///
 pub fn read_from_file() -> HashMap<FieldType, FieldInformation> {
-    let mut data = String::new();
-    let mut file = File::open("src/deserialization/definitions.json").expect("Getting the file did not work.");
-    file.read_to_string(&mut data).expect("Reading from file did not work.");
-
-    let all_values: serde_json::Value = serde_json::from_str(&*data).expect("Parsing the data did not work.");
+    //let all_values: serde_json::Value = serde_json::from_str(&*data).expect("Parsing the data did not work.");
     // get only the fields
-    let fields = serde_json::json!(all_values["FIELDS"]);
+    let fields = serde_json::json!(ALL_VALUES["FIELDS"]);
 
     // hashmap with all the fields (key: nth + type)
     let mut all_fields = HashMap::new();
