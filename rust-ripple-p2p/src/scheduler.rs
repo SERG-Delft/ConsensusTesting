@@ -24,6 +24,7 @@ use crate::container_manager::NodeKeys;
 use crate::deserialization::{parse2, parse_canonical_binary_format};
 use crate::message_handler::{invoke_protocol_message, RippleMessageObject};
 use crate::message_handler::RippleMessageObject::{TMHaveTransactionSet, TMProposeSet, TMStatusChange, TMTransaction, TMValidation};
+use crate::protos::ripple::NodeEvent;
 
 type P2PConnections = HashMap<usize, HashMap<usize, PeerChannel>>;
 
@@ -140,9 +141,9 @@ impl Scheduler {
                 // println!("[{}->{}] propose {}", event.from + 1, event.to + 1, hex::encode(proposal.get_currentTxHash()));
             }
             TMStatusChange(ref mut status) => {
-                if event.from == 6 && status.get_ledgerSeq() == 6 {
+                if event.from > 3 && status.get_newEvent() == NodeEvent::neACCEPTED_LEDGER {
                     self.mutated_ledger_hash = status.get_ledgerHash().to_vec().clone();
-                    // println!("{}", hex::encode(&self.mutated_ledger_hash))
+                    println!("stored ledger {}", hex::encode(&self.mutated_ledger_hash))
                 }
                 // if event.from == 3 && mutated_unl.contains(&event.to) {
                 //     status.set_ledgerHash(self.mutated_ledger_hash.clone());
@@ -157,44 +158,98 @@ impl Scheduler {
             TMValidation(ref mut validation) => {
                 let (_, mut parsed) = parse2(validation.get_validation()).unwrap();
                 if event.from == 3 && parsed["ConsensusHash"].as_str().unwrap().eq_ignore_ascii_case("fe0e71183243245e3619efcbe073f2d7eede9b0f0bf1a1b2b7d9f1e22b4a5c2a") && mutated_unl.contains(&event.to) && parsed["SigningPubKey"].as_str().unwrap().eq_ignore_ascii_case("02954103E420DA5361F00815929207B36559492B6C37C62CB2FE152CCC6F3C11C5") {
-                    // println!("{}", hex::encode(validation.get_validation()));
-                    // println!("{}", parsed.to_string());
+                    println!("incoming  {}", hex::encode(validation.get_validation()));
+                    println!("as string {}", parsed.to_string());
+
+                    let secp256k1 = Secp256k1::new();
+                    let public_key = PublicKey::from_slice(
+                        &hex::decode(parsed["SigningPubKey"].as_str().unwrap()).unwrap()
+                    ).unwrap();
+                    let private_key = SecretKey::from_slice(
+                        &bs58::decode(&self.node_keys[3].validation_private_key)
+                            .with_alphabet(Alphabet::RIPPLE)
+                            .into_vec()
+                            .unwrap()[1..33]
+                    ).unwrap();
+
+                    let signature = secp256k1::ecdsa::Signature::from_der(
+                        hex::decode(parsed["Signature"].as_str().unwrap()).unwrap().as_slice()
+                    ).unwrap();
+
+                    let my_validation = hex::decode(format!("22{}26{}29{}3A{}51{}5017{}5019{}7321{}",
+                                                   // let sign = hex::decode(format!("22{}26{}29{}3A{}51{}5017{}5019{}7321{}",
+                                                   hex::encode(parsed["Flags"].as_u32().unwrap().to_be_bytes()),
+                                                   hex::encode(parsed["LedgerSequence"].as_u32().unwrap().to_be_bytes()),
+                                                   hex::encode(parsed["SigningTime"].as_u32().unwrap().to_be_bytes()),
+                                                   hex::encode(parsed["Cookie"].as_u64().unwrap().to_be_bytes()),
+                                                   parsed["hash"].as_str().unwrap(),
+                                                   parsed["ConsensusHash"].as_str().unwrap(),
+                                                   // hex::encode(&self.mutated_ledger_hash),
+                                                   // "E803E1999369975AED1BFD2444A3552A73383C03A2004CB784CE07E13EBD7D7C",
+                                                   parsed["ValidatedHash"].as_str().unwrap(),
+                                                   parsed["SigningPubKey"].as_str().unwrap()
+                    )).unwrap();
+                    let signing_hash = sha512_first_half([
+                        &[86, 65, 76, 00],
+                        my_validation.as_slice()
+                    ].concat().as_slice());
+                    let message = secp256k1::Message::from_slice(&signing_hash).unwrap();
+
+                    secp256k1.verify_ecdsa(&message, &signature, &public_key).expect("could not verify signature");
+
                     // parsed["LedgerHash"] = self.mutated_ledger_hash.clone().into();
                     // parsed["ConsensusHash"] = "E803E1999369975AED1BFD2444A3552A73383C03A2004CB784CE07E13EBD7D7C".to_string().into();
                     // let res: &[u8; 32] = <&[u8; 32]>::try_from(bs58::decode(&self.node_keys[3].validation_public_key).with_alphabet(Alphabet::RIPPLE).into_vec().unwrap().as_slice()).unwrap();
                     // parsed["SigningPubKey"] = "02954103E420DA5361F00815929207B36559492B6C37C62CB2FE152CCC6F3C11C5".to_string().into();
                     // println!("{}", parsed.to_string());
-                    let sign = hex::decode(format!("22{}26{}29{}3A{}51{}5017{}5019{}7321{}",
-                    // let sign = hex::decode(format!("22{}26{}29{}3A{}51{}5017{}5019{}7321{}",
-                                                   hex::encode(parsed["Flags"].as_u32().unwrap().to_be_bytes()),
-                                                   hex::encode(parsed["LedgerSequence"].as_u32().unwrap().to_be_bytes()),
-                                                   hex::encode(parsed["SigningTime"].as_u32().unwrap().to_be_bytes()),
-                                                   hex::encode(parsed["Cookie"].as_u64().unwrap().to_be_bytes()),
-                                                   hex::encode(&self.mutated_ledger_hash),
-                                                   "E803E1999369975AED1BFD2444A3552A73383C03A2004CB784CE07E13EBD7D7C",
-                                                   parsed["ValidatedHash"].as_str().unwrap(),
-                                                   parsed["SigningPubKey"].as_str().unwrap()
+                    // let sign = hex::decode(format!("22{}26{}29{}51{}5017{}5019{}7321{}",
+                    let mutated_validation = hex::decode(format!("22{}26{}29{}3A{}51{}5017{}5019{}7321{}",
+                                                            // let sign = hex::decode(format!("22{}26{}29{}3A{}51{}5017{}5019{}7321{}",
+                                                            hex::encode(parsed["Flags"].as_u32().unwrap().to_be_bytes()),
+                                                            hex::encode(parsed["LedgerSequence"].as_u32().unwrap().to_be_bytes()),
+                                                            hex::encode(parsed["SigningTime"].as_u32().unwrap().to_be_bytes()),
+                                                            hex::encode(parsed["Cookie"].as_u64().unwrap().to_be_bytes()),
+                                                            // parsed["hash"].as_str().unwrap(),
+                                                            // parsed["ConsensusHash"].as_str().unwrap(),
+                                                            hex::encode(&self.mutated_ledger_hash),
+                                                            "E803E1999369975AED1BFD2444A3552A73383C03A2004CB784CE07E13EBD7D7C",
+                                                            parsed["ValidatedHash"].as_str().unwrap(),
+                                                            parsed["SigningPubKey"].as_str().unwrap()
                     )).unwrap();
+                    let mutated_signing_hash = sha512_first_half([
+                        &[86, 65, 76, 00],
+                        mutated_validation.as_slice()
+                    ].concat().as_slice());
+                    let mutated_message = secp256k1::Message::from_slice(&mutated_signing_hash).unwrap();
+
+                    let mutated_signature = secp256k1.sign_ecdsa(&mutated_message, &private_key);
+                    let der_sign = mutated_signature.serialize_der().to_vec();
+
                     // println!("{}", hex::encode(&sign));
-                    let message = secp256k1::Message::from_slice(&sha512_first_half(&sign)).unwrap();
-                    let algo = Secp256k1::new();
-                    let priv_key = bs58::decode(&self.node_keys[3].validation_private_key).with_alphabet(Alphabet::RIPPLE).into_vec().unwrap();
-                    let signature = algo.sign_ecdsa(&message, &SecretKey::from_slice(&priv_key[1..33]).unwrap());
-                    parsed["Signature"] = hex::encode_upper(signature.serialize_der().to_vec()).into();
-                    let der_sign = signature.serialize_der().to_vec();
+                    // let message = secp256k1::Message::from_slice(&sha512_first_half(&sign)).unwrap();
+                    // let algo = Secp256k1::new();
+                    // let priv_key = bs58::decode(&self.node_keys[3].validation_private_key).with_alphabet(Alphabet::RIPPLE).into_vec().unwrap();
+                    // let signature = algo.sign_ecdsa(&message, &SecretKey::from_slice(&priv_key[1..33]).unwrap());
+                    // // parsed["Signature"] = hex::encode_upper(signature.serialize_der().to_vec()).into();
+                    // // let der_sign = signature.serialize_der().to_vec();
                     let val = hex::decode(format!("22{}26{}29{}3A{}51{}5017{}5019{}7321{}76{}{}",
                     // let val = hex::decode(format!("22{}26{}29{}3A{}51{}5017{}5019{}7321{}7647{}",
                                                              hex::encode(parsed["Flags"].as_u32().unwrap().to_be_bytes()),
                                                              hex::encode(parsed["LedgerSequence"].as_u32().unwrap().to_be_bytes()),
                                                              hex::encode(parsed["SigningTime"].as_u32().unwrap().to_be_bytes()),
                                                              hex::encode(parsed["Cookie"].as_u64().unwrap().to_be_bytes()),
+                                                  // parsed["hash"].as_str().unwrap(),
+                                                  // parsed["ConsensusHash"].as_str().unwrap(),
                                                              hex::encode(&self.mutated_ledger_hash),
                                                              "E803E1999369975AED1BFD2444A3552A73383C03A2004CB784CE07E13EBD7D7C",
                                                              parsed["ValidatedHash"].as_str().unwrap(),
                                                              parsed["SigningPubKey"].as_str().unwrap(),
+                        // hex::encode((hex::decode(parsed["Signature"].as_str().unwrap()).unwrap().len() as u8).to_be_bytes()),
+                        // parsed["Signature"].as_str().unwrap()
                                                   hex::encode((der_sign.len() as u8).to_be_bytes()),
                                                   hex::encode(der_sign),
                     )).unwrap();
+                    println!("outgoing  {}", hex::encode(&val));
                     // validation.set_validation(hex::decode(serialize_tx(parsed.to_string(), false).unwrap()).unwrap());
                     validation.set_validation(val);
                     event.message = [&event.message[0..6], &validation.write_to_bytes().unwrap()].concat();
@@ -208,9 +263,9 @@ impl Scheduler {
             _ => ()
         }
         // println!("[{}->{}] {}", event.from + 1, event.to + 1, rmo);
-        self.p2p_connections.get(&event.to).unwrap().get(&event.from).unwrap().send(event.message);
+        self.p2p_connections.get(&event.to).unwrap().get(&event.from).unwrap().send(event.message.clone());
         let collector_message = RippleMessage::new(event.from.to_string(),
-                                                   event.to.to_string(), Utc::now(), rmo);
+                                                   event.to.to_string(), Utc::now(), invoke_protocol_message(BigEndian::read_u16(&event.message[4..6]), &event.message[6..]));
         self.collector_sender.send(collector_message).expect("Collector receiver failed");
         // match rmo {
         //     RippleMessageObject::TMTransaction(_) => {
