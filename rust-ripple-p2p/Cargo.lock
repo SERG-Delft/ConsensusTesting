@@ -1660,14 +1660,13 @@ dependencies = [
 
 [[package]]
 name = "rand"
-version = "0.8.4"
+version = "0.8.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2e7573632e6454cf6b99d7aac4ccca54be06da05aca2ef7423d22d27d4d4bcd8"
+checksum = "34af8d1a0e25924bc5b7c43c079c942339d8f0a8b57c39049bef581b46327404"
 dependencies = [
  "libc",
  "rand_chacha 0.3.1",
  "rand_core 0.6.3",
- "rand_hc 0.3.1",
 ]
 
 [[package]]
@@ -1982,6 +1981,7 @@ dependencies = [
  "powershell_script",
  "protobuf",
  "protobuf-codegen-pure",
+ "rand 0.8.5",
  "rayon",
  "ripemd160",
  "ripple-address-codec",
@@ -1990,6 +1990,7 @@ dependencies = [
  "secp256k1 0.22.1",
  "serde",
  "serde_json",
+ "set-partitions",
  "sha2 0.8.2",
  "tokio",
  "tokio-openssl",
@@ -2172,6 +2173,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "set-partitions"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "61454a213ca8388d4d013daf1430421ed1a5592d0eeedba6b260855dfb509096"
+dependencies = [
+ "arrayvec",
+ "num-traits",
+]
+
+[[package]]
 name = "sha-1"
 version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2337,7 +2348,7 @@ checksum = "dac1c663cfc93810f88aed9b8941d48cabf856a1b111c29a40439018d870eb22"
 dependencies = [
  "cfg-if 1.0.0",
  "libc",
- "rand 0.8.4",
+ "rand 0.8.5",
  "redox_syscall 0.2.10",
  "remove_dir_all",
  "winapi 0.3.9",
@@ -2865,7 +2876,7 @@ dependencies = [
  "indexmap",
  "lazy_static",
  "num-bigint 0.4.3",
- "rand 0.8.4",
+ "rand 0.8.5",
  "rand_hc 0.3.1",
  "regex",
  "ripemd160",

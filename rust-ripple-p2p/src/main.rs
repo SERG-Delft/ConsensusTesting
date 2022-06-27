@@ -4,6 +4,7 @@ extern crate core;
 use std::env;
 use log::*;
 use env_logger;
+use crate::byzzfuzz::ByzzFuzz;
 use crate::container_manager::start_docker_containers;
 
 mod app;
@@ -16,6 +17,7 @@ mod scheduler;
 mod peer_connection;
 mod deserialization;
 mod container_manager;
+mod byzzfuzz;
 
 type AnyError = Box<dyn std::error::Error + Send + Sync>;
 type AnyResult<T> = Result<T, AnyError>;

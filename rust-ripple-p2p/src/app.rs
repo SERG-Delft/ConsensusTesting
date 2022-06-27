@@ -6,6 +6,7 @@ use std::time::Duration;
 
 use log::*;
 use itertools::Itertools;
+use crate::ByzzFuzz;
 
 use super::{EmptyResult};
 use crate::client::{Client};
@@ -34,12 +35,14 @@ const _AMOUNT: u32 = 2u32.pow(31);
 pub struct App {
     peers: u16,
     only_subscribe: bool,
-    node_keys: Vec<NodeKeys>
+    node_keys: Vec<NodeKeys>,
+    byzz_fuzz: ByzzFuzz,
 }
 
 impl App {
     pub fn new(peers: u16, only_subscribe: bool, node_keys: Vec<NodeKeys>) -> Self {
-        App { peers, only_subscribe, node_keys }
+        let byzz_fuzz = ByzzFuzz::new(7, 2, 6);
+        App { peers, only_subscribe, node_keys, byzz_fuzz }
     }
 
     /// Start proxy
