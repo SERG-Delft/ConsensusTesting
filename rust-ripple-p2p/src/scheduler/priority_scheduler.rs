@@ -8,9 +8,9 @@ use log::{debug, error, trace};
 use parking_lot::{Condvar, Mutex};
 use tokio::sync::mpsc::Receiver as TokioReceiver;
 use crate::collector::RippleMessage;
-use crate::ga::encoding::ExtendedPhenotype;
+use crate::ga::encoding::{ExtendedPhenotype};
 use crate::ga::genetic_algorithm::ConsensusMessageType;
-use crate::ga::encoding::priority_encoding::{Priority, PriorityMapPhenotype};
+use crate::ga::encoding::priority_encoding::{PriorityMapPhenotype};
 use crate::message_handler::RippleMessageObject;
 use crate::node_state::MutexNodeStates;
 use crate::NodeKeys;
@@ -113,7 +113,7 @@ impl Scheduler for PriorityScheduler {
                                 RippleMessageObject::TMTransaction(_) => message_type_map.get(&ConsensusMessageType::TMTransaction).unwrap(),
                                 RippleMessageObject::TMLedgerData(_) => message_type_map.get(&ConsensusMessageType::TMLedgerData).unwrap(),
                                 RippleMessageObject::TMGetLedger(_) => message_type_map.get(&ConsensusMessageType::TMGetLedger).unwrap(),
-                                _ => &Priority(0f32)
+                                _ => &0
                             };
                             inbox_lock.lock().push(OrderedRMOEvent::new(rmo_event, *priority));
                             inbox_cvar.notify_all();
@@ -153,11 +153,11 @@ impl Scheduler for PriorityScheduler {
 #[derive(Debug, Clone)]
 pub struct OrderedRMOEvent {
     rmo_event: RMOEvent,
-    priority: Priority,
+    priority: usize,
 }
 
 impl OrderedRMOEvent {
-    pub fn new(rmo_event: RMOEvent, priority: Priority) -> Self {
+    pub fn new(rmo_event: RMOEvent, priority: usize) -> Self {
         Self { rmo_event, priority }
     }
 }
@@ -193,7 +193,6 @@ mod priority_scheduler_tests {
     use std::thread;
     use std::time::Duration;
     use parking_lot::{Condvar, Mutex};
-    use crate::ga::encoding::priority_encoding::Priority;
     use crate::message_handler::RippleMessageObject;
     use crate::protos::ripple::{TMStatusChange, TMValidation};
     use crate::scheduler::priority_scheduler::{OrderedRMOEvent, PriorityScheduler};
@@ -216,12 +215,12 @@ mod priority_scheduler_tests {
         for i in 0..max_inbox_size+1 {
             let mut inbox_heap = inbox_lock.lock();
             if i == max_inbox_size {
-                inbox_heap.push(OrderedRMOEvent::new(rmo_event_size.clone(), Priority(i as f32)));
+                inbox_heap.push(OrderedRMOEvent::new(rmo_event_size.clone(), i));
                 println!("Sending message {} to inbox", i);
             } else if i == max_inbox_size - 1 {
-                inbox_heap.push(OrderedRMOEvent::new(rmo_event_time.clone(), Priority(i as f32)));
+                inbox_heap.push(OrderedRMOEvent::new(rmo_event_time.clone(), i));
             } else {
-                inbox_heap.push(OrderedRMOEvent::new(RMOEvent::default(), Priority(i as f32)));
+                inbox_heap.push(OrderedRMOEvent::new(RMOEvent::default(), i));
                 println!("Sending message {} to inbox", i);
             }
             println!("woke up {} threads", inbox_cvar.notify_all());

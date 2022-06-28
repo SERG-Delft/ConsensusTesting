@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 use std::hash::Hash;
-use genevo::genetic::Phenotype;
+use genevo::genetic::{Genotype, Phenotype};
 use genevo::operator::prelude::MultiPointCrossover;
 use crate::ga::genetic_algorithm::ConsensusMessageType;
 use crate::ga::mutation::GaussianGenomeMutation;
@@ -19,4 +19,6 @@ pub trait ExtendedPhenotype<G>: Phenotype<G> + Send where G: ExtendedGenotype {
     fn display_genotype_by_message(&self) -> String;
 }
 
-pub trait ExtendedGenotype: MultiPointCrossover + GaussianGenomeMutation + Eq + Hash + Debug + Default {}
+pub trait ExtendedGenotype: Genotype + Eq + Hash + Debug + Default {}
+
+pub trait SuperExtendedGenotype: ExtendedGenotype + MultiPointCrossover + GaussianGenomeMutation {}

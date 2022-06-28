@@ -9,6 +9,7 @@ use crate::protos::ripple::{NodeEvent, TMStatusChange};
 pub struct ConsensusProperties {}
 
 impl ConsensusProperties {
+    /// I1 Check whether a proposal has already declared consensus on a transaction set for one ledger
     pub fn check_proposal_integrity_property(node_states: &Arc<MutexNodeStates>, status_change: &TMStatusChange, sender: usize) -> bool {
         if status_change.has_newEvent() && status_change.get_newEvent() == NodeEvent::neACCEPTED_LEDGER {
             let mut node_states_vec = node_states.node_states.lock();
@@ -23,6 +24,7 @@ impl ConsensusProperties {
         true
     }
 
+    /// I2 Check whether a node has already issued a validation for a ledger
     pub fn check_validation_integrity_property(node_states: &Arc<MutexNodeStates>, validation: ParsedValidation, sender: usize) -> bool {
         let mut node_states_vec = node_states.node_states.lock();
         let already_present = node_states_vec.add_sent_validation(validation.clone(), sender);
@@ -35,6 +37,10 @@ impl ConsensusProperties {
         true
     }
 
+    /// Check agreement consensus properties
+    /// A1 is a weaker safety property, as validation is specifically designed to remedy that situation
+    /// A1 Check whether two nodes created different ledgers / declared consensus on two different tx sets
+    /// A2 Check whether two nodes validated two different ledgers
     pub fn check_agreement_properties(node_states: &Arc<MutexNodeStates>) -> bool {
         let mut agreement = true;
         let node_states_vec = &node_states.node_states.lock().node_states;

@@ -5,16 +5,17 @@ use std::sync::Arc;
 use std::sync::mpsc::{Sender, Receiver};
 use std::thread;
 use itertools::chain;
+use petgraph::Graph;
 use rand::distributions::Uniform;
 use rand::Rng;
 use rand_chacha::ChaCha8Rng;
 use rand_chacha::rand_core::SeedableRng;
 use crate::ga::encoding::delay_encoding::{DelayMapPhenotype, DelaysGenotype};
 use crate::ga::encoding::{ExtendedPhenotype, num_genes};
-use crate::ga::encoding::priority_encoding::{Priority, PriorityMapPhenotype};
+use crate::ga::encoding::priority_encoding::{PriorityMapPhenotype};
 use crate::ga::fitness::ExtendedFitness;
 use crate::ga::genetic_algorithm::{ConsensusMessageType, CurrentFitness};
-use crate::node_state::MutexNodeStates;
+use crate::node_state::{DependencyEvent, MessageTypeDependencyEvent, MutexNodeStates};
 use crate::NUM_NODES;
 
 mod compare;
@@ -117,12 +118,12 @@ impl<T> PriorityTraceGraphSchedulerHandler<T>
 
     /// Write trace graphs to file after running a number of test harnesses with certain delays
     pub fn priority_trace_graph_creation(&mut self, node_states: Arc<MutexNodeStates>) {
-        let no_priorities = vec![Priority(0f32); num_genes()];
+        let no_priorities = vec![0; num_genes()];
         let range = Uniform::from(0f32..1f32);
         let mut rng_1 = ChaCha8Rng::seed_from_u64(1);
         let mut rng_2 = ChaCha8Rng::seed_from_u64(2);
-        let random_priorities_1: Vec<Priority> = rng_1.sample_iter(&range).take(num_genes()).map(|f| Priority(f)).collect();
-        let random_priorities_2: Vec<Priority> = rng_2.sample_iter(&range).take(num_genes()).map(|f| Priority(f)).collect();
+        let random_priorities_1: Vec<usize> = rng_1.sample_iter(&range).take(num_genes()).map(|f| f as usize).collect();
+        let random_priorities_2: Vec<usize> = rng_2.sample_iter(&range).take(num_genes()).map(|f| f as usize).collect();
         let priorities = vec![no_priorities, random_priorities_1, random_priorities_2];
 
         // Allow five test harnesses to pass to mitigate any startup difficulties in the network
@@ -143,9 +144,10 @@ impl<T> PriorityTraceGraphSchedulerHandler<T>
                 // Receive fitness from scheduler
                 match self.scheduler_receiver.recv() {
                     Ok(_) => {
+                        let message_type_graph = transform_to_message_type_graph(&node_states.get_dependency_graph());
                         self.graph_file.write(format!("{:?}", cur_priorities).as_bytes()).unwrap();
                         self.graph_file.write(b"+\n").unwrap();
-                        let j = serde_json::to_string(&node_states.get_dependency_graph()).unwrap();
+                        let j = serde_json::to_string(&message_type_graph).unwrap();
                         self.graph_file.write(j.as_bytes()).unwrap();
                         self.graph_file.write(b"+\n").unwrap();
                     }
@@ -157,6 +159,10 @@ impl<T> PriorityTraceGraphSchedulerHandler<T>
         println!("Finished graph creation, exiting...");
         std::process::exit(0);
     }
+}
+
+fn transform_to_message_type_graph(graph: &Graph<DependencyEvent, ()>) -> Graph<MessageTypeDependencyEvent, ()> {
+    graph.map(|_ix, node| MessageTypeDependencyEvent::from(node), |_ix, edge| *edge)
 }
 
 pub struct FitnessComparisonSchedulerHandler {

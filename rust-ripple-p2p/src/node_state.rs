@@ -513,6 +513,23 @@ impl MutexNodeStates {
 }
 
 #[derive(Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq, Hash, Default)]
+pub struct MessageTypeDependencyEvent {
+    pub message_type: String,
+    pub from_node: usize,
+    pub to_node: usize,
+}
+
+impl MessageTypeDependencyEvent {
+    pub fn from(event: &DependencyEvent) -> Self {
+        Self {
+            message_type: event.ripple_message.message_type(),
+            from_node: event.ripple_message.sender_index(),
+            to_node: event.ripple_message.receiver_index(),
+        }
+    }
+}
+
+#[derive(Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq, Hash, Default)]
 pub struct DependencyEvent {
     pub ripple_message: RippleMessage,
 }

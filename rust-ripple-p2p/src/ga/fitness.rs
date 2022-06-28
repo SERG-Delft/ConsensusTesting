@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, RwLock};
 use std::thread;
-use genevo::genetic::{AsScalar, Fitness, FitnessFunction};
+use genevo::genetic::{AsScalar, Fitness, FitnessFunction, Genotype};
 use std::fmt::{Display};
 use std::time::{Duration as TimeDuration};
 use log::debug;
@@ -32,7 +32,7 @@ pub trait ExtendedFitness: Fitness + AsScalar + Clone + Send + Sync + Display {
 
 /// Fitness function communicates with scheduler handler for calculating and storing fitness of solutions.
 #[derive(Clone, Debug)]
-pub struct FitnessCalculation<T, G> where T: ExtendedFitness + Clone, G: ExtendedGenotype {
+pub struct FitnessCalculation<T, G> where T: ExtendedFitness + Clone, G: Genotype {
     pub(crate) fitness_values: Arc<RwLock<HashMap<G, T>>>,
     pub(crate) sender: Sender<G>,
 }

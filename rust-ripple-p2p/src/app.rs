@@ -118,7 +118,7 @@ impl App {
         }
 
         // Start GA and scheduler
-        let scheduler_type = SchedulerType::Priority;
+        let scheduler_type = SchedulerType::Delay;
         match scheduler_type {
             SchedulerType::Priority => {
                 let (ga_scheduler_sender, ga_scheduler_receiver) = std::sync::mpsc::channel();
