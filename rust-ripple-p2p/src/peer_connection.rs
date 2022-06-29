@@ -1,5 +1,5 @@
 use log::*;
-use std::net::SocketAddr;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use bytes::{Buf, BytesMut};
 use openssl::ssl::{Ssl, SslContext, SslMethod};
 use secp256k1::{Message as CryptoMessage, Secp256k1, SecretKey};
@@ -37,8 +37,18 @@ impl PeerConnection {
     }
 
     /// Create SSLStream to the validator at address using the identity of the key pair
-    async fn connect_to_peer(address: SocketAddr, private_key: &str, public_key: &str) -> SslStream<TcpStream> {
-        let stream = match TcpStream::connect(address).await {
+    async fn connect_to_peer(
+        address: SocketAddr,
+        private_key: &str,
+        public_key: &str,
+        peer1: usize,
+        peer2: usize,
+    ) -> SslStream<TcpStream> {
+        let proxy_address = SocketAddr::new(
+            IpAddr::from(Ipv4Addr::LOCALHOST),
+            (60000 + 10 * peer2 + peer1) as u16,
+        );
+        let stream = match TcpStream::connect(proxy_address).await {
             Ok(tcp_stream) => tcp_stream,
             Err(e) => panic!("{}", e)
         };
@@ -163,8 +173,20 @@ impl PeerConnection {
     ) -> (JoinHandle<()>, JoinHandle<()>) {
         info!("Thread {:?} has started", self.name);
         // Connect to the two validators using each other's identity
-        let ssl_stream1 = Self::connect_to_peer(self.address1, self.private_key2.as_str(), self.public_key2.as_str()).await;
-        let ssl_stream2 = Self::connect_to_peer(self.address2, self.private_key1.as_str(), self.public_key1.as_str()).await;
+        let ssl_stream1 = Self::connect_to_peer(
+            self.address1,
+            self.private_key2.as_str(),
+            self.public_key2.as_str(),
+            peer1,
+            peer2
+        ).await;
+        let ssl_stream2 = Self::connect_to_peer(
+            self.address2,
+            self.private_key1.as_str(),
+            self.public_key1.as_str(),
+            peer2,
+            peer1
+        ).await;
 
         let peer1_clone = peer1.clone();
         let peer2_clone = peer2.clone();

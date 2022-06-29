@@ -1,8 +1,13 @@
 use std::fmt::{Debug, Display, Formatter};
+use byteorder::{BigEndian, ByteOrder};
 use openssl::sha::sha256;
 use crate::protos::ripple::{TMManifest, TMPing, TMCluster, TMEndpoints, TMTransaction, TMGetLedger, TMLedgerData, TMProposeSet, TMStatusChange, TMHaveTransactionSet, TMValidation, TMGetObjectByHash, TMGetShardInfo, TMShardInfo, TMGetPeerShardInfo, TMPeerShardInfo, TMValidatorList};
 use serde_json;
 // use crate::deserialization::{deserialize_validation};
+
+pub fn from_bytes(bytes: &[u8]) -> RippleMessageObject {
+    invoke_protocol_message(BigEndian::read_u16(&bytes[4..6]), &bytes[6..])
+}
 
 /// Deserialize message
 pub fn invoke_protocol_message(message_type: u16, payload: &[u8]) -> RippleMessageObject {

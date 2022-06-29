@@ -1,20 +1,18 @@
 use std::collections::HashMap;
-use std::net::{SocketAddr, Ipv4Addr, IpAddr};
-use std::thread;
-use std::thread::sleep;
-use std::time::Duration;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
-use log::*;
 use itertools::Itertools;
-use crate::ByzzFuzz;
+use log::*;
 
-use super::{EmptyResult};
-use crate::client::{Client};
-use crate::collector::{Collector};
+use crate::ByzzFuzz;
+use crate::client::Client;
+use crate::collector::Collector;
 use crate::container_manager::NodeKeys;
 use crate::peer_connection::PeerConnection;
 use crate::scheduler::{PeerChannel, Scheduler};
+use crate::toxiproxy::ToxiproxyClient;
 
+use super::EmptyResult;
 
 const _NODE_PRIVATE_KEY: &str = "e55dc8f3741ac9668dbe858409e5d64f5ce88380f7228eccfe82b92b2c7848ba";
 const _NODE_PUBLIC_KEY_BASE58: &str = "n9KAa2zVWjPHgfzsE3iZ8HAbzJtPrnoh4H2M2HgE7dfqtvyEb1KJ";
@@ -36,13 +34,13 @@ pub struct App {
     peers: u16,
     only_subscribe: bool,
     node_keys: Vec<NodeKeys>,
-    byzz_fuzz: ByzzFuzz,
+    toxiproxy: ToxiproxyClient,
 }
 
 impl App {
     pub fn new(peers: u16, only_subscribe: bool, node_keys: Vec<NodeKeys>) -> Self {
-        let byzz_fuzz = ByzzFuzz::new(7, 2, 6);
-        App { peers, only_subscribe, node_keys, byzz_fuzz }
+        let toxiproxy = ToxiproxyClient::new("http://localhost:8474/");
+        App { peers, only_subscribe, node_keys, toxiproxy }
     }
 
     /// Start proxy
@@ -51,19 +49,18 @@ impl App {
     /// Every p2p connection has two senders and receivers for relaying messages to and from the scheduler
     /// Every message gets relayed by the scheduler
     /// A separate thread is created for each node which handles websocket client requests
-    pub async fn start(&self) -> EmptyResult {
+    pub async fn start(&self, byzz_fuzz: ByzzFuzz) -> EmptyResult {
         let mut tokio_tasks = vec![];
-        let mut threads = vec![];
         let (collector_tx, collector_rx) = std::sync::mpsc::channel();
         let (_control_tx, control_rx) = std::sync::mpsc::channel();
         let (subscription_tx, subscription_rx) = std::sync::mpsc::channel();
         let (collector_state_tx, scheduler_state_rx) = std::sync::mpsc::channel();
         let peer = self.peers.clone();
         // Start the collector which writes output to files
-        let collector_task = thread::spawn(move || {
+        let collector_task = tokio::spawn(async move {
             Collector::new(peer, collector_rx, subscription_rx, control_rx, collector_state_tx).start();
         });
-        threads.push(collector_task);
+        tokio_tasks.push(collector_task);
 
         // Start p2p connections
         if !self.only_subscribe {
@@ -73,7 +70,9 @@ impl App {
             let mut scheduler_peer_channels = HashMap::new();
             let (scheduler_sender, scheduler_receiver) = tokio::sync::mpsc::channel(32);
 
-            for pair in (0..peer).into_iter().combinations(2).into_iter() {
+            let peer_pairs = (0..peer).into_iter().combinations(2).collect_vec();
+
+            for pair in &peer_pairs {
                 let i = pair[0] as usize;
                 let j = pair[1] as usize;
                 let tx_peer_i = scheduler_sender.clone();
@@ -88,13 +87,18 @@ impl App {
                 scheduler_peer_channels.entry(j).or_insert(HashMap::new()).insert(i, PeerChannel::new(tx_scheduler_j));
             }
 
-            let scheduler = Scheduler::new(scheduler_peer_channels, collector_tx, self.node_keys.clone());
-            let scheduler_thread = thread::spawn(move || {
-                scheduler.start(scheduler_receiver, scheduler_state_rx);
+            let scheduler = Scheduler::new(
+                scheduler_peer_channels, collector_tx, self.node_keys.clone(),
+                byzz_fuzz,
+            );
+            let scheduler_thread = tokio::spawn(async move {
+                scheduler.start(scheduler_receiver, scheduler_state_rx).await;
             });
-            threads.push(scheduler_thread);
+            tokio_tasks.push(scheduler_thread);
 
-            for pair in (0..peer).into_iter().combinations(2).into_iter() {
+            self.toxiproxy.populate(&peer_pairs).await;
+
+            for pair in &peer_pairs {
 
                 let i = pair[0] as usize;
                 let j = pair[1] as usize;
@@ -163,9 +167,6 @@ impl App {
 
         for tokio_task in tokio_tasks {
             tokio_task.await.expect("task failed");
-        }
-        for thread in threads {
-            thread.join().unwrap();
         }
         Ok(())
     }

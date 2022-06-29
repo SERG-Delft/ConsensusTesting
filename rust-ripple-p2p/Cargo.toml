@@ -48,3 +48,4 @@ nom = "7.1.1"
 lazy_static = "1.4.0"
 rand = "0.8.5"
 set-partitions = "1.0.1"
+reqwest = { version = "0.11", features = ["json"] }

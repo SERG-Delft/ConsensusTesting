@@ -18,6 +18,7 @@ mod peer_connection;
 mod deserialization;
 mod container_manager;
 mod byzzfuzz;
+mod toxiproxy;
 
 type AnyError = Box<dyn std::error::Error + Send + Sync>;
 type AnyResult<T> = Result<T, AnyError>;
@@ -78,9 +79,11 @@ fn main() {
         println!("node key {}", k.validation_public_key);
     }
 
+    let byzz_fuzz = ByzzFuzz::new(7, 500, 6);
+    println!("{:?}", &byzz_fuzz);
     let app = app::App::new(n as u16, only_subscribe, node_keys);
 
-    if let Err(error) = runtime.block_on(app.start()) {
+    if let Err(error) = runtime.block_on(app.start(byzz_fuzz)) {
         error!("Error: {}", error);
         std::process::exit(1);
     }
