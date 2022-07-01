@@ -1,5 +1,5 @@
 use itertools::Itertools;
-use reqwest::{Client as HttpClient, Response, Url};
+use reqwest::{Client, Url};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
@@ -7,14 +7,14 @@ static BASE_PORT: usize = 51235;
 
 #[derive(Debug)]
 pub struct ToxiproxyClient {
-    client: HttpClient,
+    client: Client,
     url: Url,
 }
 
 impl ToxiproxyClient {
     pub fn new(url: &str) -> Self {
         Self {
-            client: HttpClient::new(),
+            client: Client::new(),
             url: Url::parse(url).unwrap(),
         }
     }

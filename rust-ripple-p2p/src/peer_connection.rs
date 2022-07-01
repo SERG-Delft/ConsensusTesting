@@ -222,11 +222,12 @@ impl PeerConnection {
         mut receiver: tokio::sync::mpsc::Receiver<Vec<u8>>,
     ) {
         let (mut ssl_reader, mut ssl_writer) = tokio::io::split(ssl_stream);
-        tokio::spawn(async move {
+        let task = tokio::spawn(async move {
             loop {
                 match receiver.recv().await {
                     Some(message) => ssl_writer.write_all(message.as_slice()).await.expect("Unable to write to ssl stream"),
-                    None => panic!("Scheduler sender failed") // Break when there are no more messages
+                    None => break
+                    // None => panic!("Scheduler sender failed") // Break when there are no more messages
                 }
             }
         });
@@ -273,5 +274,6 @@ impl PeerConnection {
 
             buf.advance(payload_size + 6);
         }
+        task.abort();
     }
 }

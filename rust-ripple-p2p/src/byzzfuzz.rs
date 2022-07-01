@@ -23,7 +23,7 @@ pub struct ByzzFuzz {
     current_round: usize,
     applied_partitions: bool,
     network_faults: HashMap<usize, Vec<HashSet<u8>>>,
-    toxiproxy: Arc<ToxiproxyClient>,
+    pub toxiproxy: Arc<ToxiproxyClient>,
 }
 
 impl ByzzFuzz {
@@ -47,7 +47,7 @@ impl ByzzFuzz {
     }
 
     pub async fn on_message(&mut self, event: Event) -> Event {
-        let mut message = from_bytes(&event.message);
+        let message = from_bytes(&event.message);
         self.update_round(&message).await;
         self.apply_partition().await;
         event

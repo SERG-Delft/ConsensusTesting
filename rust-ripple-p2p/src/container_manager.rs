@@ -10,13 +10,13 @@ use log::debug;
 use rayon::prelude::*;
 use serde::{Serialize, Deserialize};
 
-pub fn start_docker_containers(peers: usize, unls: Vec<Vec<usize>>) -> Vec<NodeKeys> {
+pub fn start_docker_containers(peers: usize, unls: &Vec<Vec<usize>>) -> Vec<NodeKeys> {
     remove_containers("validator");
     let node_keys = get_node_keys(peers);
     create_configs(peers, &node_keys);
     configure_unls(unls, &node_keys);
     run_nodes(peers);
-    thread::sleep(Duration::from_secs(2));
+    thread::sleep(Duration::from_secs(5));
     node_keys
 }
 
@@ -92,7 +92,7 @@ fn create_configs(peers: usize, keys: &Vec<NodeKeys>) {
     });
 }
 
-fn configure_unls(unls: Vec<Vec<usize>>, keys: &Vec<NodeKeys>) {
+fn configure_unls(unls: &Vec<Vec<usize>>, keys: &Vec<NodeKeys>) {
     (0..unls.len()).into_par_iter().for_each(|i| {
         let path = format!("..\\config\\validator_{}\\validators.txt", i);
         let mut validators = "[validators]\n".to_owned();

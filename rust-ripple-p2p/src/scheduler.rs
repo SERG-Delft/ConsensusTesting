@@ -14,6 +14,7 @@ use openssl::sha::sha512;
 use protobuf::Message;
 use rippled_binary_codec::serialize::serialize_tx;
 use secp256k1::{PublicKey, Secp256k1, SecretKey};
+use tokio::sync::broadcast::{Receiver, Sender};
 use tokio::sync::mpsc::{Receiver as TokioReceiver, Sender as TokioSender};
 use xrpl::core::keypairs::utils::sha512_first_half;
 use xrpl::indexmap::serde_seq::deserialize;
@@ -37,12 +38,17 @@ pub struct Scheduler {
     node_keys: Vec<NodeKeys>,
     mutated_ledger_hash: Vec<u8>,
     byzz_fuzz: ByzzFuzz,
+    message_count: usize,
+    shutdown_tx: Sender<()>,
+    shutdown_rx: Receiver<()>,
 }
 
 impl Scheduler {
     pub fn new(
         p2p_connections: P2PConnections, collector_sender: STDSender<Box<RippleMessage>>, node_keys: Vec<NodeKeys>,
-        byzz_fuzz: ByzzFuzz
+        byzz_fuzz: ByzzFuzz,
+        mut shutdown_tx: Sender<()>,
+        shutdown_rx: Receiver<()>,
     ) -> Self {
         Scheduler {
             p2p_connections,
@@ -52,25 +58,45 @@ impl Scheduler {
             node_keys,
             mutated_ledger_hash: hex::decode("0000000000000000000000000000000000000000000000000000000000000000").unwrap(),
             byzz_fuzz,
+            message_count: 0,
+            shutdown_tx,
+            shutdown_rx,
         }
     }
 
-    pub async fn start(mut self, mut receiver: TokioReceiver<Event>, collector_receiver: STDReceiver<SubscriptionObject>) {
+    pub async fn start(
+        mut self,
+        mut receiver: TokioReceiver<Event>,
+        collector_receiver: STDReceiver<SubscriptionObject>
+    ) {
         let stable_clone = self.stable.clone();
         let latest_validated_ledger_clone = self.latest_validated_ledger.clone();
-        tokio::spawn(async move {
+        let task = tokio::spawn(async move {
             Self::listen_to_collector(collector_receiver, stable_clone, latest_validated_ledger_clone)
         });
         loop {
-            match receiver.recv().await {
-                Some(event) => self.execute_event(event).await,
-                None => error!("Peer senders failed")
+            tokio::select! {
+                event_option = receiver.recv() => match event_option {
+                    Some(event) => if !self.execute_event(event).await {
+                        self.shutdown_tx.send(()).unwrap();
+                    },
+                    None => error!("Peer senders failed")
+                },
+                _ = self.shutdown_rx.recv() => {
+                    break;
+                }
             }
         }
+        task.await.unwrap();
     }
 
-    async fn execute_event(&mut self, mut event: Event) {
+    async fn execute_event(&mut self, mut event: Event) -> bool {
         event = self.byzz_fuzz.on_message(event).await;
+        self.message_count += 1;
+        // println!("messages {}", self.message_count);
+        if self.message_count >= 10_000 {
+            return false;
+        }
         // this code should go in the byzzfuzz on_message method
         // let mut rmo: RippleMessageObject = invoke_protocol_message(BigEndian::read_u16(&event.message[4..6]), &event.message[6..]);
         // let mutated_unl: Vec<usize> = vec![4, 5, 6];
@@ -181,6 +207,7 @@ impl Scheduler {
         let collector_message = RippleMessage::new(event.from.to_string(),
                                                    event.to.to_string(), Utc::now(), invoke_protocol_message(BigEndian::read_u16(&event.message[4..6]), &event.message[6..]));
         self.collector_sender.send(collector_message).expect("Collector receiver failed");
+        true
     }
 
     #[allow(unused)]
@@ -188,7 +215,11 @@ impl Scheduler {
         Event { from, to, message }
     }
 
-    fn listen_to_collector(collector_receiver: STDReceiver<SubscriptionObject>, stable: Arc<Mutex<bool>>, latest_validated_ledger: Arc<Mutex<u32>>) {
+    fn listen_to_collector(
+        collector_receiver: STDReceiver<SubscriptionObject>,
+        stable: Arc<Mutex<bool>>,
+        latest_validated_ledger: Arc<Mutex<u32>>,
+    ) {
         let mut set_stable = false;
         let mut local_latest_validated_ledger = 0;
         loop {
@@ -208,7 +239,9 @@ impl Scheduler {
                         _ => {}
                     }
                 }
-                Err(_) => {}
+                Err(_) => {
+                    break;
+                }
             }
         }
     }

@@ -1,4 +1,3 @@
-use protobuf_codegen_pure;
 use protobuf_codegen_pure::Customize;
 
 fn main() {
