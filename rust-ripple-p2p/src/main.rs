@@ -41,13 +41,22 @@ fn main() {
     env_logger::Builder::new().parse_default_env().init();
 
     let bug_unls: Vec<Vec<usize>> = vec![
-        vec![0, 1, 2, 3, 4], // 0
-        vec![0, 1, 2, 3, 4], // 1
-        vec![0, 1, 2, 3, 4], // 2
-        vec![0, 1, 2, 3, 4], // 3
-        vec![2, 3, 4, 5, 6], // 4
-        vec![2, 3, 4, 5, 6], // 5
-        vec![2, 3, 4, 5, 6], // 6
+        // vec![0, 1, 2, 3, 4], // 0
+        // vec![0, 1, 2, 3, 4], // 1
+        // vec![0, 1, 2, 3, 4], // 2
+        // vec![0, 1, 2, 3, 4], // 3
+        // vec![2, 3, 4, 5, 6], // 4
+        // vec![2, 3, 4, 5, 6], // 5
+        // vec![2, 3, 4, 5, 6], // 6
+
+
+        vec![0, 1, 2, 3, 4, 5], // 0
+        vec![0, 1, 2, 3, 4, 5, 6], // 1
+        vec![0, 1, 2, 3, 4, 5, 6], // 2
+        vec![0, 1, 2, 3, 4, 5, 6], // 3
+        vec![0, 1, 2, 3, 4, 5, 6], // 4
+        vec![0, 1, 2, 3, 4, 5, 6], // 5
+        vec![1, 2, 3, 4, 5, 6], // 6
 
         // // config 1.5
         // vec![0, 1, 2, 3, 7], // 0
@@ -85,7 +94,7 @@ fn main() {
             println!("node key {}", k.validation_public_key);
         }
 
-        let byzz_fuzz = ByzzFuzz::new(7, 500, 6);
+        let byzz_fuzz = ByzzFuzz::new(7, 10, 10, 10, node_keys.clone());
         println!("{:?}", &byzz_fuzz);
         let app = app::App::new(n as u16, only_subscribe, node_keys);
 

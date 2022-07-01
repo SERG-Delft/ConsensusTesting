@@ -94,7 +94,7 @@ impl App {
         byzz_fuzz.toxiproxy.populate(&peer_pairs).await;
         let mut shutdown_rx = shutdown_tx.subscribe();
         let scheduler = Scheduler::new(
-            scheduler_peer_channels, collector_tx, self.node_keys.clone(),
+            scheduler_peer_channels, collector_tx,
             byzz_fuzz,
             shutdown_tx,
             shutdown_rx.resubscribe(),
