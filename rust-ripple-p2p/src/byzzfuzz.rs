@@ -80,6 +80,9 @@ impl ByzzFuzz {
 
     pub async fn on_message(&mut self, mut event: Event) -> Event {
         let mut message = from_bytes(&event.message);
+        // Check the agreement property
+        let result = self.check_agreement_property(&message).await;
+        println!("{}", result);
         self.update_round(&message).await;
         self.apply_partition().await;
         if self.process_faults.contains_key(&self.current_round)
