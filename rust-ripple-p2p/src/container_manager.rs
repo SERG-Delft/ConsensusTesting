@@ -55,13 +55,13 @@ fn get_node_keys(n: usize) -> Vec<NodeKeys> {
         start_node_with_options("key_generator", 0, false);
     }
     let keys: Vec<NodeKeys> = (0..n).into_par_iter().map(|i| {
-        let path = format!("..\\config\\validator_{}", i);
-        if Path::new(&format!("{}\\keys.json", path)).exists() {
-            let keys: NodeKeys = serde_json::from_str(&*read_to_string(&format!("{}\\keys.json", path)).unwrap()).unwrap();
+        let path = format!("../config/validator_{}", i);
+        if Path::new(&format!("{}/keys.json", path)).exists() {
+            let keys: NodeKeys = serde_json::from_str(&*read_to_string(&format!("{}/keys.json", path)).unwrap()).unwrap();
             keys
         } else {
             let keys = acquire_keys();
-            File::create(&format!("{}\\keys.json", path)).unwrap().write(serde_json::to_string(&keys).unwrap().as_bytes()).unwrap();
+            File::create(&format!("{}/keys.json", path)).unwrap().write(serde_json::to_string(&keys).unwrap().as_bytes()).unwrap();
             keys
         }
     }).collect();
@@ -81,20 +81,20 @@ fn acquire_keys() -> NodeKeys {
 }
 
 fn create_configs(peers: usize, keys: &Vec<NodeKeys>) {
-    let base = read_to_string("..\\config\\rippled.cfg").unwrap();
+    let base = read_to_string("../config/rippled.cfg").unwrap();
     (0..peers).into_par_iter().for_each(|i| {
-        let path = format!("..\\config\\validator_{}", i);
+        let path = format!("../config/validator_{}", i);
         fs::create_dir_all(&path).unwrap();
-        fs::copy("..\\config\\ledger.json", format!("{}\\ledger.json", path)).unwrap();
+        fs::copy("../config/ledger.json", format!("{}/ledger.json", path)).unwrap();
         let config = base.replace("{validation_seed}", &keys[i].validation_seed);
-        File::create(&format!("{}\\rippled.cfg", path)).unwrap().write(config.as_bytes()).unwrap();
+        File::create(&format!("{}/rippled.cfg", path)).unwrap().write(config.as_bytes()).unwrap();
         debug!("created config setup for validator {}", i);
     });
 }
 
 fn configure_unls(unls: &Vec<Vec<usize>>, keys: &Vec<NodeKeys>) {
     (0..unls.len()).into_par_iter().for_each(|i| {
-        let path = format!("..\\config\\validator_{}\\validators.txt", i);
+        let path = format!("../config/validator_{}/validators.txt", i);
         let mut validators = "[validators]\n".to_owned();
         for node in 0..unls.len() {
             if i != node && unls[i].contains(&node) {
