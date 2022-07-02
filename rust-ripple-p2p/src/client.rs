@@ -10,7 +10,7 @@ use log::*;
 const _NODE_PRIVATE_KEY: &str = "e55dc8f3741ac9668dbe858409e5d64f5ce88380f7228eccfe82b92b2c7848ba";
 const _NODE_PUBLIC_KEY_BASE58: &str = "n9KAa2zVWjPHgfzsE3iZ8HAbzJtPrnoh4H2M2HgE7dfqtvyEb1KJ";
 // Account and its keys to send transaction to
-const _ACCOUNT_ID: &str = "rE4DHSdcXafD7DkpJuFCAvc3CvsgXHjmEJ";
+pub const _ACCOUNT_ID: &str = "rE4DHSdcXafD7DkpJuFCAvc3CvsgXHjmEJ";
 const _MASTER_KEY: &str = "BUSY MARS SLED SNUG OBOE REID SUNK NEW GYM LAD LICE FEAT";
 const _MASTER_SEED: &str = "saNSJMEBKisBr6phJtGXUcV85RBZ3";
 const _MASTER_SEED_HEX: &str = "FDDE6A91607445E59C6F7CF07AF7B661";
@@ -18,8 +18,8 @@ const _PUBLIC_KEY_HEX: &str = "03137FF01C82A1CF507CC243EBF629A99F2256FA43BCB7A45
 const _PUBLIC_KEY: &str = "aBQsqGF1HEduKrHrSVzNE5yeCTJTGgrsKgyjNLgabS2Rkq7CgZiq";
 
 // Genesis account with initial supply of XRP
-const _GENESIS_SEED: &str = "snoPBrXtMeMyMHUVTgbuqAfg1SUTb";
-const _GENESIS_ADDRESS: &str = "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh";
+pub const _GENESIS_SEED: &str = "snoPBrXtMeMyMHUVTgbuqAfg1SUTb";
+pub const _GENESIS_ADDRESS: &str = "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh";
 
 const _AMOUNT: u32 = 2u32.pow(31);
 
@@ -92,13 +92,13 @@ impl Client<'static> {
                                     SubscriptionObject::ValidatedLedger(vl) => {
                                         if vl.ledger_index == 5 && is_byzantine {
                                             // thread::sleep(Duration::from_millis(450));
-                                            Client::sign_and_submit(
-                                                &sender_clone,
-                                                format!("Ripple TXN").as_str(),
-                                                &Client::create_payment_transaction(200000000, _ACCOUNT_ID, _GENESIS_ADDRESS),
-                                                _GENESIS_SEED
-                                            );
-                                            println!("submitted");
+                                            // Client::sign_and_submit(
+                                            //     &sender_clone,
+                                            //     format!("Ripple TXN").as_str(),
+                                            //     &Client::create_payment_transaction(200000000, _ACCOUNT_ID, _GENESIS_ADDRESS),
+                                            //     _GENESIS_SEED
+                                            // );
+                                            // println!("submitted");
                                         }
                                     }
                                     _ => ()

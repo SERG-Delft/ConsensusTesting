@@ -2,9 +2,11 @@ use bs58::Alphabet;
 use itertools::Itertools;
 use nom::AsBytes;
 use protobuf::Message;
+use websocket::{Message as WsMessage};
 use std::cmp::max;
 use std::collections::{HashMap, HashSet};
 use std::iter::FromIterator;
+use std::net::TcpStream;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -16,12 +18,16 @@ use crate::scheduler::Event;
 use crate::toxiproxy::ToxiproxyClient;
 use rand::prelude::*;
 use secp256k1::{Secp256k1, SecretKey};
+use serde_json::json;
 use set_partitions::{set_partitions, ArrayVecSetPartition, HashSubsets};
 use tokio::time::sleep;
+use websocket::ClientBuilder;
+use websocket::receiver::Reader;
+use websocket::sender::Writer;
 use xrpl::core::keypairs::utils::sha512_first_half;
 use RippleMessageObject::{TMProposeSet, TMStatusChange, TMValidation};
+use crate::client::Client;
 
-#[derive(Debug)]
 pub struct ByzzFuzz {
     n: usize, // number of processes
     c: usize, // bound on the #rounds with process faults
@@ -36,6 +42,7 @@ pub struct ByzzFuzz {
     mutated_ledger_hash: Vec<u8>,
     node_keys: Vec<NodeKeys>,
     pub sequences_hashes: HashMap<usize, String>,
+    byzantine_sender: Writer<TcpStream>,
 }
 
 impl ByzzFuzz {
@@ -43,7 +50,7 @@ impl ByzzFuzz {
         assert_eq!(n, 7);
         let mut process_faults = HashMap::with_capacity(c);
         (0..c).for_each(|_| {
-            let round = thread_rng().gen_range(1..=r);
+            let round = thread_rng().gen_range(2..r + 2);
             let sublist = if thread_rng().gen_bool(0.5) {
                 (0..3)
             } else {
@@ -65,11 +72,16 @@ impl ByzzFuzz {
         });
         let mut network_faults = HashMap::with_capacity(d);
         (0..d)
-            .map(|_| NetworkFault::sample_network_fault(n, r))
+            .map(|_| NetworkFault::sample_network_fault(n, r)) //TODO network faults right time
             .for_each(|fault| {
                 network_faults.insert(fault.round, fault.partition);
             });
         let mut sequences_hashes: HashMap<usize, String> = HashMap::new();
+        let client = ClientBuilder::new("ws://127.0.0.1:6008")
+            .unwrap()
+            .connect_insecure()
+            .unwrap();
+        let (_, sender) = client.split().unwrap();
         Self {
             n,
             c,
@@ -87,6 +99,7 @@ impl ByzzFuzz {
             .unwrap(),
             node_keys,
             sequences_hashes,
+            byzantine_sender: sender,
         }
     }
 
@@ -141,6 +154,16 @@ impl ByzzFuzz {
                 println!("round {}", round);
                 self.current_round = round;
                 self.applied_partitions = false;
+                if self.current_round == 2 {
+                    let json = json!({
+                        "id": "Ripple TXN",
+                        "command": "submit",
+                        "tx_json": Client::create_payment_transaction(200000000, crate::client::_ACCOUNT_ID, crate::client::_GENESIS_ADDRESS),
+                        "secret": crate::client::_GENESIS_SEED
+                    });
+                    self.byzantine_sender.send_message(&WsMessage::text(json.to_string())).unwrap();
+                    println!("submitted");
+                }
             }
         }
     }

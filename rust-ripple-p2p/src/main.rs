@@ -86,7 +86,7 @@ fn main() {
     let mut file = fs::OpenOptions::new()
         .write(true)
         .append(true) // This is needed to append to file
-        .open("results.txt")
+        .open("results2.txt")
         .unwrap();
 
     loop {
@@ -104,8 +104,8 @@ fn main() {
             println!("node key {}", k.validation_public_key);
         }
 
-        let byzz_fuzz = ByzzFuzz::new(7, 3, 0, 6, node_keys.clone());
-        println!("{:?}", &byzz_fuzz);
+        let byzz_fuzz = ByzzFuzz::new(7, 30, 0, 6, node_keys.clone());
+        println!("{:?}", &byzz_fuzz.process_faults);
         file.write_fmt(format_args!("process faults {:?}\n", &byzz_fuzz.process_faults)).expect("could not log byzzfuzz");
         file.write_fmt(format_args!("network faults {:?}\n", &byzz_fuzz.network_faults)).expect("could not log byzzfuzz");
         let app = app::App::new(n as u16, only_subscribe, node_keys);
