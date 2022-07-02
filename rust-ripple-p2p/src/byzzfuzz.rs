@@ -37,8 +37,7 @@ pub struct ByzzFuzz {
     pub toxiproxy: Arc<ToxiproxyClient>,
     mutated_ledger_hash: Vec<u8>,
     node_keys: Vec<NodeKeys>,
-    sequences_hashes: HashMap<usize, String>,
-    output_file: File
+    sequences_hashes: HashMap<usize, String>
 }
 
 impl ByzzFuzz {
@@ -69,11 +68,6 @@ impl ByzzFuzz {
                 network_faults.insert(fault.round, fault.partition);
             });
         let mut sequences_hashes: HashMap<usize, String> = HashMap::new();
-        let mut output_file = OpenOptions::new()
-            .append(true)
-            .create(true)
-            .open("checks.txt")
-            .unwrap();
         Self {
             n,
             c,
@@ -90,8 +84,7 @@ impl ByzzFuzz {
             )
             .unwrap(),
             node_keys,
-            sequences_hashes,
-            output_file
+            sequences_hashes
         }
     }
 
@@ -99,7 +92,7 @@ impl ByzzFuzz {
         let mut message = from_bytes(&event.message);
         // Check the agreement property
         let result = self.check_agreement_property(&message).await;
-        println!("{}", result);
+        println!("Validation hash is valid: {}", result);
         self.update_round(&message).await;
         self.apply_partition().await;
         if self.process_faults.contains_key(&self.current_round)
@@ -151,8 +144,6 @@ impl ByzzFuzz {
                 } else {
                     self.sequences_hashes.insert(self.current_round, validation_hash);
                 }
-                let data = "Validated hash!\n";
-                self.output_file.write_all(data.as_bytes()).expect("Unable to write data");
                 true
             }
             _ => true
