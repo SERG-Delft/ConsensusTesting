@@ -7,6 +7,8 @@ use std::iter::FromIterator;
 use std::sync::Arc;
 use std::time::Duration;
 use nom::AsBytes;
+use std::io::Write;
+use std::fs::{File, OpenOptions};
 
 use crate::deserialization::parse2;
 use crate::message_handler::{from_bytes, invoke_protocol_message, RippleMessageObject};
@@ -35,7 +37,8 @@ pub struct ByzzFuzz {
     pub toxiproxy: Arc<ToxiproxyClient>,
     mutated_ledger_hash: Vec<u8>,
     node_keys: Vec<NodeKeys>,
-    sequences_hashes: HashMap<usize, String>
+    sequences_hashes: HashMap<usize, String>,
+    output_file: File
 }
 
 impl ByzzFuzz {
@@ -66,6 +69,11 @@ impl ByzzFuzz {
                 network_faults.insert(fault.round, fault.partition);
             });
         let mut sequences_hashes: HashMap<usize, String> = HashMap::new();
+        let mut output_file = OpenOptions::new()
+            .append(true)
+            .create(true)
+            .open("checks.txt")
+            .unwrap();
         Self {
             n,
             c,
@@ -82,7 +90,8 @@ impl ByzzFuzz {
             )
             .unwrap(),
             node_keys,
-            sequences_hashes
+            sequences_hashes,
+            output_file
         }
     }
 
@@ -142,6 +151,8 @@ impl ByzzFuzz {
                 } else {
                     self.sequences_hashes.insert(self.current_round, validation_hash);
                 }
+                let data = "Validated hash!\n";
+                self.output_file.write_all(data.as_bytes()).expect("Unable to write data");
                 true
             }
             _ => true

@@ -401,3 +401,5 @@ node 5 has balance of Account not found.
 node 6 has balance of Account not found.
 process faults {2: {5, 4, 6}, 3: {5, 6, 4}}
 network faults {}
+process faults {3: {4, 5, 6}, 4: {5, 4}}
+network faults {}
