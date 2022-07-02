@@ -121,7 +121,7 @@ fn start_node_with_options(name: &str, offset: usize, expose_to_network: bool) {
         .arg("run")
         .args(["-dit", "--name", name])
         .args(["--mount", &format!("type=bind,source={}/../config/{},target=/.config/ripple", env::current_dir().unwrap().to_str().unwrap(), name)])
-        .args(["--mount", &format!("type=bind,source={}/../logs/{},target=/var/log/rippled", env::current_dir().unwrap().to_str().unwrap(), name)]);
+        // .args(["--mount", &format!("type=bind,source={}/../logs/{},target=/var/log/rippled", env::current_dir().unwrap().to_str().unwrap(), name)]);
     if expose_to_network {
         command = command
             .args(["--net", "ripple-net"])
