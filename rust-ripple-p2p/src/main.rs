@@ -92,6 +92,7 @@ fn main() {
         let runtime = tokio::runtime::Runtime::new().unwrap();
 
         let (shutdown_tx, mut shutdown_rx) = broadcast::channel(16);
+        let mut results = shutdown_rx.resubscribe();
 
         let mut toxiproxy = Command::new(
             r"C:\Users\levin\Downloads\toxiproxy-server-windows-amd64.exe"
@@ -115,10 +116,13 @@ fn main() {
             error!("Error: {}", error);
         }
 
+        // let check = Command::new("node").arg(r"C:\Users\levin\git\xrp\index.js").output().unwrap();
+        let (map, agreed, reason) = runtime.block_on(async {
+            results.recv().await.unwrap()
+        });
+        file.write_all(format!("{:?}\n{:?}\nreason: {}\n", map, agreed, reason).as_bytes()).expect("could not write");
+
         toxiproxy.kill().unwrap();
         runtime.shutdown_timeout(Duration::from_millis(100));
-
-        let check = Command::new("node").arg(r"C:\Users\levin\git\xrp\index.js").output().unwrap();
-        file.write_all(check.stdout.as_slice()).expect("could not write");
     }
 }

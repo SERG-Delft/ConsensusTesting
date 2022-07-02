@@ -1,5 +1,5 @@
 use bs58::Alphabet;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
 use std::sync::mpsc::{Receiver as STDReceiver, Sender as STDSender};
 use std::sync::{Arc, Mutex};
@@ -17,10 +17,11 @@ use rippled_binary_codec::serialize::serialize_tx;
 use secp256k1::{PublicKey, Secp256k1, SecretKey};
 use tokio::sync::broadcast::{Receiver, Sender};
 use tokio::sync::mpsc::{Receiver as TokioReceiver, Sender as TokioSender};
+use tokio::time;
 use xrpl::core::keypairs::utils::sha512_first_half;
 use xrpl::indexmap::serde_seq::deserialize;
 
-use crate::client::SubscriptionObject;
+use crate::client::{PeerSubscriptionObject, SubscriptionObject};
 use crate::collector::RippleMessage;
 use crate::container_manager::NodeKeys;
 use crate::deserialization::{parse2, parse_canonical_binary_format};
@@ -39,8 +40,8 @@ pub struct Scheduler {
     latest_validated_ledger: Arc<Mutex<u32>>,
     byzz_fuzz: ByzzFuzz,
     message_count: usize,
-    shutdown_tx: Sender<()>,
-    shutdown_rx: Receiver<()>,
+    shutdown_tx: Sender<(HashMap<usize, String>, usize, String)>,
+    shutdown_rx: Receiver<(HashMap<usize, String>, usize, String)>,
 }
 
 impl Scheduler {
@@ -48,8 +49,8 @@ impl Scheduler {
         p2p_connections: P2PConnections,
         collector_sender: STDSender<Box<RippleMessage>>,
         byzz_fuzz: ByzzFuzz,
-        mut shutdown_tx: Sender<()>,
-        shutdown_rx: Receiver<()>,
+        mut shutdown_tx: Sender<(HashMap<usize, String>, usize, String)>,
+        shutdown_rx: Receiver<(HashMap<usize, String>, usize, String)>,
     ) -> Self {
         Scheduler {
             p2p_connections,
@@ -66,22 +67,36 @@ impl Scheduler {
     pub async fn start(
         mut self,
         mut receiver: TokioReceiver<Event>,
-        collector_receiver: STDReceiver<SubscriptionObject>,
+        collector_receiver: STDReceiver<PeerSubscriptionObject>,
     ) {
         let stable_clone = self.stable.clone();
         let latest_validated_ledger_clone = self.latest_validated_ledger.clone();
+        let transactions = Arc::new(Mutex::new(HashSet::new()));
+        let collector_txs = transactions.clone();
+        let disagree_message = Arc::new(Mutex::new(String::new()));
+        let mutex_sequences_hashes = Arc::new(Mutex::new(HashMap::new()));
+        let message_clone = disagree_message.clone();
+        let mutex_clone = mutex_sequences_hashes.clone();
         let task = tokio::spawn(async move {
             Self::listen_to_collector(
                 collector_receiver,
                 stable_clone,
                 latest_validated_ledger_clone,
+                collector_txs,
+                mutex_clone,
+                message_clone,
             )
         });
         loop {
             tokio::select! {
                 event_option = receiver.recv() => match event_option {
-                    Some(event) => if !self.execute_event(event).await {
-                        self.shutdown_tx.send(()).unwrap();
+                    Some(event) => {
+                        let (keep_going, reason) = self.execute_event(event).await;
+                        let committed = transactions.lock().unwrap().len();
+                        let message = disagree_message.lock().unwrap();
+                        if !keep_going || committed == 7 || !message.is_empty() {
+                            self.shutdown_tx.send((mutex_sequences_hashes.lock().unwrap().clone(), committed, if !message.is_empty() { message.clone() } else {if committed == 7 { "all committed".to_string() } else { reason.to_string() }})).unwrap();
+                        }
                     },
                     None => error!("Peer senders failed")
                 },
@@ -93,11 +108,11 @@ impl Scheduler {
         task.await.unwrap();
     }
 
-    async fn execute_event(&mut self, mut event: Event) -> bool {
+    async fn execute_event(&mut self, mut event: Event) -> (bool, &'static str) {
         event = self.byzz_fuzz.on_message(event).await;
         self.message_count += 1;
         if self.message_count >= 10_000 {
-            return false;
+            return (false, "timeout_messages");
         }
         self.p2p_connections
             .get(&event.to)
@@ -118,7 +133,7 @@ impl Scheduler {
         self.collector_sender
             .send(collector_message)
             .expect("Collector receiver failed");
-        true
+        (true, "everything good")
     }
 
     #[allow(unused)]
@@ -127,16 +142,40 @@ impl Scheduler {
     }
 
     fn listen_to_collector(
-        collector_receiver: STDReceiver<SubscriptionObject>,
+        collector_receiver: STDReceiver<PeerSubscriptionObject>,
         stable: Arc<Mutex<bool>>,
         latest_validated_ledger: Arc<Mutex<u32>>,
+        mut transactions: Arc<Mutex<HashSet<u16>>>,
+        mut mutex_sequences_hashes: Arc<Mutex<HashMap<usize, String>>>,
+        mut mutex_disagree_messages: Arc<Mutex<String>>,
     ) {
         let mut set_stable = false;
         let mut local_latest_validated_ledger = 0;
         loop {
             match collector_receiver.recv() {
-                Ok(subscription_object) => match subscription_object {
+                Ok(subscription_object) => match subscription_object.subscription_object {
                     SubscriptionObject::ValidatedLedger(ledger) => {
+                        if ledger.txn_count == 1 {
+                            transactions
+                                .lock()
+                                .unwrap()
+                                .insert(subscription_object.peer);
+                            println!("transactions {:?}", transactions);
+                        }
+
+                        let sequence = ledger.ledger_index as usize;
+
+                        let mut sequences_hashes = mutex_sequences_hashes.lock().unwrap();
+
+                        if sequences_hashes.contains_key(&sequence) {
+                            let sequence_hash = sequences_hashes.get(&sequence).unwrap();
+                            if !sequence_hash.eq(&ledger.ledger_hash) {
+                                mutex_disagree_messages.lock().unwrap().push_str(format!("node {} validated {} whereas we stored {}", subscription_object.peer, ledger.ledger_hash, sequence_hash).as_str())
+                            }
+                        } else {
+                            sequences_hashes.insert(sequence, ledger.ledger_hash);
+                        }
+
                         if !set_stable {
                             *stable.lock().unwrap() = true;
                             set_stable = true;

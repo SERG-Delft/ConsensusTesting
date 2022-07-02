@@ -1,15 +1,14 @@
 use bs58::Alphabet;
 use itertools::Itertools;
+use nom::AsBytes;
 use protobuf::Message;
 use std::cmp::max;
 use std::collections::{HashMap, HashSet};
 use std::iter::FromIterator;
 use std::sync::Arc;
 use std::time::Duration;
-use nom::AsBytes;
-use std::io::Write;
-use std::fs::{File, OpenOptions};
 
+use crate::container_manager::NodeKeys;
 use crate::deserialization::parse2;
 use crate::message_handler::{from_bytes, invoke_protocol_message, RippleMessageObject};
 use crate::protos::ripple::{NodeEvent, TMTransaction};
@@ -21,7 +20,6 @@ use set_partitions::{set_partitions, ArrayVecSetPartition, HashSubsets};
 use tokio::time::sleep;
 use xrpl::core::keypairs::utils::sha512_first_half;
 use RippleMessageObject::{TMProposeSet, TMStatusChange, TMValidation};
-use crate::container_manager::NodeKeys;
 
 #[derive(Debug)]
 pub struct ByzzFuzz {
@@ -37,11 +35,10 @@ pub struct ByzzFuzz {
     pub toxiproxy: Arc<ToxiproxyClient>,
     mutated_ledger_hash: Vec<u8>,
     node_keys: Vec<NodeKeys>,
-    sequences_hashes: HashMap<usize, String>
+    pub sequences_hashes: HashMap<usize, String>,
 }
 
 impl ByzzFuzz {
-
     pub fn new(n: usize, c: usize, d: usize, r: usize, node_keys: Vec<NodeKeys>) -> Self {
         assert_eq!(n, 7);
         let mut process_faults = HashMap::with_capacity(c);
@@ -51,9 +48,14 @@ impl ByzzFuzz {
                 (0..3)
             } else {
                 (4..7)
-            }.powerset().collect_vec();
+            }
+            .powerset()
+            .collect_vec();
             let mut subset = HashSet::new();
-            for peer in sublist.get(thread_rng().gen_range(1..(sublist.len()))).unwrap() {
+            for peer in sublist
+                .get(thread_rng().gen_range(1..(sublist.len())))
+                .unwrap()
+            {
                 subset.insert(*peer);
             }
             // (4..7).for_each(|i| {
@@ -84,23 +86,21 @@ impl ByzzFuzz {
             )
             .unwrap(),
             node_keys,
-            sequences_hashes
+            sequences_hashes,
         }
     }
 
     pub async fn on_message(&mut self, mut event: Event) -> Event {
         let mut message = from_bytes(&event.message);
-        // Check the agreement property
-        let result = self.check_agreement_property(&message).await;
-        println!("Validation hash is valid: {}", result);
         self.update_round(&message).await;
         self.apply_partition().await;
         if self.process_faults.contains_key(&self.current_round)
             && self
-            .process_faults
-            .get(&self.current_round)
-            .unwrap()
-            .contains(&event.from) {
+                .process_faults
+                .get(&self.current_round)
+                .unwrap()
+                .contains(&event.from)
+        {
             match message {
                 TMStatusChange(ref mut status) => {
                     if status.get_newEvent() == NodeEvent::neACCEPTED_LEDGER {
@@ -114,7 +114,7 @@ impl ByzzFuzz {
                         }
                     }
                 }
-                _ => ()
+                _ => (),
             }
         }
         if event.from == 3
@@ -128,26 +128,6 @@ impl ByzzFuzz {
             event = self.apply_mutation(event, &mut message);
         }
         event
-    }
-
-    async fn check_agreement_property(&mut self, message: &RippleMessageObject) -> bool {
-        match message {
-            TMValidation(validation) => {
-                let (_, mut parsed) = parse2(validation.get_validation()).unwrap();
-                let validation_hash = parsed["ValidatedHash"].as_str().unwrap().to_string();
-
-                if self.sequences_hashes.contains_key(&self.current_round) {
-                    let sequence_hash = self.sequences_hashes.get(&self.current_round).unwrap();
-                    if !sequence_hash.eq(&validation_hash) {
-                        return false
-                    }
-                } else {
-                    self.sequences_hashes.insert(self.current_round, validation_hash);
-                }
-                true
-            }
-            _ => true
-        }
     }
 
     async fn update_round(&mut self, message: &RippleMessageObject) {

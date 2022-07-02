@@ -50,8 +50,8 @@ impl App {
     /// A separate thread is created for each node which handles websocket client requests
     pub async fn start(&self,
                        byzz_fuzz: ByzzFuzz,
-        shutdown_tx: Sender<()>,
-        shutdown_rx: Receiver<()>
+        shutdown_tx: Sender<(HashMap<usize, String>, usize, String)>,
+        shutdown_rx: Receiver<(HashMap<usize, String>, usize, String)>
     ) -> EmptyResult {
         let mut tokio_tasks = vec![];
         let (collector_tx, collector_rx) = std::sync::mpsc::channel();

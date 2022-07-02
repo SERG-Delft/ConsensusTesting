@@ -91,7 +91,7 @@ impl Client<'static> {
                                 match &subscription_object {
                                     SubscriptionObject::ValidatedLedger(vl) => {
                                         if vl.ledger_index == 5 && is_byzantine {
-                                            thread::sleep(Duration::from_millis(500));
+                                            // thread::sleep(Duration::from_millis(450));
                                             Client::sign_and_submit(
                                                 &sender_clone,
                                                 format!("Ripple TXN").as_str(),

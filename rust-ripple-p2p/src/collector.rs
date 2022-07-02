@@ -21,7 +21,7 @@ pub struct Collector {
     ripple_message_receiver: Receiver<Box<RippleMessage>>,
     subscription_receiver: Receiver<PeerSubscriptionObject>,
     control_receiver: Receiver<String>,
-    scheduler_sender: Sender<SubscriptionObject>,
+    scheduler_sender: Sender<PeerSubscriptionObject>,
     execution_file: BufWriter<File>,
     subscription_files: Vec<BufWriter<File>>
 }
@@ -32,7 +32,7 @@ impl Collector {
         ripple_message_receiver: Receiver<Box<RippleMessage>>,
         subscription_receiver: Receiver<PeerSubscriptionObject>,
         control_receiver: Receiver<String>,
-        scheduler_sender: Sender<SubscriptionObject>
+        scheduler_sender: Sender<PeerSubscriptionObject>
     ) -> Self {
         let execution_file = File::create(Path::new("execution.txt")).expect("Opening execution file failed");
         let mut subscription_files = vec![];
@@ -62,11 +62,11 @@ impl Collector {
                 self.write_to_file(&mut message);
             }
             if let Ok(subscription_object) = self.subscription_receiver.try_recv() {
-                match subscription_object.subscription_object {
+                match &subscription_object.subscription_object {
                     SubscriptionObject::ValidatedLedger(ledger) => {
                         println!("Ledger {} is validated with {} txns and {} hash", ledger.ledger_index, ledger.txn_count, ledger.ledger_hash);
                         self.write_to_subscription_file(subscription_object.peer, json!({"LedgerValidated": ledger}).to_string());
-                        self.scheduler_sender.send(SubscriptionObject::ValidatedLedger(ledger.clone())).expect("Scheduler send failed");
+                        self.scheduler_sender.send(subscription_object).expect("Scheduler send failed");
                     }
                     SubscriptionObject::ReceivedValidation(validation) =>
                         self.write_to_subscription_file(subscription_object.peer, json!({"ValidationReceived": validation}).to_string()),
