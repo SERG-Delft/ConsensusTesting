@@ -31,6 +31,7 @@ type EmptyResult = AnyResult<()>;
 fn main() {
     let args: Vec<String> = env::args().collect();
     let n: usize = (&args[1]).parse().unwrap();
+    let toxiproxypath = &args[2];
     let only_subscribe = if &args.len() > &2 {
         match (&args[2]).parse::<u16>() {
             Ok(_) => true,
@@ -95,7 +96,8 @@ fn main() {
         let mut results = shutdown_rx.resubscribe();
 
         let mut toxiproxy = Command::new(
-            r"C:\Users\levin\Downloads\toxiproxy-server-windows-amd64.exe"
+            toxiproxypath
+            // r"C:\Users\levin\Downloads\toxiproxy-server-windows-amd64.exe"
         ).stderr(Stdio::null()).spawn().unwrap();
         let node_keys = start_docker_containers(n, &bug_unls);
         for k in &node_keys {
