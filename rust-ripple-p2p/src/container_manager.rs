@@ -128,6 +128,8 @@ fn start_node_with_options(name: &str, offset: usize, expose_to_network: bool) {
             .args(["-p", &format!("{}:6005", 6005 + offset)])
             .args(["-p", &format!("{}:51235", 51235 + offset)])
     }
-    command.arg("mvanmeerten/rippled-boost-cmake").output().unwrap();
+    let result = command.arg("mvanmeerten/rippled-boost-cmake").output().unwrap();
+    println!("{}", from_utf8(result.stdout.as_slice()).unwrap());
+    println!("{}", from_utf8(result.stderr.as_slice()).unwrap());
     debug!("started {}", name);
 }
