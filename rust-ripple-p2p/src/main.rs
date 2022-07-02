@@ -1,7 +1,8 @@
 extern crate futures;
 extern crate core;
 
-use std::env;
+use std::{env, fs};
+use std::io::Write;
 use log::*;
 use env_logger;
 use std::process::{Command, Stdio};
@@ -41,22 +42,22 @@ fn main() {
     env_logger::Builder::new().parse_default_env().init();
 
     let bug_unls: Vec<Vec<usize>> = vec![
-        // vec![0, 1, 2, 3, 4], // 0
-        // vec![0, 1, 2, 3, 4], // 1
-        // vec![0, 1, 2, 3, 4], // 2
-        // vec![0, 1, 2, 3, 4], // 3
-        // vec![2, 3, 4, 5, 6], // 4
-        // vec![2, 3, 4, 5, 6], // 5
-        // vec![2, 3, 4, 5, 6], // 6
+        vec![0, 1, 2, 3, 4], // 0
+        vec![0, 1, 2, 3, 4], // 1
+        vec![0, 1, 2, 3, 4], // 2
+        vec![0, 1, 2, 3, 4], // 3
+        vec![2, 3, 4, 5, 6], // 4
+        vec![2, 3, 4, 5, 6], // 5
+        vec![2, 3, 4, 5, 6], // 6
 
 
-        vec![0, 1, 2, 3, 4, 5], // 0
-        vec![0, 1, 2, 3, 4, 5, 6], // 1
-        vec![0, 1, 2, 3, 4, 5, 6], // 2
-        vec![0, 1, 2, 3, 4, 5, 6], // 3
-        vec![0, 1, 2, 3, 4, 5, 6], // 4
-        vec![0, 1, 2, 3, 4, 5, 6], // 5
-        vec![1, 2, 3, 4, 5, 6], // 6
+        // vec![0, 1, 2, 3, 4, 5], // 0
+        // vec![0, 1, 2, 3, 4, 5, 6], // 1
+        // vec![0, 1, 2, 3, 4, 5, 6], // 2
+        // vec![0, 1, 2, 3, 4, 5, 6], // 3
+        // vec![0, 1, 2, 3, 4, 5, 6], // 4
+        // vec![0, 1, 2, 3, 4, 5, 6], // 5
+        // vec![1, 2, 3, 4, 5, 6], // 6
 
         // // config 1.5
         // vec![0, 1, 2, 3, 7], // 0
@@ -81,6 +82,12 @@ fn main() {
         // vec![0, 1, 2, 3, 4, 5, 6, 7, 8], // 8
     ];
 
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .append(true) // This is needed to append to file
+        .open("results.txt")
+        .unwrap();
+
     loop {
         let runtime = tokio::runtime::Runtime::new().unwrap();
 
@@ -94,8 +101,10 @@ fn main() {
             println!("node key {}", k.validation_public_key);
         }
 
-        let byzz_fuzz = ByzzFuzz::new(7, 10, 10, 10, node_keys.clone());
+        let byzz_fuzz = ByzzFuzz::new(7, 3, 0, 6, node_keys.clone());
         println!("{:?}", &byzz_fuzz);
+        file.write_fmt(format_args!("process faults {:?}\n", &byzz_fuzz.process_faults)).expect("could not log byzzfuzz");
+        file.write_fmt(format_args!("network faults {:?}\n", &byzz_fuzz.network_faults)).expect("could not log byzzfuzz");
         let app = app::App::new(n as u16, only_subscribe, node_keys);
 
         if let Err(error) = runtime.block_on(app.start(
@@ -108,5 +117,8 @@ fn main() {
 
         toxiproxy.kill().unwrap();
         runtime.shutdown_timeout(Duration::from_millis(100));
+
+        let check = Command::new("node").arg(r"C:\Users\levin\git\xrp\index.js").output().unwrap();
+        file.write_all(check.stdout.as_slice()).expect("could not write");
     }
 }

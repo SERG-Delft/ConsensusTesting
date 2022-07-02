@@ -29,8 +29,8 @@ pub struct ByzzFuzz {
     current_index: usize,
     current_round: usize,
     applied_partitions: bool,
-    process_faults: HashMap<usize, HashSet<usize>>,
-    network_faults: HashMap<usize, Vec<HashSet<u8>>>,
+    pub process_faults: HashMap<usize, HashSet<usize>>,
+    pub network_faults: HashMap<usize, Vec<HashSet<u8>>>,
     pub toxiproxy: Arc<ToxiproxyClient>,
     mutated_ledger_hash: Vec<u8>,
     node_keys: Vec<NodeKeys>,
@@ -38,14 +38,22 @@ pub struct ByzzFuzz {
 
 impl ByzzFuzz {
     pub fn new(n: usize, c: usize, d: usize, r: usize, node_keys: Vec<NodeKeys>) -> Self {
+        assert_eq!(n, 7);
         let mut process_faults = HashMap::with_capacity(c);
         (0..c).for_each(|_| {
             let round = thread_rng().gen_range(1..=r);
-            let sublist = (0..n).powerset().collect_vec();
+            let sublist = if thread_rng().gen_bool(0.5) {
+                (0..3)
+            } else {
+                (4..7)
+            }.powerset().collect_vec();
             let mut subset = HashSet::new();
-            for peer in sublist.get(thread_rng().gen_range(0..(n * n))).unwrap() {
+            for peer in sublist.get(thread_rng().gen_range(1..(sublist.len()))).unwrap() {
                 subset.insert(*peer);
             }
+            // (4..7).for_each(|i| {
+            //     subset.insert(i);
+            // });
             process_faults.insert(round, subset);
         });
         let mut network_faults = HashMap::with_capacity(d);

@@ -4,6 +4,7 @@ use std::thread;
 use serde_json::json;
 use serde::{Serialize, Deserialize};
 use std::thread::JoinHandle;
+use std::time::Duration;
 use log::*;
 
 const _NODE_PRIVATE_KEY: &str = "e55dc8f3741ac9668dbe858409e5d64f5ce88380f7228eccfe82b92b2c7848ba";
@@ -90,12 +91,14 @@ impl Client<'static> {
                                 match &subscription_object {
                                     SubscriptionObject::ValidatedLedger(vl) => {
                                         if vl.ledger_index == 5 && is_byzantine {
+                                            thread::sleep(Duration::from_millis(500));
                                             Client::sign_and_submit(
                                                 &sender_clone,
                                                 format!("Ripple TXN").as_str(),
                                                 &Client::create_payment_transaction(200000000, _ACCOUNT_ID, _GENESIS_ADDRESS),
                                                 _GENESIS_SEED
                                             );
+                                            println!("submitted");
                                         }
                                     }
                                     _ => ()

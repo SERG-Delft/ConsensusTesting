@@ -1,0 +1,403 @@
+process faults {2: {6, 4, 5}, 1: {6, 5, 4}}
+network faults {}
+process faults {1: {6, 4, 5}, 2: {4, 5, 6}}
+network faults {}
+process faults {1: {5, 6, 4}, 2: {4, 6, 5}}
+network faults {}
+process faults {1: {4, 5, 6}, 2: {5, 4, 6}}
+network faults {}
+process faults {2: {5, 4, 6}, 1: {6, 4, 5}}
+network faults {}
+process faults {2: {6, 4, 5}, 1: {5, 6, 4}}
+network faults {}
+node 0 has balance of 200000000
+node 1 has balance of 200000000
+node 2 has balance of 200000000
+node 3 has balance of 200000000
+node 4 has balance of Account not found.
+node 5 has balance of Account not found.
+node 6 has balance of Account not found.
+process faults {1: {5, 4, 6}, 2: {5, 4, 6}}
+network faults {}
+process faults {2: {4, 5, 6}, 3: {4, 5, 6}, 1: {5, 6, 4}}
+network faults {}
+process faults {2: {4, 6, 5}, 3: {4, 5, 6}}
+network faults {}
+node 0 has balance of 200000000
+node 1 has balance of 200000000
+node 2 has balance of 200000000
+node 3 has balance of 200000000
+node 4 has balance of 200000000
+node 5 has balance of 200000000
+node 6 has balance of 200000000
+process faults {3: {5, 6, 4}, 2: {5, 6, 4}}
+network faults {}
+node 0 has balance of 200000000
+node 1 has balance of 200000000
+node 2 has balance of 200000000
+node 3 has balance of 200000000
+node 4 has balance of 200000000
+node 5 has balance of 200000000
+node 6 has balance of 200000000
+process faults {2: {5, 6, 4}, 3: {4, 5, 6}}
+network faults {}
+process faults {2: {5, 6, 4}, 1: {4, 6, 5}}
+network faults {}
+process faults {2: {6, 4, 5}, 1: {4, 5, 6}}
+network faults {}
+node 0 has balance of 200000000
+node 1 has balance of 200000000
+node 2 has balance of 200000000
+node 3 has balance of 200000000
+node 4 has balance of Account not found.
+node 5 has balance of Account not found.
+node 6 has balance of Account not found.
+process faults {1: {4, 5, 6}, 2: {6, 4, 5}}
+network faults {}
+process faults {2: {6, 5, 4}, 1: {4, 6, 5}, 3: {5, 4, 6}}
+network faults {}
+process faults {8: {1, 0}, 1: {5}}
+network faults {}
+node 0 has balance of 200000000
+node 1 has balance of 200000000
+node 2 has balance of 200000000
+node 3 has balance of 200000000
+node 4 has balance of 200000000
+node 5 has balance of 200000000
+node 6 has balance of 200000000
+process faults {6: {5, 6}, 8: {2, 1}, 7: {1}}
+network faults {}
+process faults {1: {}, 8: {4, 5}}
+network faults {}
+process faults {2: {0}, 6: {0, 1, 2}}
+network faults {}
+node 0 has balance of 200000000
+node 1 has balance of 200000000
+node 2 has balance of 200000000
+node 3 has balance of 200000000
+node 4 has balance of 200000000
+node 5 has balance of 200000000
+node 6 has balance of 200000000
+process faults {6: {6}, 1: {6}, 3: {}}
+network faults {}
+node 0 has balance of 200000000
+node 1 has balance of 200000000
+node 2 has balance of 200000000
+node 3 has balance of 200000000
+node 4 has balance of 200000000
+node 5 has balance of 200000000
+node 6 has balance of 200000000
+process faults {1: {0, 2, 1}, 3: {1, 2}, 7: {4}}
+network faults {}
+node 0 has balance of 200100000
+node 1 has balance of 200100000
+node 2 has balance of 200100000
+node 3 has balance of 200100000
+node 4 has balance of Account not found.
+node 5 has balance of Account not found.
+node 6 has balance of Account not found.
+process faults {7: {2}, 1: {}}
+network faults {}
+node 0 has balance of 200000000
+node 1 has balance of 200000000
+node 2 has balance of 200000000
+node 3 has balance of 200000000
+node 4 has balance of 200000000
+node 5 has balance of 200000000
+node 6 has balance of 200000000
+process faults {4: {2}, 3: {0}, 5: {0}}
+network faults {}
+node 0 has balance of 200000000
+node 1 has balance of 200000000
+node 2 has balance of 200000000
+node 3 has balance of 200000000
+node 4 has balance of 200000000
+node 5 has balance of 200000000
+node 6 has balance of 200000000
+process faults {3: {4, 6, 5}, 4: {}, 6: {0}}
+network faults {}
+node 0 has balance of 200000000
+node 1 has balance of 200000000
+node 2 has balance of 200000000
+node 3 has balance of 200000000
+node 4 has balance of 200000000
+node 5 has balance of 200000000
+node 6 has balance of 200000000
+process faults {1: {0}, 8: {}}
+network faults {}
+node 0 has balance of 200000000
+node 1 has balance of 200000000
+node 2 has balance of 200000000
+node 3 has balance of 200000000
+node 4 has balance of 200000000
+node 5 has balance of 200000000
+node 6 has balance of 200000000
+process faults {5: {6, 5}, 8: {5, 4}, 3: {1}}
+network faults {}
+node 0 has balance of 200000000
+node 1 has balance of 200000000
+node 2 has balance of 200000000
+node 3 has balance of 200000000
+node 4 has balance of 200000000
+node 5 has balance of 200000000
+node 6 has balance of 200000000
+process faults {6: {1}, 5: {4, 5}, 3: {0}}
+network faults {}
+node 0 has balance of 200000000
+node 1 has balance of 200000000
+node 2 has balance of 200000000
+node 3 has balance of 200000000
+node 4 has balance of 200000000
+node 5 has balance of 200000000
+node 6 has balance of 200000000
+process faults {3: {6}, 7: {6, 5}}
+network faults {}
+node 0 has balance of 200000000
+node 1 has balance of 200000000
+node 2 has balance of 200000000
+node 3 has balance of 200000000
+node 4 has balance of 200000000
+node 5 has balance of 200000000
+node 6 has balance of 200000000
+process faults {5: {1, 2}, 2: {5}, 3: {5}}
+network faults {}
+node 0 has balance of 200000000
+node 1 has balance of 200000000
+node 2 has balance of 200000000
+node 3 has balance of 200000000
+node 4 has balance of 200000000
+node 5 has balance of 200000000
+node 6 has balance of 200000000
+process faults {8: {1}, 7: {4}, 5: {}}
+network faults {}
+node 0 has balance of 200000000
+node 1 has balance of 200000000
+node 2 has balance of 200000000
+node 3 has balance of 200000000
+node 4 has balance of 200000000
+node 5 has balance of 200000000
+node 6 has balance of 200000000
+process faults {2: {2, 1}, 3: {6}, 6: {5}}
+network faults {}
+node 0 has balance of 200000000
+node 1 has balance of 200000000
+node 2 has balance of 200000000
+node 3 has balance of 200000000
+node 4 has balance of 200000000
+node 5 has balance of 200000000
+node 6 has balance of 200000000
+process faults {6: {4}, 7: {6, 4}, 8: {2}}
+network faults {}
+process faults {3: {1}, 7: {4, 5}, 4: {4, 5}}
+network faults {}
+process faults {4: {4, 5, 6}, 7: {0}}
+network faults {}
+process faults {1: {4, 6}, 6: {1, 0}, 2: {2, 0}}
+network faults {}
+process faults {1: {1}, 8: {2}}
+network faults {}
+node 0 has balance of 200000000
+node 1 has balance of 200000000
+node 2 has balance of 200000000
+node 3 has balance of 200000000
+node 4 has balance of 200000000
+node 5 has balance of 200000000
+node 6 has balance of 200000000
+process faults {6: {6}, 1: {4}}
+network faults {}
+node 0 has balance of 200000000
+node 1 has balance of 200000000
+node 2 has balance of 200000000
+node 3 has balance of 200000000
+node 4 has balance of 200000000
+node 5 has balance of 200000000
+node 6 has balance of 200000000
+process faults {7: {4, 5}, 5: {4}}
+network faults {}
+process faults {4: {1, 2}, 5: {5, 6, 4}}
+network faults {}
+process faults {4: {2, 0}, 3: {1}}
+network faults {}
+node 0 has balance of 200000000
+node 1 has balance of 200000000
+node 2 has balance of 200000000
+node 3 has balance of 200000000
+node 4 has balance of 200000000
+node 5 has balance of 200000000
+node 6 has balance of 200000000
+process faults {1: {2}, 8: {0, 2}}
+network faults {}
+process faults {2: {5, 4, 6}, 1: {6, 4, 5}}
+network faults {}
+node 0 has balance of 200000000
+node 1 has balance of 200000000
+node 2 has balance of 200000000
+node 3 has balance of 200000000
+node 4 has balance of Account not found.
+node 5 has balance of Account not found.
+node 6 has balance of Account not found.
+process faults {2: {5, 6, 4}, 1: {5, 6, 4}}
+network faults {}
+process faults {3: {4, 6, 5}, 2: {5, 6, 4}}
+network faults {}
+process faults {2: {4, 5, 6}, 3: {4, 5, 6}}
+network faults {}
+node 0 has balance of 200000000
+node 1 has balance of 200000000
+node 2 has balance of 200000000
+node 3 has balance of 200000000
+node 4 has balance of Account not found.
+node 5 has balance of Account not found.
+node 6 has balance of Account not found.
+process faults {2: {6, 5, 4}, 3: {4, 5, 6}}
+network faults {}
+process faults {3: {4, 6, 5}, 2: {4, 5, 6}}
+network faults {}
+process faults {3: {4, 5, 6}, 2: {6, 4, 5}}
+network faults {}
+process faults {2: {5, 4, 6}, 3: {6, 4, 5}}
+network faults {}
+node 0 has balance of 200000000
+node 1 has balance of 200000000
+node 2 has balance of 200000000
+node 3 has balance of 200000000
+node 4 has balance of 200100000
+node 5 has balance of 200100000
+node 6 has balance of 200100000
+process faults {3: {6, 5, 4}, 2: {4, 5, 6}}
+network faults {}
+node 0 has balance of 200000000
+node 1 has balance of 200000000
+node 2 has balance of 200000000
+node 3 has balance of 200000000
+node 4 has balance of 200100000
+node 5 has balance of 200100000
+node 6 has balance of 200100000
+process faults {3: {6, 4, 5}, 2: {4, 5, 6}}
+network faults {}
+node 0 has balance of 200000000
+node 1 has balance of 200000000
+node 2 has balance of 200000000
+node 3 has balance of 200000000
+node 4 has balance of Account not found.
+node 5 has balance of Account not found.
+node 6 has balance of Account not found.
+process faults {2: {4, 6, 5}, 3: {4, 5, 6}}
+network faults {}
+node 0 has balance of 200000000
+node 1 has balance of 200000000
+node 2 has balance of 200000000
+node 3 has balance of 200000000
+node 4 has balance of Account not found.
+node 5 has balance of Account not found.
+node 6 has balance of Account not found.
+process faults {3: {4, 6, 5}, 2: {4, 5, 6}}
+network faults {}
+node 0 has balance of 200000000
+node 1 has balance of 200000000
+node 2 has balance of 200000000
+node 3 has balance of 200000000
+node 4 has balance of Account not found.
+node 5 has balance of Account not found.
+node 6 has balance of Account not found.
+process faults {3: {4, 5, 6}, 2: {6, 4, 5}}
+network faults {}
+node 0 has balance of 200000000
+node 1 has balance of 200000000
+node 2 has balance of 200000000
+node 3 has balance of 200000000
+node 4 has balance of Account not found.
+node 5 has balance of Account not found.
+node 6 has balance of Account not found.
+process faults {3: {6, 4, 5}, 2: {6, 5, 4}}
+network faults {}
+node 0 has balance of 200000000
+node 1 has balance of 200000000
+node 2 has balance of 200000000
+node 3 has balance of 200000000
+node 4 has balance of 200000000
+node 5 has balance of 200000000
+node 6 has balance of 200000000
+process faults {2: {6, 4, 5}, 3: {5, 4, 6}}
+network faults {}
+node 0 has balance of 200000000
+node 1 has balance of 200000000
+node 2 has balance of 200000000
+node 3 has balance of 200000000
+node 4 has balance of Account not found.
+node 5 has balance of Account not found.
+node 6 has balance of Account not found.
+process faults {3: {5, 6, 4}, 2: {4, 6, 5}}
+network faults {}
+node 0 has balance of 200000000
+node 1 has balance of 200000000
+node 2 has balance of 200000000
+node 3 has balance of 200000000
+node 4 has balance of Account not found.
+node 5 has balance of Account not found.
+node 6 has balance of Account not found.
+process faults {2: {6, 4, 5}, 3: {5, 6, 4}}
+network faults {}
+node 0 has balance of 200000000
+node 1 has balance of 200000000
+node 2 has balance of 200000000
+node 3 has balance of 200000000
+node 4 has balance of Account not found.
+node 5 has balance of Account not found.
+node 6 has balance of Account not found.
+process faults {2: {5, 6, 4}, 3: {5, 6, 4}}
+network faults {}
+node 0 has balance of 200000000
+node 1 has balance of 200000000
+node 2 has balance of 200000000
+node 3 has balance of 200000000
+node 4 has balance of Account not found.
+node 5 has balance of Account not found.
+node 6 has balance of Account not found.
+process faults {2: {5, 4, 6}, 3: {6, 5, 4}}
+network faults {}
+node 0 has balance of 200000000
+node 1 has balance of 200000000
+node 2 has balance of 200000000
+node 3 has balance of 200000000
+node 4 has balance of 200100000
+node 5 has balance of 200100000
+node 6 has balance of 200100000
+process faults {2: {6, 4, 5}, 3: {4, 5, 6}}
+network faults {}
+node 0 has balance of 200000000
+node 1 has balance of 200000000
+node 2 has balance of 200000000
+node 3 has balance of 200000000
+node 4 has balance of 200100000
+node 5 has balance of 200100000
+node 6 has balance of 200100000
+process faults {2: {5, 6, 4}, 3: {5, 6, 4}}
+network faults {}
+node 0 has balance of 200000000
+node 1 has balance of 200000000
+node 2 has balance of 200000000
+node 3 has balance of 200000000
+node 4 has balance of Account not found.
+node 5 has balance of Account not found.
+node 6 has balance of Account not found.
+process faults {3: {5, 6, 4}, 2: {6, 4, 5}}
+network faults {}
+node 0 has balance of 200000000
+node 1 has balance of 200000000
+node 2 has balance of 200000000
+node 3 has balance of 200000000
+node 4 has balance of 200000000
+node 5 has balance of 200000000
+node 6 has balance of 200000000
+process faults {2: {4, 5, 6}, 3: {5, 4, 6}}
+network faults {}
+node 0 has balance of 200000000
+node 1 has balance of 200000000
+node 2 has balance of 200000000
+node 3 has balance of 200000000
+node 4 has balance of Account not found.
+node 5 has balance of Account not found.
+node 6 has balance of Account not found.
+process faults {2: {5, 4, 6}, 3: {5, 6, 4}}
+network faults {}
