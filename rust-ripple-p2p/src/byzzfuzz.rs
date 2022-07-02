@@ -120,7 +120,8 @@ impl ByzzFuzz {
     async fn check_agreement_property(&mut self, message: &RippleMessageObject) -> bool {
         match message {
             TMValidation(validation) => {
-                let validation_hash = "hash".to_string();
+                let (_, mut parsed) = parse2(validation.get_validation()).unwrap();
+                let validation_hash = parsed["ValidatedHash"].as_str().unwrap().to_string();
 
                 if self.sequences_hashes.contains_key(&self.current_round) {
                     let sequence_hash = self.sequences_hashes.get(&self.current_round).unwrap();
