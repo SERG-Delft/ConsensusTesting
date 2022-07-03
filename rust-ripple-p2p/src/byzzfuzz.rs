@@ -28,6 +28,8 @@ use xrpl::core::keypairs::utils::sha512_first_half;
 use RippleMessageObject::{TMProposeSet, TMStatusChange, TMValidation};
 use crate::client::Client;
 
+const SMALL_SCOPE: bool = true;
+
 pub struct ByzzFuzz {
     n: usize, // number of processes
     c: usize, // bound on the #rounds with process faults
@@ -144,7 +146,7 @@ impl ByzzFuzz {
                 .unwrap()
                 .contains(&event.to)
         {
-            event = self.apply_mutation(event, &mut message);
+            event = self.apply_mutation(event, &mut message, false);
         }
         event
     }
@@ -219,7 +221,7 @@ impl ByzzFuzz {
         }
     }
 
-    fn apply_mutation(&mut self, mut event: Event, message: &mut RippleMessageObject) -> Event {
+    fn apply_mutation(&mut self, mut event: Event, message: &mut RippleMessageObject, mutate_seq_id: bool) -> Event {
         match message {
             RippleMessageObject::TMTransaction(ref mut transaction) => {
                 let mutation = "1200002280000000240000000161400000000BED48A068400000000000000A73210330E7FC9D56BB25D6893BA3F317AE5BCF33B3291BD63DB32654A313222F7FD02074473045022100F1D8AA686F6241A5F39106FFDA94AA218118D385B58A00E633425D882B17205902200B38092D3F990359928F393485DC352CD0F3C22E4559280354FB423BC7F08BEC8114B5F762798A53D543A014CAF8B297CFF8F2F937E883149D94BFF9BAAA5267D5733CA2B59950B4C9A01564";
@@ -229,12 +231,15 @@ impl ByzzFuzz {
             }
             TMProposeSet(ref mut proposal) => {
                 if proposal.get_nodePubKey()[1] == 149 {
-                    proposal.set_currentTxHash(
-                        hex::decode(
-                            "e803e1999369975aed1bfd2444a3552a73383c03a2004cb784ce07e13ebd7d7c",
-                        )
-                        .unwrap(),
-                    );
+
+                    if (!bool) {
+                        proposal.set_currentTxHash(
+                            hex::decode(
+                                "e803e1999369975aed1bfd2444a3552a73383c03a2004cb784ce07e13ebd7d7c",
+                            )
+                                .unwrap(),
+                        );
+                    } 
                     let hash = sha512_first_half(
                         [
                             &[80, 82, 80, 00],
@@ -268,12 +273,12 @@ impl ByzzFuzz {
             TMValidation(ref mut validation) => {
                 let (_, mut parsed) = parse2(validation.get_validation()).unwrap();
                 if event.from == 3
-                    && parsed["ConsensusHash"]
-                        .as_str()
-                        .unwrap()
-                        .eq_ignore_ascii_case(
-                            "fe0e71183243245e3619efcbe073f2d7eede9b0f0bf1a1b2b7d9f1e22b4a5c2a",
-                        )
+                    // && parsed["ConsensusHash"]
+                    //     .as_str()
+                    //     .unwrap()
+                    //     .eq_ignore_ascii_case(
+                    //         "fe0e71183243245e3619efcbe073f2d7eede9b0f0bf1a1b2b7d9f1e22b4a5c2a",
+                    //     )
                     && parsed["SigningPubKey"]
                         .as_str()
                         .unwrap()
@@ -290,45 +295,92 @@ impl ByzzFuzz {
                     )
                     .unwrap();
 
-                    let mutated_validation = hex::decode(format!(
-                        "22{}26{}29{}3A{}51{}5017{}5019{}7321{}",
-                        hex::encode(parsed["Flags"].as_u32().unwrap().to_be_bytes()),
-                        hex::encode(parsed["LedgerSequence"].as_u32().unwrap().to_be_bytes()),
-                        hex::encode(parsed["SigningTime"].as_u32().unwrap().to_be_bytes()),
-                        hex::encode(parsed["Cookie"].as_u64().unwrap().to_be_bytes()),
-                        hex::encode(&self.mutated_ledger_hash),
-                        "E803E1999369975AED1BFD2444A3552A73383C03A2004CB784CE07E13EBD7D7C",
-                        parsed["ValidatedHash"].as_str().unwrap(),
-                        parsed["SigningPubKey"].as_str().unwrap()
-                    ))
-                    .unwrap();
+                    if (!bool) {
+                        let mutated_validation = hex::decode(format!(
+                            "22{}26{}29{}3A{}51{}5017{}5019{}7321{}",
+                            hex::encode(parsed["Flags"].as_u32().unwrap().to_be_bytes()),
+                            hex::encode(parsed["LedgerSequence"].as_u32().unwrap().to_be_bytes()),
+                            hex::encode(parsed["SigningTime"].as_u32().unwrap().to_be_bytes()),
+                            hex::encode(parsed["Cookie"].as_u64().unwrap().to_be_bytes()),
+                            hex::encode(&self.mutated_ledger_hash),
+                            "E803E1999369975AED1BFD2444A3552A73383C03A2004CB784CE07E13EBD7D7C",
+                            parsed["ValidatedHash"].as_str().unwrap(),
+                            parsed["SigningPubKey"].as_str().unwrap()
+                        ))
+                            .unwrap();
 
-                    let mutated_signing_hash = sha512_first_half(
-                        [&[86, 65, 76, 00], mutated_validation.as_slice()]
-                            .concat()
-                            .as_slice(),
-                    );
-                    let mutated_message =
-                        secp256k1::Message::from_slice(&mutated_signing_hash).unwrap();
-                    let mutated_signature = secp256k1.sign_ecdsa(&mutated_message, &private_key);
-                    let der_sign = mutated_signature.serialize_der().to_vec();
+                        let mutated_signing_hash = sha512_first_half(
+                            [&[86, 65, 76, 00], mutated_validation.as_slice()]
+                                .concat()
+                                .as_slice(),
+                        );
+                        let mutated_message =
+                            secp256k1::Message::from_slice(&mutated_signing_hash).unwrap();
+                        let mutated_signature = secp256k1.sign_ecdsa(&mutated_message, &private_key);
+                        let der_sign = mutated_signature.serialize_der().to_vec();
 
-                    let val = hex::decode(format!(
-                        "22{}26{}29{}3A{}51{}5017{}5019{}7321{}76{}{}",
-                        hex::encode(parsed["Flags"].as_u32().unwrap().to_be_bytes()),
-                        hex::encode(parsed["LedgerSequence"].as_u32().unwrap().to_be_bytes()),
-                        hex::encode(parsed["SigningTime"].as_u32().unwrap().to_be_bytes()),
-                        hex::encode(parsed["Cookie"].as_u64().unwrap().to_be_bytes()),
-                        hex::encode(&self.mutated_ledger_hash),
-                        "E803E1999369975AED1BFD2444A3552A73383C03A2004CB784CE07E13EBD7D7C",
-                        parsed["ValidatedHash"].as_str().unwrap(),
-                        parsed["SigningPubKey"].as_str().unwrap(),
-                        hex::encode((der_sign.len() as u8).to_be_bytes()),
-                        hex::encode(der_sign)
-                    ))
-                    .unwrap();
+                        let val = hex::decode(format!(
+                            "22{}26{}29{}3A{}51{}5017{}5019{}7321{}76{}{}",
+                            hex::encode(parsed["Flags"].as_u32().unwrap().to_be_bytes()),
+                            hex::encode(parsed["LedgerSequence"].as_u32().unwrap().to_be_bytes()),
+                            hex::encode(parsed["SigningTime"].as_u32().unwrap().to_be_bytes()),
+                            hex::encode(parsed["Cookie"].as_u64().unwrap().to_be_bytes()),
+                            hex::encode(&self.mutated_ledger_hash),
+                            "E803E1999369975AED1BFD2444A3552A73383C03A2004CB784CE07E13EBD7D7C",
+                            parsed["ValidatedHash"].as_str().unwrap(),
+                            parsed["SigningPubKey"].as_str().unwrap(),
+                            hex::encode((der_sign.len() as u8).to_be_bytes()),
+                            hex::encode(der_sign)
+                        ))
+                            .unwrap();
 
-                    validation.set_validation(val);
+                        validation.set_validation(val);
+                    } else {
+                        let ledger_sequence = parsed["LedgerSequence"].as_u32().unwrap();
+                        let new_ledger_sequence = ledger_sequence + 1;
+
+                        // decide what we do not mutate anymore
+                        let mutated_validation = hex::decode(format!(
+                            "22{}26{}29{}3A{}51{}5017{}5019{}7321{}",
+                            hex::encode(parsed["Flags"].as_u32().unwrap().to_be_bytes()),
+                            hex::encode(new_ledger_sequence.to_be_bytes()),
+                            hex::encode(parsed["SigningTime"].as_u32().unwrap().to_be_bytes()),
+                            hex::encode(parsed["Cookie"].as_u64().unwrap().to_be_bytes()),
+                            parsed["hash"].as_str().unwrap(),
+                            parsed["ConsensusHash"].as_str().unwrap(),
+                            parsed["ValidatedHash"].as_str().unwrap(),
+                            parsed["SigningPubKey"].as_str().unwrap()
+                        ))
+                            .unwrap();
+
+                        let mutated_signing_hash = sha512_first_half(
+                            [&[86, 65, 76, 00], mutated_validation.as_slice()]
+                                .concat()
+                                .as_slice(),
+                        );
+                        let mutated_message =
+                            secp256k1::Message::from_slice(&mutated_signing_hash).unwrap();
+                        let mutated_signature = secp256k1.sign_ecdsa(&mutated_message, &private_key);
+                        let der_sign = mutated_signature.serialize_der().to_vec();
+
+                        let val = hex::decode(format!(
+                            "22{}26{}29{}3A{}51{}5017{}5019{}7321{}76{}{}",
+                            hex::encode(parsed["Flags"].as_u32().unwrap().to_be_bytes()),
+                            hex::encode(new_ledger_sequence.to_be_bytes()),
+                            hex::encode(parsed["SigningTime"].as_u32().unwrap().to_be_bytes()),
+                            hex::encode(parsed["Cookie"].as_u64().unwrap().to_be_bytes()),
+                            parsed["hash"].as_str().unwrap(),
+                            parsed["ConsensusHash"].as_str().unwrap(),
+                            parsed["ValidatedHash"].as_str().unwrap(),
+                            parsed["SigningPubKey"].as_str().unwrap(),
+                            hex::encode((der_sign.len() as u8).to_be_bytes()),
+                            hex::encode(der_sign)
+                        ))
+                            .unwrap();
+
+                        validation.set_validation(val);
+                    }
+
                     event.message =
                         [&event.message[0..6], &validation.write_to_bytes().unwrap()].concat();
                     let bytes = ((event.message.len() - 6) as u32).to_be_bytes();
