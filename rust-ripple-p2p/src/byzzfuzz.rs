@@ -54,9 +54,9 @@ impl ByzzFuzz {
         (0..c).for_each(|_| {
             let round = thread_rng().gen_range(2..r + 2);
             let sublist = if thread_rng().gen_bool(0.5) {
-                (0..5)
+                [0, 1, 2, 4]
             } else {
-                (1..7)
+                [2, 4, 5, 6]
             }
             .powerset()
             .collect_vec();
