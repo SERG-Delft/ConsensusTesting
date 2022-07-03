@@ -86,7 +86,7 @@ fn main() {
     let mut file = fs::OpenOptions::new()
         .write(true)
         .append(true) // This is needed to append to file
-        .open("results-buggy-7-2-0-6-v2.txt")
+        .open("results-buggy-7-3-0-6-v2.txt")
         .unwrap();
 
     loop {
@@ -104,7 +104,7 @@ fn main() {
             println!("node key {}", k.validation_public_key);
         }
 
-        let byzz_fuzz = ByzzFuzz::new(7, 2, 0, 6, node_keys.clone());
+        let byzz_fuzz = ByzzFuzz::new(7, 3, 0, 6, node_keys.clone());
         println!("{:?}", &byzz_fuzz.process_faults);
         file.write_fmt(format_args!("process faults {:?}\n", &byzz_fuzz.process_faults)).expect("could not log byzzfuzz");
         file.write_fmt(format_args!("network faults {:?}\n", &byzz_fuzz.network_faults)).expect("could not log byzzfuzz");
