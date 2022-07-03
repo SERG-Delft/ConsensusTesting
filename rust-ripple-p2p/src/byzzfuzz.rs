@@ -52,9 +52,9 @@ impl ByzzFuzz {
         (0..c).for_each(|_| {
             let round = thread_rng().gen_range(2..r + 2);
             let sublist = if thread_rng().gen_bool(0.5) {
-                (0..3)
+                (0..5)
             } else {
-                (4..7)
+                (1..7)
             }
             .powerset()
             .collect_vec();
@@ -70,6 +70,12 @@ impl ByzzFuzz {
             // });
             process_faults.insert(round, subset);
         });
+
+        // // {4: {2}, 2: {1, 2}, 5: {6}}
+        // process_faults.insert(2, HashSet::from([1, 2]));
+        // process_faults.insert(4, HashSet::from([2]));
+        // process_faults.insert(5, HashSet::from([6]));
+
         let mut network_faults = HashMap::with_capacity(d);
         (0..d)
             .map(|_| NetworkFault::sample_network_fault(n, r)) //TODO network faults right time
@@ -358,7 +364,7 @@ impl NetworkFault {
         }
 
         Self {
-            round: thread_rng().gen_range(1..=r),
+            round: thread_rng().gen_range(2..r + 2),
             partition: partitions.subsets().subsets().to_vec(),
         }
     }
