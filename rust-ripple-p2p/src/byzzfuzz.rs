@@ -2,14 +2,15 @@ use bs58::Alphabet;
 use itertools::Itertools;
 use nom::AsBytes;
 use protobuf::Message;
-use websocket::{Message as WsMessage};
 use std::cmp::max;
 use std::collections::{HashMap, HashSet};
 use std::iter::FromIterator;
 use std::net::TcpStream;
 use std::sync::Arc;
 use std::time::Duration;
+use websocket::Message as WsMessage;
 
+use crate::client::Client;
 use crate::container_manager::NodeKeys;
 use crate::deserialization::parse2;
 use crate::message_handler::{from_bytes, invoke_protocol_message, RippleMessageObject};
@@ -21,12 +22,11 @@ use secp256k1::{Secp256k1, SecretKey};
 use serde_json::json;
 use set_partitions::{set_partitions, ArrayVecSetPartition, HashSubsets};
 use tokio::time::sleep;
-use websocket::ClientBuilder;
 use websocket::receiver::Reader;
 use websocket::sender::Writer;
+use websocket::ClientBuilder;
 use xrpl::core::keypairs::utils::sha512_first_half;
 use RippleMessageObject::{TMProposeSet, TMStatusChange, TMValidation};
-use crate::client::Client;
 
 const SMALL_SCOPE: bool = true;
 
@@ -38,7 +38,7 @@ pub struct ByzzFuzz {
     current_index: usize,
     current_round: usize,
     applied_partitions: bool,
-    pub process_faults: HashMap<usize, HashSet<usize>>,
+    pub process_faults: HashMap<usize, (HashSet<usize>, u32)>,
     pub network_faults: HashMap<usize, Vec<HashSet<u8>>>,
     pub toxiproxy: Arc<ToxiproxyClient>,
     mutated_ledger_hash: Vec<u8>,
@@ -70,7 +70,7 @@ impl ByzzFuzz {
             // (4..7).for_each(|i| {
             //     subset.insert(i);
             // });
-            process_faults.insert(round, subset);
+            process_faults.insert(round, (subset, thread_rng().gen()));
         });
 
         // // {4: {2}, 2: {1, 2}, 5: {6}}
@@ -120,6 +120,7 @@ impl ByzzFuzz {
                 .process_faults
                 .get(&self.current_round)
                 .unwrap()
+                .0
                 .contains(&event.from)
         {
             match message {
@@ -144,9 +145,11 @@ impl ByzzFuzz {
                 .process_faults
                 .get(&self.current_round)
                 .unwrap()
+                .0
                 .contains(&event.to)
         {
-            event = self.apply_mutation(event, &mut message, false);
+            let seed = self.process_faults.get(&self.current_round).unwrap().1;
+            event = self.apply_mutation(event, &mut message, seed);
         }
         event
     }
@@ -169,7 +172,9 @@ impl ByzzFuzz {
                         "tx_json": Client::create_payment_transaction(200000000, crate::client::_ACCOUNT_ID, crate::client::_GENESIS_ADDRESS),
                         "secret": crate::client::_GENESIS_SEED
                     });
-                    self.byzantine_sender.send_message(&WsMessage::text(json.to_string())).unwrap();
+                    self.byzantine_sender
+                        .send_message(&WsMessage::text(json.to_string()))
+                        .unwrap();
                     println!("submitted");
                 }
             }
@@ -221,7 +226,13 @@ impl ByzzFuzz {
         }
     }
 
-    fn apply_mutation(&mut self, mut event: Event, message: &mut RippleMessageObject, mutate_sequence_ids: bool) -> Event {
+    fn apply_mutation(
+        &mut self,
+        mut event: Event,
+        message: &mut RippleMessageObject,
+        seed: u32,
+    ) -> Event {
+        let mutate_sequence_ids = seed % 2 == 0;
         match message {
             RippleMessageObject::TMTransaction(ref mut transaction) => {
                 let mutation = "1200002280000000240000000161400000000BED48A068400000000000000A73210330E7FC9D56BB25D6893BA3F317AE5BCF33B3291BD63DB32654A313222F7FD02074473045022100F1D8AA686F6241A5F39106FFDA94AA218118D385B58A00E633425D882B17205902200B38092D3F990359928F393485DC352CD0F3C22E4559280354FB423BC7F08BEC8114B5F762798A53D543A014CAF8B297CFF8F2F937E883149D94BFF9BAAA5267D5733CA2B59950B4C9A01564";
@@ -231,13 +242,12 @@ impl ByzzFuzz {
             }
             TMProposeSet(ref mut proposal) => {
                 if proposal.get_nodePubKey()[1] == 149 {
-
                     if (!mutate_sequence_ids) {
                         proposal.set_currentTxHash(
                             hex::decode(
                                 "e803e1999369975aed1bfd2444a3552a73383c03a2004cb784ce07e13ebd7d7c",
                             )
-                                .unwrap(),
+                            .unwrap(),
                         );
                     } else {
                         let initial_propose_seq = proposal.get_proposeSeq();
@@ -284,11 +294,11 @@ impl ByzzFuzz {
                     //         "fe0e71183243245e3619efcbe073f2d7eede9b0f0bf1a1b2b7d9f1e22b4a5c2a",
                     //     )
                     && parsed["SigningPubKey"]
-                        .as_str()
-                        .unwrap()
-                        .eq_ignore_ascii_case(
-                            "02954103E420DA5361F00815929207B36559492B6C37C62CB2FE152CCC6F3C11C5",
-                        )
+                    .as_str()
+                    .unwrap()
+                    .eq_ignore_ascii_case(
+                        "02954103E420DA5361F00815929207B36559492B6C37C62CB2FE152CCC6F3C11C5",
+                    )
                 {
                     let secp256k1 = Secp256k1::new();
                     let private_key = SecretKey::from_slice(
@@ -311,7 +321,7 @@ impl ByzzFuzz {
                             parsed["ValidatedHash"].as_str().unwrap(),
                             parsed["SigningPubKey"].as_str().unwrap()
                         ))
-                            .unwrap();
+                        .unwrap();
 
                         let mutated_signing_hash = sha512_first_half(
                             [&[86, 65, 76, 00], mutated_validation.as_slice()]
@@ -320,7 +330,8 @@ impl ByzzFuzz {
                         );
                         let mutated_message =
                             secp256k1::Message::from_slice(&mutated_signing_hash).unwrap();
-                        let mutated_signature = secp256k1.sign_ecdsa(&mutated_message, &private_key);
+                        let mutated_signature =
+                            secp256k1.sign_ecdsa(&mutated_message, &private_key);
                         let der_sign = mutated_signature.serialize_der().to_vec();
 
                         let val = hex::decode(format!(
@@ -336,7 +347,7 @@ impl ByzzFuzz {
                             hex::encode((der_sign.len() as u8).to_be_bytes()),
                             hex::encode(der_sign)
                         ))
-                            .unwrap();
+                        .unwrap();
 
                         validation.set_validation(val);
                     } else {
@@ -354,7 +365,7 @@ impl ByzzFuzz {
                             parsed["ValidatedHash"].as_str().unwrap(),
                             parsed["SigningPubKey"].as_str().unwrap()
                         ))
-                            .unwrap();
+                        .unwrap();
 
                         let mutated_signing_hash = sha512_first_half(
                             [&[86, 65, 76, 00], mutated_validation.as_slice()]
@@ -363,7 +374,8 @@ impl ByzzFuzz {
                         );
                         let mutated_message =
                             secp256k1::Message::from_slice(&mutated_signing_hash).unwrap();
-                        let mutated_signature = secp256k1.sign_ecdsa(&mutated_message, &private_key);
+                        let mutated_signature =
+                            secp256k1.sign_ecdsa(&mutated_message, &private_key);
                         let der_sign = mutated_signature.serialize_der().to_vec();
 
                         let val = hex::decode(format!(
@@ -379,7 +391,7 @@ impl ByzzFuzz {
                             hex::encode((der_sign.len() as u8).to_be_bytes()),
                             hex::encode(der_sign)
                         ))
-                            .unwrap();
+                        .unwrap();
 
                         validation.set_validation(val);
                     }
