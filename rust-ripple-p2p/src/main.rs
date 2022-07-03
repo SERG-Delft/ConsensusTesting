@@ -43,22 +43,22 @@ fn main() {
     env_logger::Builder::new().parse_default_env().init();
 
     let bug_unls: Vec<Vec<usize>> = vec![
-        // vec![0, 1, 2, 3, 4], // 0
-        // vec![0, 1, 2, 3, 4], // 1
-        // vec![0, 1, 2, 3, 4], // 2
-        // vec![0, 1, 2, 3, 4], // 3
-        // vec![2, 3, 4, 5, 6], // 4
-        // vec![2, 3, 4, 5, 6], // 5
-        // vec![2, 3, 4, 5, 6], // 6
+        vec![0, 1, 2, 3, 4], // 0
+        vec![0, 1, 2, 3, 4], // 1
+        vec![0, 1, 2, 3, 4], // 2
+        vec![0, 1, 2, 3, 4], // 3
+        vec![2, 3, 4, 5, 6], // 4
+        vec![2, 3, 4, 5, 6], // 5
+        vec![2, 3, 4, 5, 6], // 6
 
 
-        vec![0, 1, 2, 3, 4, 5], // 0
-        vec![0, 1, 2, 3, 4, 5], // 1
-        vec![0, 1, 2, 3, 4, 5], // 2
-        vec![0, 1, 2, 3, 4, 5], // 3
-        vec![1, 2, 3, 4, 5, 6], // 4
-        vec![1, 2, 3, 4, 5, 6], // 5
-        vec![1, 2, 3, 4, 5, 6], // 6
+        // vec![0, 1, 2, 3, 4, 5], // 0
+        // vec![0, 1, 2, 3, 4, 5], // 1
+        // vec![0, 1, 2, 3, 4, 5], // 2
+        // vec![0, 1, 2, 3, 4, 5], // 3
+        // vec![1, 2, 3, 4, 5, 6], // 4
+        // vec![1, 2, 3, 4, 5, 6], // 5
+        // vec![1, 2, 3, 4, 5, 6], // 6
 
         // // config 1.5
         // vec![0, 1, 2, 3, 7], // 0
@@ -86,7 +86,7 @@ fn main() {
     let mut file = fs::OpenOptions::new()
         .write(true)
         .append(true) // This is needed to append to file
-        .open("results-overlap-7-4-3-6.txt")
+        .open("results-buggy-7-2-0-6.txt")
         .unwrap();
 
     loop {
@@ -104,7 +104,7 @@ fn main() {
             println!("node key {}", k.validation_public_key);
         }
 
-        let byzz_fuzz = ByzzFuzz::new(7, 4, 3, 6, node_keys.clone());
+        let byzz_fuzz = ByzzFuzz::new(7, 2, 0, 6, node_keys.clone());
         println!("{:?}", &byzz_fuzz.process_faults);
         file.write_fmt(format_args!("process faults {:?}\n", &byzz_fuzz.process_faults)).expect("could not log byzzfuzz");
         file.write_fmt(format_args!("network faults {:?}\n", &byzz_fuzz.network_faults)).expect("could not log byzzfuzz");
