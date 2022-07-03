@@ -253,7 +253,7 @@ impl ByzzFuzz {
                         let initial_propose_seq = proposal.get_proposeSeq();
                         let mut corrupted_propose_seq = initial_propose_seq + 1;
                         if LARGE_SCOPE {
-                            corrupted_propose_seq = seed % 2;
+                            corrupted_propose_seq = seed / 2;
                         }
                         proposal.set_proposeSeq(corrupted_propose_seq);
                     }
@@ -357,7 +357,7 @@ impl ByzzFuzz {
                         let ledger_sequence = parsed["LedgerSequence"].as_u32().unwrap();
                         let mut new_ledger_sequence = ledger_sequence + 1;
                         if LARGE_SCOPE {
-                            new_ledger_sequence = seed % 2;
+                            new_ledger_sequence = seed / 2;
                         }
 
                         let mutated_validation = hex::decode(format!(
