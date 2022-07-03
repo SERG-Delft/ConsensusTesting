@@ -54,9 +54,9 @@ impl ByzzFuzz {
         (0..c).for_each(|_| {
             let round = thread_rng().gen_range(2..r + 2);
             let sublist = if thread_rng().gen_bool(0.5) {
-                [0, 1, 2, 4]
+                [0 as usize, 1, 2, 4].into_iter()
             } else {
-                [2, 4, 5, 6]
+                [2 as usize, 4, 5, 6].into_iter()
             }
             .powerset()
             .collect_vec();
@@ -64,6 +64,7 @@ impl ByzzFuzz {
             for peer in sublist
                 .get(thread_rng().gen_range(1..(sublist.len())))
                 .unwrap()
+                .clone()
             {
                 subset.insert(*peer);
             }
