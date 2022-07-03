@@ -221,7 +221,7 @@ impl ByzzFuzz {
         }
     }
 
-    fn apply_mutation(&mut self, mut event: Event, message: &mut RippleMessageObject, mutate_seq_id: bool) -> Event {
+    fn apply_mutation(&mut self, mut event: Event, message: &mut RippleMessageObject, mutate_sequence_ids: bool) -> Event {
         match message {
             RippleMessageObject::TMTransaction(ref mut transaction) => {
                 let mutation = "1200002280000000240000000161400000000BED48A068400000000000000A73210330E7FC9D56BB25D6893BA3F317AE5BCF33B3291BD63DB32654A313222F7FD02074473045022100F1D8AA686F6241A5F39106FFDA94AA218118D385B58A00E633425D882B17205902200B38092D3F990359928F393485DC352CD0F3C22E4559280354FB423BC7F08BEC8114B5F762798A53D543A014CAF8B297CFF8F2F937E883149D94BFF9BAAA5267D5733CA2B59950B4C9A01564";
@@ -232,14 +232,18 @@ impl ByzzFuzz {
             TMProposeSet(ref mut proposal) => {
                 if proposal.get_nodePubKey()[1] == 149 {
 
-                    if (!bool) {
+                    if (!mutate_sequence_ids) {
                         proposal.set_currentTxHash(
                             hex::decode(
                                 "e803e1999369975aed1bfd2444a3552a73383c03a2004cb784ce07e13ebd7d7c",
                             )
                                 .unwrap(),
                         );
-                    } 
+                    } else {
+                        let initial_propose_seq = proposal.get_proposeSeq();
+                        let corrupted_propose_seq = initial_propose_seq + 1;
+                        proposal.set_proposeSeq(corrupted_propose_seq);
+                    }
                     let hash = sha512_first_half(
                         [
                             &[80, 82, 80, 00],
@@ -295,7 +299,7 @@ impl ByzzFuzz {
                     )
                     .unwrap();
 
-                    if (!bool) {
+                    if (!mutate_sequence_ids) {
                         let mutated_validation = hex::decode(format!(
                             "22{}26{}29{}3A{}51{}5017{}5019{}7321{}",
                             hex::encode(parsed["Flags"].as_u32().unwrap().to_be_bytes()),
@@ -339,7 +343,6 @@ impl ByzzFuzz {
                         let ledger_sequence = parsed["LedgerSequence"].as_u32().unwrap();
                         let new_ledger_sequence = ledger_sequence + 1;
 
-                        // decide what we do not mutate anymore
                         let mutated_validation = hex::decode(format!(
                             "22{}26{}29{}3A{}51{}5017{}5019{}7321{}",
                             hex::encode(parsed["Flags"].as_u32().unwrap().to_be_bytes()),
