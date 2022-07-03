@@ -6,7 +6,7 @@ use std::io::Write;
 use log::*;
 use env_logger;
 use std::process::{Command, Stdio};
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::broadcast;
 use crate::byzzfuzz::ByzzFuzz;
 use crate::container_manager::start_docker_containers;
@@ -123,6 +123,15 @@ fn main() {
             results.recv().await.unwrap()
         });
         file.write_all(format!("{:?}\n{:?}\nreason: {}\n", map, agreed, reason).as_bytes()).expect("could not write");
+
+        if reason.contains("node") {
+            fs::copy("execution.txt", format!("execution-{:?}.txt", SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs())).unwrap();
+
+            // toxiproxy.kill().unwrap();
+            // runtime.shutdown_timeout(Duration::from_millis(100));
+
+            // std::process::exit(0);
+        }
 
         toxiproxy.kill().unwrap();
         runtime.shutdown_timeout(Duration::from_millis(100));
