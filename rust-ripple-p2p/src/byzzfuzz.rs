@@ -242,7 +242,7 @@ impl ByzzFuzz {
             }
             TMProposeSet(ref mut proposal) => {
                 if proposal.get_nodePubKey()[1] == 149 {
-                    if (!mutate_sequence_ids) {
+                    if !mutate_sequence_ids {
                         proposal.set_currentTxHash(
                             hex::decode(
                                 "e803e1999369975aed1bfd2444a3552a73383c03a2004cb784ce07e13ebd7d7c",
@@ -252,8 +252,8 @@ impl ByzzFuzz {
                     } else {
                         let initial_propose_seq = proposal.get_proposeSeq();
                         let mut corrupted_propose_seq = initial_propose_seq + 1;
-                        if (LARGE_SCOPE) {
-                            corrupted_propose_seq = seed;
+                        if LARGE_SCOPE {
+                            corrupted_propose_seq = seed % 2;
                         }
                         proposal.set_proposeSeq(corrupted_propose_seq);
                     }
@@ -312,7 +312,7 @@ impl ByzzFuzz {
                     )
                     .unwrap();
 
-                    if (!mutate_sequence_ids) {
+                    if !mutate_sequence_ids {
                         let mutated_validation = hex::decode(format!(
                             "22{}26{}29{}3A{}51{}5017{}5019{}7321{}",
                             hex::encode(parsed["Flags"].as_u32().unwrap().to_be_bytes()),
@@ -356,8 +356,8 @@ impl ByzzFuzz {
                     } else {
                         let ledger_sequence = parsed["LedgerSequence"].as_u32().unwrap();
                         let mut new_ledger_sequence = ledger_sequence + 1;
-                        if (LARGE_SCOPE) {
-                            new_ledger_sequence = seed;
+                        if LARGE_SCOPE {
+                            new_ledger_sequence = seed % 2;
                         }
 
                         let mutated_validation = hex::decode(format!(
