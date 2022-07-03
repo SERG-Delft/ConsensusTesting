@@ -86,7 +86,7 @@ fn main() {
     let mut file = fs::OpenOptions::new()
         .write(true)
         .append(true) // This is needed to append to file
-        .open("results-buggy-7-2-0-6-v2.txt")
+        .open("results-buggy-7-2-0-6-any-scope.txt")
         .unwrap();
 
     loop {

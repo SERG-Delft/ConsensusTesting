@@ -28,7 +28,7 @@ use websocket::ClientBuilder;
 use xrpl::core::keypairs::utils::sha512_first_half;
 use RippleMessageObject::{TMProposeSet, TMStatusChange, TMValidation};
 
-const LARGE_SCOPE: bool = false;
+const LARGE_SCOPE: bool = true;
 
 pub struct ByzzFuzz {
     n: usize, // number of processes
