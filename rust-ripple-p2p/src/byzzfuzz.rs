@@ -28,7 +28,7 @@ use websocket::ClientBuilder;
 use xrpl::core::keypairs::utils::sha512_first_half;
 use RippleMessageObject::{TMProposeSet, TMStatusChange, TMValidation};
 
-const SMALL_SCOPE: bool = true;
+const LARGE_SCOPE: bool = false;
 
 pub struct ByzzFuzz {
     n: usize, // number of processes
@@ -251,7 +251,10 @@ impl ByzzFuzz {
                         );
                     } else {
                         let initial_propose_seq = proposal.get_proposeSeq();
-                        let corrupted_propose_seq = initial_propose_seq + 1;
+                        let mut corrupted_propose_seq = initial_propose_seq + 1;
+                        if (LARGE_SCOPE) {
+                            corrupted_propose_seq = seed;
+                        }
                         proposal.set_proposeSeq(corrupted_propose_seq);
                     }
                     let hash = sha512_first_half(
@@ -352,7 +355,10 @@ impl ByzzFuzz {
                         validation.set_validation(val);
                     } else {
                         let ledger_sequence = parsed["LedgerSequence"].as_u32().unwrap();
-                        let new_ledger_sequence = ledger_sequence + 1;
+                        let mut new_ledger_sequence = ledger_sequence + 1;
+                        if (LARGE_SCOPE) {
+                            new_ledger_sequence = seed;
+                        }
 
                         let mutated_validation = hex::decode(format!(
                             "22{}26{}29{}3A{}51{}5017{}5019{}7321{}",
