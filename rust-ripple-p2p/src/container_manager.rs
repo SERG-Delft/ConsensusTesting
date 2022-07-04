@@ -126,6 +126,7 @@ fn start_node_with_options(name: &str, offset: usize, expose_to_network: bool) {
     if expose_to_network {
         command = command
             .args(["--net", "ripple-net"])
+            .args(["--hostname", name])
             .args(["-p", &format!("{}:6005", 6005 + offset)])
             .args(["-p", &format!("{}:51235", 51235 + offset)])
     }

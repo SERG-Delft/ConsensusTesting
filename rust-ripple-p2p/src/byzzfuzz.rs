@@ -28,19 +28,19 @@ use websocket::ClientBuilder;
 use xrpl::core::keypairs::utils::sha512_first_half;
 use RippleMessageObject::{TMProposeSet, TMStatusChange, TMValidation};
 
-const LARGE_SCOPE: bool = true;
-
 pub struct ByzzFuzz {
     n: usize, // number of processes
     c: usize, // bound on the #rounds with process faults
     d: usize, // bound on the #rounds with network faults
     r: usize, // bound on the #rounds with faults
+    any_scope: bool,
     current_index: usize,
     current_round: usize,
     applied_partitions: bool,
     pub process_faults: HashMap<usize, (HashSet<usize>, u32)>,
     pub network_faults: HashMap<usize, Vec<HashSet<u8>>>,
     pub toxiproxy: Arc<ToxiproxyClient>,
+    all_mutated_ledger_hashes: HashSet<Vec<u8>>,
     mutated_ledger_hash: Vec<u8>,
     node_keys: Vec<NodeKeys>,
     pub sequences_hashes: HashMap<usize, String>,
@@ -48,7 +48,7 @@ pub struct ByzzFuzz {
 }
 
 impl ByzzFuzz {
-    pub fn new(n: usize, c: usize, d: usize, r: usize, node_keys: Vec<NodeKeys>) -> Self {
+    pub fn new(n: usize, c: usize, d: usize, r: usize, any_scope: bool, node_keys: Vec<NodeKeys>) -> Self {
         assert_eq!(n, 7);
         let mut process_faults = HashMap::with_capacity(c);
         (0..c).for_each(|_| {
@@ -96,12 +96,17 @@ impl ByzzFuzz {
             c,
             d,
             r,
+            any_scope,
             current_index: 0,
             current_round: 0,
             applied_partitions: true,
             process_faults,
             network_faults,
             toxiproxy: Arc::new(ToxiproxyClient::new("http://localhost:8474/")),
+            all_mutated_ledger_hashes: HashSet::from([hex::decode(
+                "0000000000000000000000000000000000000000000000000000000000000000",
+            )
+                .unwrap()]),
             mutated_ledger_hash: hex::decode(
                 "0000000000000000000000000000000000000000000000000000000000000000",
             )
@@ -244,16 +249,34 @@ impl ByzzFuzz {
             TMProposeSet(ref mut proposal) => {
                 if proposal.get_nodePubKey()[1] == 149 {
                     if !mutate_sequence_ids {
-                        proposal.set_currentTxHash(
-                            hex::decode(
-                                "e803e1999369975aed1bfd2444a3552a73383c03a2004cb784ce07e13ebd7d7c",
-                            )
-                            .unwrap(),
-                        );
+                        if !self.any_scope {
+                            proposal.set_currentTxHash(
+                                hex::decode(
+                                    "e803e1999369975aed1bfd2444a3552a73383c03a2004cb784ce07e13ebd7d7c",
+                                )
+                                    .unwrap(),
+                            );
+                        } else {
+                            if (seed / 2) % 2 == 0 {
+                                proposal.set_currentTxHash(
+                                    hex::decode(
+                                        "e803e1999369975aed1bfd2444a3552a73383c03a2004cb784ce07e13ebd7d7c",
+                                    )
+                                        .unwrap(),
+                                );
+                            } else {
+                                proposal.set_currentTxHash(
+                                    hex::decode(
+                                        "0000000000000000000000000000000000000000000000000000000000000000",
+                                    )
+                                        .unwrap(),
+                                );
+                            }
+                        }
                     } else {
                         let initial_propose_seq = proposal.get_proposeSeq();
                         let mut corrupted_propose_seq = initial_propose_seq + 1;
-                        if LARGE_SCOPE {
+                        if self.any_scope {
                             corrupted_propose_seq = seed / 2;
                         }
                         proposal.set_proposeSeq(corrupted_propose_seq);
@@ -314,13 +337,19 @@ impl ByzzFuzz {
                     .unwrap();
 
                     if !mutate_sequence_ids {
+                        let corruped_hash = if self.any_scope {
+                            let n = (seed as usize / 2) % self.all_mutated_ledger_hashes.len();
+                            self.all_mutated_ledger_hashes.iter().skip(n).next().unwrap()
+                        } else {
+                            &self.mutated_ledger_hash
+                        };
                         let mutated_validation = hex::decode(format!(
                             "22{}26{}29{}3A{}51{}5017{}5019{}7321{}",
                             hex::encode(parsed["Flags"].as_u32().unwrap().to_be_bytes()),
                             hex::encode(parsed["LedgerSequence"].as_u32().unwrap().to_be_bytes()),
                             hex::encode(parsed["SigningTime"].as_u32().unwrap().to_be_bytes()),
                             hex::encode(parsed["Cookie"].as_u64().unwrap().to_be_bytes()),
-                            hex::encode(&self.mutated_ledger_hash),
+                            hex::encode(corruped_hash),
                             "E803E1999369975AED1BFD2444A3552A73383C03A2004CB784CE07E13EBD7D7C",
                             parsed["ValidatedHash"].as_str().unwrap(),
                             parsed["SigningPubKey"].as_str().unwrap()
@@ -344,7 +373,7 @@ impl ByzzFuzz {
                             hex::encode(parsed["LedgerSequence"].as_u32().unwrap().to_be_bytes()),
                             hex::encode(parsed["SigningTime"].as_u32().unwrap().to_be_bytes()),
                             hex::encode(parsed["Cookie"].as_u64().unwrap().to_be_bytes()),
-                            hex::encode(&self.mutated_ledger_hash),
+                            hex::encode(corruped_hash),
                             "E803E1999369975AED1BFD2444A3552A73383C03A2004CB784CE07E13EBD7D7C",
                             parsed["ValidatedHash"].as_str().unwrap(),
                             parsed["SigningPubKey"].as_str().unwrap(),
@@ -357,7 +386,7 @@ impl ByzzFuzz {
                     } else {
                         let ledger_sequence = parsed["LedgerSequence"].as_u32().unwrap();
                         let mut new_ledger_sequence = ledger_sequence + 1;
-                        if LARGE_SCOPE {
+                        if self.any_scope {
                             new_ledger_sequence = seed / 2;
                         }
 
