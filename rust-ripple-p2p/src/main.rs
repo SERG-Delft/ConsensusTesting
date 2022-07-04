@@ -48,6 +48,9 @@ struct Args {
     /// Use any-scope corruptions
     #[clap(long, value_parser)]
     any_scope: bool,
+    /// Test baseline algorithm
+    #[clap(long, value_parser)]
+    baseline: bool,
     /// Path to the toxiproxy executable
     #[clap(long, value_parser)]
     toxiproxy_path: String,
@@ -102,19 +105,25 @@ fn main() {
                              // vec![0, 1, 2, 3, 4, 5, 6, 7, 8], // 8
     ];
 
+    let execution_string = format!(
+        "buggy-{}-{}-{}-{}-{}-{}.txt",
+        args.n,
+        args.c,
+        args.d,
+        args.r,
+        if args.baseline {
+            "baseline"
+        } else {
+            if args.any_scope { "any-scope" } else { "small-scope" }
+        },
+        crate_version!()
+    );
+
     let mut file = fs::OpenOptions::new()
         .write(true)
         .append(true)
         .create(true)// This is needed to append to file
-        .open(format!(
-            "results-buggy-{}-{}-{}-{}-{}-scope-{}.txt",
-            args.n,
-            args.c,
-            args.d,
-            args.r,
-            if args.any_scope { "any" } else { "small" },
-            crate_version!()
-        ))
+        .open(format!("results-{}", &execution_string))
         .unwrap();
 
     loop {
@@ -138,6 +147,7 @@ fn main() {
             args.d,
             args.r,
             args.any_scope,
+            args.baseline,
             node_keys.clone(),
         );
         println!("{:?}", &byzz_fuzz.process_faults);
@@ -162,11 +172,12 @@ fn main() {
         file.write_all(format!("{:?}\n{:?}\nreason: {}\n", map, agreed, reason).as_bytes())
             .expect("could not write");
 
-        if reason.contains("node") {
+        if reason.contains("node") || (args.baseline && reason.contains("timeout")) {
             fs::copy(
                 "execution.txt",
                 format!(
-                    "execution-ol-{:?}.txt",
+                    "execution-{}-{:?}.txt",
+                    &execution_string,
                     SystemTime::now()
                         .duration_since(UNIX_EPOCH)
                         .unwrap()

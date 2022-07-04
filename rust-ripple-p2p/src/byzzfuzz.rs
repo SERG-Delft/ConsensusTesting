@@ -34,6 +34,7 @@ pub struct ByzzFuzz {
     d: usize, // bound on the #rounds with network faults
     r: usize, // bound on the #rounds with faults
     any_scope: bool,
+    pub baseline: bool,
     current_index: usize,
     current_round: usize,
     applied_partitions: bool,
@@ -48,7 +49,15 @@ pub struct ByzzFuzz {
 }
 
 impl ByzzFuzz {
-    pub fn new(n: usize, c: usize, d: usize, r: usize, any_scope: bool, node_keys: Vec<NodeKeys>) -> Self {
+    pub fn new(
+        n: usize,
+        c: usize,
+        d: usize,
+        r: usize,
+        any_scope: bool,
+        baseline: bool,
+        node_keys: Vec<NodeKeys>,
+    ) -> Self {
         assert_eq!(n, 7);
         let mut process_faults = HashMap::with_capacity(c);
         (0..c).for_each(|_| {
@@ -97,6 +106,7 @@ impl ByzzFuzz {
             d,
             r,
             any_scope,
+            baseline,
             current_index: 0,
             current_round: 0,
             applied_partitions: true,
@@ -106,7 +116,7 @@ impl ByzzFuzz {
             all_mutated_ledger_hashes: HashSet::from([hex::decode(
                 "0000000000000000000000000000000000000000000000000000000000000000",
             )
-                .unwrap()]),
+            .unwrap()]),
             mutated_ledger_hash: hex::decode(
                 "0000000000000000000000000000000000000000000000000000000000000000",
             )
@@ -118,6 +128,17 @@ impl ByzzFuzz {
     }
 
     pub async fn on_message(&mut self, mut event: Event) -> Event {
+        if self.baseline {
+            if event.from != 3 {
+                let mut message = from_bytes(&event.message);
+                self.update_round(&message).await;
+            }
+            if event.from == 3 && self.current_round > 1 && thread_rng().gen_bool(0.2) {
+                let index = thread_rng().gen_range(0..event.message.len());
+                event.message[index] = event.message[index] ^ 0b0000_0001 << thread_rng().gen_range(0..8);
+            }
+            return event
+        }
         let mut message = from_bytes(&event.message);
         self.update_round(&message).await;
         self.apply_partition().await;
@@ -339,7 +360,11 @@ impl ByzzFuzz {
                     if !mutate_sequence_ids {
                         let corruped_hash = if self.any_scope {
                             let n = (seed as usize / 2) % self.all_mutated_ledger_hashes.len();
-                            self.all_mutated_ledger_hashes.iter().skip(n).next().unwrap()
+                            self.all_mutated_ledger_hashes
+                                .iter()
+                                .skip(n)
+                                .next()
+                                .unwrap()
                         } else {
                             &self.mutated_ledger_hash
                         };

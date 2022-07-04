@@ -1,6 +1,6 @@
 [package]
 name = "rust-ripple-p2p"
-version = "0.2.1"
+version = "0.2.2"
 authors = ["Martijn van Meerten <m.c.vanmeerten@student.tudelft.nl"]
 edition = "2018"
 

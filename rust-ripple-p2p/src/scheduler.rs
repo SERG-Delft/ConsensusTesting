@@ -121,6 +121,9 @@ impl Scheduler {
             .unwrap()
             .send(event.message.clone())
             .await;
+        if self.byzz_fuzz.baseline {
+            return (true, "everything good");
+        }
         let collector_message = RippleMessage::new(
             event.from.to_string(),
             event.to.to_string(),
