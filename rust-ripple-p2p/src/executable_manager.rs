@@ -10,7 +10,8 @@ use crate::{get_static_node_keys, NodeKeys};
 use crate::container_manager::{configure_unls, create_log_folders, get_node_keys, remove_containers};
 
 #[allow(unused)]
-const RIPPLED_EXECUTABLE_PATH: &str = "C:\\Users\\Martijn.vanMeerten\\Documents\\rippled\\cmake-build-debug\\rippled.exe";
+const RIPPLED_EXECUTABLE_PATH: &str = "C:\\Users\\Martijn.vanMeerten\\Documents\\rippled\\out\\build\\x64-Debug\\rippled.exe";
+// const RIPPLED_EXECUTABLE_PATH: &str = "C:\\Users\\Martijn.vanMeerten\\Documents\\rippled\\cmake-build-debug\\rippled.exe";
 #[allow(unused)]
 const LEDGER_PATH: &str = "C:\\Users\\Martijn.vanMeerten\\Documents\\rippled\\cfg\\ledger.json";
 #[allow(unused)]
@@ -19,7 +20,7 @@ const DB_BASE_PATH: &str = "C:\\Users\\Martijn.vanMeerten\\Documents\\rippled\\c
 #[allow(unused)]
 pub fn start_executables(peers: usize, unls: Vec<Vec<usize>>) -> Vec<NodeKeys> {
     kill_executables();
-    remove_containers("validator");
+    remove_containers("validator", "rippled-boost-cmake");
     let node_keys = get_node_keys(peers);
     let folders = create_log_folders(peers);
     create_db_folders(peers);

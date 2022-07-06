@@ -6,10 +6,10 @@ use log::{debug, error, trace};
 use std::collections::{HashMap};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
-use std::sync::Arc;
-use chrono::Utc;
+use std::sync::{Arc, RwLock};
+use chrono::{DateTime, MAX_DATETIME, Utc};
 use tokio::sync::mpsc::{Sender as TokioSender, Receiver as TokioReceiver};
-use std::sync::mpsc::{Sender as STDSender, Receiver as STDReceiver, channel};
+use std::sync::mpsc::{Sender as STDSender, Receiver as STDReceiver, channel, Sender, SendError};
 use std::thread;
 use std::time::Duration;
 use parking_lot::{Mutex, Condvar};
@@ -18,6 +18,7 @@ use websocket::Message;
 use crate::client::{AccountInfo, Transaction};
 use crate::collector::RippleMessage;
 use crate::consensus_properties::ConsensusProperties;
+use crate::failure_writer::ConsensusPropertyTypes;
 use crate::ga::fitness::ExtendedFitness;
 use crate::ga::genetic_algorithm::{CurrentFitness, ConsensusMessageType};
 use crate::message_handler::{parse_protocol_message, ParsedValidation, RippleMessageObject, rmo_to_bytes};
@@ -71,7 +72,7 @@ pub trait Scheduler: Sized {
     }
 
     fn schedule_controller(receiver: TokioReceiver<Event>,
-                           run: Arc<(Mutex<bool>, Condvar)>,
+                           run: Arc<(RwLock<bool>, Condvar)>,
                            current_individual: Arc<Mutex<Self::IndividualPhenotype>>,
                            node_states: Arc<MutexNodeStates>,
                            event_schedule_sender: STDSender<RMOEvent>
@@ -83,25 +84,43 @@ pub trait Scheduler: Sized {
 
     /// Execute event and report to collector
     fn execute_event(&self, event: RMOEvent) {
-        let collector_message = RippleMessage::new(format!("Ripple{}", event.from+1), format!("Ripple{}", event.to+1), Utc::now(), event.message.clone());
+        let collector_message = RippleMessage::new(format!("Ripple{}", event.from+1), format!("Ripple{}", event.to+1),
+                                                   Utc::now().signed_duration_since(event.time_in), Utc::now(), event.message.clone());
         self.get_state().collector_sender.send(collector_message.clone()).expect("Collector receiver failed");
         let (ref run_lock, ref _run_cvar) = &*self.get_state().run;
-        if *run_lock.lock() {
+        if *run_lock.read().unwrap() {
             if Self::is_consensus_rmo(&event.message) {
                 self.get_state().node_states.add_execution(collector_message.as_ref().clone());
                 if Self::is_own_message(&event.message, &self.get_state().node_keys[event.from].validation_public_key) {
+                    let mut consensus_property_violations = vec![];
                     match &event.message {
                         RippleMessageObject::TMStatusChange(status_change) => {
-                            ConsensusProperties::check_proposal_integrity_property(&self.get_state().node_states, &status_change, event.from);
+                            consensus_property_violations.append(
+                                &mut ConsensusProperties::check_proposal_integrity_property(
+                                    &self.get_state().node_states,
+                                    &status_change,
+                                    event.from
+                                ));
                         }
                         RippleMessageObject::TMValidation(validation) => {
                             let parsed_validation = ParsedValidation::new(validation);
-                            ConsensusProperties::check_validation_integrity_property(&self.get_state().node_states, parsed_validation, event.from);
+                            consensus_property_violations.append(
+                                &mut ConsensusProperties::check_validation_integrity_property(
+                                    &self.get_state().node_states,
+                                    parsed_validation,
+                                    event.from
+                                ));
                         }
                         RippleMessageObject::TMProposeSet(proposal) => {
                             self.get_state().node_states.node_states.lock().add_proposed_tx_set(proposal.get_currentTxHash(), event.from);
                         }
                         _ => {}
+                    }
+                    if !consensus_property_violations.is_empty() {
+                        match self.get_state().failure_sender.send(consensus_property_violations) {
+                            Ok(_) => {}
+                            Err(_) => error!("Failure channel failed")
+                        };
                     }
                 }
             }
@@ -159,16 +178,26 @@ pub trait Scheduler: Sized {
     }
 
     /// Update the latest validated ledger if all nodes have validated a next ledger
-    fn update_latest_validated_ledger(node_states: Arc<MutexNodeStates>, latest_validated_ledger: Arc<(Mutex<u32>, Condvar)>) {
+    fn update_latest_validated_ledger(
+        node_states: Arc<MutexNodeStates>,
+        latest_validated_ledger: Arc<(Mutex<u32>, Condvar)>,
+        failure_sender: STDSender<Vec<ConsensusPropertyTypes>>
+    ) {
         let mut liveness = true;
         loop {
             let mut node_states_mutex = node_states.node_states.lock();
             // Liveness check!
             let now = Utc::now();
             node_states.validated_ledger_cvar.wait_for(&mut node_states_mutex, Duration::from_secs(65));
-            if Utc::now() - chrono::Duration::seconds(65) >= now {
+            if Utc::now() - chrono::Duration::seconds(65) >= now && liveness {
                 error!("Liveness bug");
+                match failure_sender.send(vec![ConsensusPropertyTypes::Termination]) {
+                    Ok(_) => {}
+                    Err(err) => error!("Failure channel failed")
+                };
                 liveness = false;
+            } else if !liveness {
+                liveness = true;
             }
             let validated_ledger_index = node_states_mutex.min_validated_ledger();
             let (ref lock, ref cvar) = &*latest_validated_ledger;
@@ -178,7 +207,7 @@ pub trait Scheduler: Sized {
                 *locked_ledger_index = validated_ledger_index;
                 cvar.notify_all();
             }
-             println!("Validated ledgers: {:?}, fork: {}, liveness: {}", node_states_mutex.validated_ledgers(), node_states_mutex.check_for_fork(), liveness);
+            println!("Validated ledgers: {:?}, fork: {}, liveness: {}", node_states_mutex.validated_ledgers(), node_states_mutex.check_for_fork(), liveness);
         }
     }
 
@@ -194,7 +223,7 @@ pub trait Scheduler: Sized {
         balance_receiver: STDReceiver<u32>,
         latest_validated_ledger: Arc<(Mutex<u32>, Condvar)>,
         current_round: Arc<(Mutex<u32>, Condvar)>,
-        run: Arc<(Mutex<bool>, Condvar)>,
+        run: Arc<(RwLock<bool>, Condvar)>,
         node_states: Arc<MutexNodeStates>,
     )
     {
@@ -222,13 +251,17 @@ pub trait Scheduler: Sized {
                 if *round_number > first_round {
                     drop(round_number);
                     test_harness.setup_balances(&node_states);
-                    *run_lock.lock() = true;
+                    {
+                        *run_lock.write().unwrap() = true;
+                    }
                     println!("Starting test harness run");
                     run_cvar.notify_all();
                     let fitness = CurrentFitness::run_harness(&mut test_harness, node_states.clone());
                     // Send fitness of test case to GA
                     ga_sender.send(fitness).expect("GA receiver failed");
-                    *run_lock.lock() = false;
+                    {
+                        *run_lock.write().unwrap() = false;
+                    }
                     run_cvar.notify_all();
                 }
             }
@@ -279,23 +312,31 @@ pub trait Scheduler: Sized {
 pub struct SchedulerState {
     pub p2p_connections: P2PConnections,
     pub collector_sender: STDSender<Box<RippleMessage>>,
-    pub run: Arc<(Mutex<bool>, Condvar)>,
+    pub run: Arc<(RwLock<bool>, Condvar)>,
     pub latest_validated_ledger: Arc<(Mutex<u32>, Condvar)>,
     pub current_round: Arc<(Mutex<u32>, Condvar)>,
     pub node_states: Arc<MutexNodeStates>,
     pub node_keys: Vec<NodeKeys>,
+    pub failure_sender: Sender<Vec<ConsensusPropertyTypes>>
 }
 
 impl SchedulerState {
-    pub fn new(p2p_connections: P2PConnections, collector_sender: STDSender<Box<RippleMessage>>, node_states: Arc<MutexNodeStates>, node_keys: Vec<NodeKeys>) -> Self {
+    pub fn new(
+        p2p_connections: P2PConnections,
+        collector_sender: STDSender<Box<RippleMessage>>,
+        node_states: Arc<MutexNodeStates>,
+        node_keys: Vec<NodeKeys>,
+        failure_sender: Sender<Vec<ConsensusPropertyTypes>>,
+    ) -> Self {
         SchedulerState {
             p2p_connections,
             collector_sender,
-            run: Arc::new((Mutex::new(false), Condvar::new())),
+            run: Arc::new((RwLock::new(false), Condvar::new())),
             latest_validated_ledger: Arc::new((Mutex::new(0), Condvar::new())),
             current_round: Arc::new((Mutex::new(0), Condvar::new())),
             node_states,
             node_keys,
+            failure_sender
         }
     }
 }
@@ -335,11 +376,12 @@ impl Event {
     }
 }
 
-#[derive(Default, Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Hash)]
 pub struct RMOEvent {
     pub from: usize,
     pub to: usize,
     pub message: RippleMessageObject,
+    pub time_in: DateTime<Utc>,
 }
 
 impl RMOEvent {
@@ -348,6 +390,7 @@ impl RMOEvent {
             from: event.from,
             to: event.to,
             message: parse_protocol_message(BigEndian::read_u16(&event.message[4..6]), &event.message[6..]),
+            time_in: Utc::now(),
         }
     }
 }
@@ -374,10 +417,17 @@ impl Ord for RMOEvent {
     }
 }
 
+impl Default for RMOEvent {
+    fn default() -> Self {
+        Self { from: 0, to: 0, message: RippleMessageObject::default(), time_in: MAX_DATETIME }
+    }
+}
+
 #[cfg(test)]
 mod scheduler_tests {
     use std::thread;
     use std::time::Duration;
+    use chrono::{DateTime, TimeZone, Utc};
     use crate::ga::encoding::delay_encoding::DROP_THRESHOLD;
     use crate::message_handler::RippleMessageObject;
     use crate::protos::ripple::{TMTransaction as PBTransaction, TransactionStatus};
@@ -389,7 +439,7 @@ mod scheduler_tests {
         let mut transaction = PBTransaction::new();
         transaction.set_rawTransaction(vec![]);
         transaction.set_status(TransactionStatus::tsCOMMITED);
-        let rmo_event = RMOEvent { from: 0, to: 1, message: RippleMessageObject::TMTransaction(transaction) };
+        let rmo_event = RMOEvent { from: 0, to: 1, message: RippleMessageObject::TMTransaction(transaction), time_in: Utc.timestamp(1431648000, 0) };
         let event = Event::from(rmo_event.clone());
         let transformed_event = RMOEvent::from(&event);
         assert_eq!(rmo_event.message, transformed_event.message);
@@ -397,13 +447,13 @@ mod scheduler_tests {
 
     #[test]
     fn test_drop_threshold() {
-        let rmo_event = RMOEvent { from: 0, to: 1, message: RippleMessageObject::TMTransaction(PBTransaction::new()) };
+        let rmo_event = RMOEvent { from: 0, to: 1, message: RippleMessageObject::TMTransaction(PBTransaction::new()), time_in: Utc.timestamp(1431648000, 0) };
         let (sender, receiver) = std::sync::mpsc::channel();
         ScheduledEvent::schedule_execution(rmo_event, Duration::from_millis(DROP_THRESHOLD as u64 + 1), sender.clone());
         thread::sleep(Duration::from_millis(DROP_THRESHOLD as u64 + 500));
         let result = receiver.try_recv();
         assert!(result.is_err());
-        let rmo_event = RMOEvent { from: 0, to: 1, message: RippleMessageObject::TMTransaction(PBTransaction::default()) };
+        let rmo_event = RMOEvent { from: 0, to: 1, message: RippleMessageObject::TMTransaction(PBTransaction::default()), time_in: Utc.timestamp(1431648000, 0) };
         ScheduledEvent::schedule_execution(rmo_event, Duration::from_millis(100), sender);
         thread::sleep(Duration::from_millis(1000));
         let result = receiver.try_recv();

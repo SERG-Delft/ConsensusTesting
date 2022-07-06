@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use log::error;
 use itertools::Itertools;
+use crate::failure_writer::ConsensusPropertyTypes;
 use crate::message_handler::ParsedValidation;
 use crate::node_state::{MutexNodeStates};
 use crate::protos::ripple::{NodeEvent, TMStatusChange};
@@ -10,39 +11,39 @@ pub struct ConsensusProperties {}
 
 impl ConsensusProperties {
     /// I1 Check whether a proposal has already declared consensus on a transaction set for one ledger
-    pub fn check_proposal_integrity_property(node_states: &Arc<MutexNodeStates>, status_change: &TMStatusChange, sender: usize) -> bool {
+    pub fn check_proposal_integrity_property(node_states: &Arc<MutexNodeStates>, status_change: &TMStatusChange, sender: usize) -> Vec<ConsensusPropertyTypes> {
         if status_change.has_newEvent() && status_change.get_newEvent() == NodeEvent::neACCEPTED_LEDGER {
             let mut node_states_vec = node_states.node_states.lock();
             let already_present = node_states_vec.add_consensus_constructed_ledger(status_change.clone(), sender);
             if let Some(earlier_status_change) = already_present {
                 if earlier_status_change != *status_change {
                     error!("(I1) Node has declared consensus on two transaction sets for the same ledger sequence\nOld: {:?}\nNew: {:?}", earlier_status_change, status_change);
-                    return false;
+                    return vec![ConsensusPropertyTypes::Integrity1];
                 }
             }
         }
-        true
+        vec![]
     }
 
     /// I2 Check whether a node has already issued a validation for a ledger
-    pub fn check_validation_integrity_property(node_states: &Arc<MutexNodeStates>, validation: ParsedValidation, sender: usize) -> bool {
+    pub fn check_validation_integrity_property(node_states: &Arc<MutexNodeStates>, validation: ParsedValidation, sender: usize) -> Vec<ConsensusPropertyTypes> {
         let mut node_states_vec = node_states.node_states.lock();
         let already_present = node_states_vec.add_sent_validation(validation.clone(), sender);
         if let Some(earlier_validation) = already_present {
             if earlier_validation != validation {
                 error!("(I2) Node validated twice for one ledger sequence\nOld: {:?}\nNew: {:?}", earlier_validation, validation);
-                return false
+                return vec![ConsensusPropertyTypes::Integrity2];
             }
         }
-        true
+        vec![]
     }
 
     /// Check agreement consensus properties
     /// A1 is a weaker safety property, as validation is specifically designed to remedy that situation
     /// A1 Check whether two nodes created different ledgers / declared consensus on two different tx sets
     /// A2 Check whether two nodes validated two different ledgers
-    pub fn check_agreement_properties(node_states: &Arc<MutexNodeStates>) -> bool {
-        let mut agreement = true;
+    pub fn check_agreement_properties(node_states: &Arc<MutexNodeStates>) -> Vec<ConsensusPropertyTypes> {
+        let mut consensus_properties_violated = vec![];
         let node_states_vec = &node_states.node_states.lock().node_states;
         let seqs = node_states_vec.iter()
             .map(|node| node.validated_ledgers.keys().map(|key| *key).collect::<HashSet<usize>>())
@@ -58,22 +59,23 @@ impl ConsensusProperties {
                 .all_equal();
             if !validation_agreement {
                 error!("(A2) Conflicting ledgers validated");
-                agreement = false
+                consensus_properties_violated.push(ConsensusPropertyTypes::Agreement2);
             }
             if !proposal_agreement {
                 error!("(A1) Conflicting ledgers created");
-                agreement = false
+                consensus_properties_violated.push(ConsensusPropertyTypes::Agreement1);
             }
         }
-        agreement
+        consensus_properties_violated
     }
 
     /// Check validity consensus properties
     /// V1 Check whether the transaction sets on which the nodes declared consensus are actually in the proposed transaction sets
     /// V2 Check whether the transaction sets (consensus_hash) in nodes' validation messages are actually in the proposed transaction sets
-    pub fn check_validity_properties(node_states: &Arc<MutexNodeStates>) {
+    pub fn check_validity_properties(node_states: &Arc<MutexNodeStates>) -> Vec<ConsensusPropertyTypes> {
         let node_states_vec = &node_states.node_states.lock().node_states;
         let seqs = node_states_vec.iter().map(|node| node.proposed_tx_sets.keys().map(|key| *key).collect::<HashSet<usize>>()).flatten().collect::<HashSet<usize>>();
+        let mut consensus_properties_violated = vec![];
         for seq in seqs {
             let proposed_tx_sets = node_states_vec.iter()
                 .filter_map(|node| node.proposed_tx_sets.get(&seq)).flatten()
@@ -92,14 +94,18 @@ impl ConsensusProperties {
                 }).collect::<HashSet<Vec<u8>>>();
             let is_v2_violated = validations.difference(&proposed_tx_sets).count() > 0;
             if is_v1_violated {
+                consensus_properties_violated.push(ConsensusPropertyTypes::Validity1);
                 error!("(V1) Node declared consensus on a tx_set that was never proposed");
             }
             if is_v2_violated {
+                consensus_properties_violated.push(ConsensusPropertyTypes::Validity2);
                 error!("(V2) Node sent a validation for a ledger that was never constructed");
             }
         }
+        consensus_properties_violated
     }
 }
+
 
 #[cfg(test)]
 mod consensus_properties_tests {

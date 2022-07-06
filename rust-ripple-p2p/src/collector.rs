@@ -9,9 +9,10 @@ use std::thread;
 use serde_json::json;
 use crate::client::{ConsensusChange, PeerServerStateObject, PeerSubscriptionObject, SubscriptionObject};
 use crate::message_handler::RippleMessageObject;
-use chrono::{DateTime, MAX_DATETIME, Utc};
+use chrono::{DateTime, Duration, MAX_DATETIME, Utc};
 use itertools::Itertools;
 use log::error;
+use serde_with::{serde_as, DurationSecondsWithFrac};
 use crate::LOG_FOLDER;
 use crate::message_handler::RippleMessageObject::TMProposeSet;
 use crate::node_state::{ConsensusPhase, MutexNodeStates};
@@ -149,17 +150,20 @@ impl Collector {
 }
 
 /// Struct for writing clearly to execution.txt, should definitely rename
+#[serde_as]
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct RippleMessage {
     pub from_node: String,
     pub to_node: String,
+    #[serde_as(as = "DurationSecondsWithFrac<f64>")]
+    delay: Duration,
     timestamp: DateTime<Utc>,
     pub message: RippleMessageObject
 }
 
 impl RippleMessage {
-    pub fn new(from_node: String, to_node: String, timestamp: DateTime<Utc>, message: RippleMessageObject) -> Box<Self> {
-        Box::from(RippleMessage { from_node, to_node, timestamp, message })
+    pub fn new(from_node: String, to_node: String, delay: Duration, timestamp: DateTime<Utc>, message: RippleMessageObject) -> Box<Self> {
+        Box::from(RippleMessage { from_node, to_node, delay, timestamp, message })
     }
 
     pub fn message_type(&self) -> String {
@@ -206,12 +210,12 @@ impl Display for RippleMessage {
         let to_node_buf = &self.to_node;
         // let time_since = self.timestamp.signed_duration_since(ripple_epoch).num_seconds();
         let message_buf = self.message.to_string();
-        write!(f, "{} {} -> {} sent {}\n", self.timestamp, from_node_buf, to_node_buf, message_buf)
+        write!(f, "After {}, at {} {} -> {} sent {}\n", self.delay, self.timestamp, from_node_buf, to_node_buf, message_buf)
     }
 }
 
 impl Default for RippleMessage {
     fn default() -> Self {
-        *Self::new("".to_string(), "".to_string(), MAX_DATETIME, RippleMessageObject::TMTransaction(TMTransaction::default()))
+        *Self::new("".to_string(), "".to_string(), Duration::zero(), MAX_DATETIME, RippleMessageObject::TMTransaction(TMTransaction::default()))
     }
 }

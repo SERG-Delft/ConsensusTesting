@@ -19,10 +19,10 @@ pub fn approximate_aed_graph_edit_distance<N, E>(graph1: Graph<N, E, petgraph::D
     calculate_min_cost(&node_matrix_cost, &star_matrix)
 }
 
-pub fn approximate_hed_graph_edit_distance<N, E>(graph1: Graph<N, E, petgraph::Directed>, graph2: Graph<N, E, petgraph::Directed>, scoring: DistanceScoring) -> f32
+pub fn approximate_hed_graph_edit_distance<N, E>(graph1: &Graph<N, E, petgraph::Directed>, graph2: &Graph<N, E, petgraph::Directed>, scoring: DistanceScoring) -> f32
     where N: PartialEq + Eq + Clone + Debug + Hash, E: PartialEq + Eq + Clone
 {
-    let (indexed_nodes_1, indexed_nodes_2, _indexed_edges_1, _indexed_edges_2) = create_indexed_graph(&graph1, &graph2);
+    let (indexed_nodes_1, indexed_nodes_2, _indexed_edges_1, _indexed_edges_2) = create_indexed_graph(graph1, graph2);
     println!("Nodes_1: {}, Edges_1: {}, Nodes_2: {}, Edges_2: {}", indexed_nodes_1.len(),
              indexed_nodes_1.iter().map(|x| x.number_of_edges).sum::<i32>() / 2,
              indexed_nodes_2.len(), indexed_nodes_2.iter().map(|x| x.number_of_edges).sum::<i32>() / 2);
@@ -51,7 +51,7 @@ fn hausdorff_edit_distance<N: PartialEq + Eq + Clone + Debug + Hash>(nodes_1: &V
     }
     for i in 0..nodes_1.len() {
         for j in 0..nodes_2.len() {
-            let mut cost_edge: f32 = hausdorff_edit_cost(
+            let mut cost_edge = hausdorff_edit_cost(
                 &nodes_1[i].edges,
                 &nodes_2[j].edges,
             );
@@ -60,8 +60,8 @@ fn hausdorff_edit_distance<N: PartialEq + Eq + Clone + Debug + Hash>(nodes_1: &V
                 true => 0.0,
                 false => 1.0
             };
-            distance_1[i] = (((sub_cost + cost_edge / 2.0) / 2.0) as f32).min(distance_1[i]);
-            distance_2[j] = (((sub_cost + cost_edge / 2.0) / 2.0) as f32).min(distance_2[j]);
+            distance_1[i] = ((sub_cost + cost_edge / 2.0) / 2.0).min(distance_1[i]);
+            distance_2[j] = ((sub_cost + cost_edge / 2.0) / 2.0).min(distance_2[j]);
         }
     }
     let distance = distance_1.iter().sum::<f32>() + distance_2.iter().sum::<f32>();
@@ -74,16 +74,21 @@ fn hausdorff_edit_cost<N: PartialEq + Eq + Clone + Debug + Hash>(
     edges_2: &Vec<(N, N)>,
 ) -> f32
 {
-    let mut cost_1: Vec<f32> = vec![1.0; edges_1.len()];
-    let mut cost_2: Vec<f32> = vec![1.0; edges_2.len()];
+    let mut cost_1: Vec<f32> = vec![1.0 / 2.0; edges_1.len()];
+    let mut cost_2: Vec<f32> = vec![1.0/ 2.0; edges_2.len()];
+    // let mut sub_cost_time = chrono::Duration::zero();
     for i in 0..edges_1.len() {
         for j in 0..edges_2.len() {
-            let sub_cost = match edges_1[i] == edges_2[j] {
-                true => 0.0,
-                false => 1.0 / 2.0
-            };
-            cost_1[i] = f32::min(sub_cost, cost_1[i]);
-            cost_2[j] = f32::min(sub_cost, cost_2[j]);
+            if edges_1[i] == edges_2[j] {
+                (cost_1[i], cost_2[j]) = (0.0, 0.0);
+            }
+            // let sub_cost = match edges_1[i] == edges_2[j] {
+            //     true => 0.0,
+            //     false => 1.0 / 2.0
+            // };
+            // cost_1[i] = f32::min(sub_cost, cost_1[i]);
+            // cost_2[j] = f32::min(sub_cost, cost_2[j]);
+            // sub_cost_time = sub_cost_time + (chrono::Utc::now() - before_time);
         }
     }
     cost_1.iter().sum::<f32>() + cost_2.iter().sum::<f32>()
@@ -135,14 +140,15 @@ pub enum DistanceScoring {
 #[cfg(test)]
 mod tests {
     use ndarray::{arr2, Array2};
-    use crate::approximate_edit_distance::{add_edge_cost, approximate_hed_graph_edit_distance, calculate_edge_substitution_cost, calculate_min_cost, DistanceScoring};
+    use petgraph::Graph;
+    use crate::approximate_edit_distance::{add_edge_cost, approximate_hed_graph_edit_distance, calculate_min_cost, DistanceScoring};
     use crate::graph_edit_distance::{calculate_cost_matrix, create_indexed_graph, munkres_min_cost};
     use crate::graph_edit_distance::tests::{setup_graph, setup_graph_2};
 
     #[test]
     fn approximate_hed_test_1() {
         let (graph1, graph2) = setup_graph();
-        let actual_similarity = approximate_hed_graph_edit_distance(graph1, graph2, DistanceScoring::Normalized);
+        let actual_similarity = approximate_hed_graph_edit_distance(&graph1, &graph2, DistanceScoring::Normalized);
         let expected_similarity: f32 = 1.0 - (4.0/8.0);
         assert!(actual_similarity >= expected_similarity);
     }
@@ -150,15 +156,22 @@ mod tests {
     #[test]
     fn approximate_hed_test_2() {
         let (graph1, graph2) = setup_graph_2();
-        let actual_similarity = approximate_hed_graph_edit_distance(graph1, graph2, DistanceScoring::Normalized);
+        let actual_similarity = approximate_hed_graph_edit_distance(&graph1, &graph2, DistanceScoring::Normalized);
         let expected_similarity: f32 = 1.0 - (5.0/8.0);
         assert!(actual_similarity > expected_similarity);
     }
 
     #[test]
+    fn approximate_hed_max_test_2() {
+        let (graph1, _) = setup_graph();
+        let similarity = approximate_hed_graph_edit_distance(&graph1, &Graph::new(), DistanceScoring::Normalized);
+        assert_eq!(similarity, 0.0);
+    }
+
+    #[test]
     fn approximate_ged_test() {
         let (graph1, graph2) = setup_graph();
-        let (indexed_nodes_1, indexed_nodes_2, indexed_edges_1, indexed_edges_2) = create_indexed_graph(&graph1, &graph2);
+        let (indexed_nodes_1, indexed_nodes_2, _indexed_edges_1, _indexed_edges_2) = create_indexed_graph(&graph1, &graph2);
         let mut cost_matrix = calculate_cost_matrix(&indexed_nodes_1, &indexed_nodes_2);
         add_edge_cost(&mut cost_matrix, &indexed_nodes_1, &indexed_nodes_2);
         let star_matrix= munkres_min_cost(&mut cost_matrix.clone());
@@ -169,7 +182,7 @@ mod tests {
     #[test]
     fn calculate_edge_substitution_cost_test() {
         let (graph1, graph2) = setup_graph();
-        let (indexed_nodes_1, indexed_nodes_2, indexed_edges_1, indexed_edges_2) = create_indexed_graph(&graph1, &graph2);
+        let (indexed_nodes_1, indexed_nodes_2, _indexed_edges_1, _indexed_edges_2) = create_indexed_graph(&graph1, &graph2);
         let mut cost_matrix = calculate_cost_matrix(&indexed_nodes_1, &indexed_nodes_2);
         let expected_edge_substitution_added_cost_matrix = arr2(&[
             [1, 2, 1, 2, 2, i32::MAX, i32::MAX, i32::MAX],

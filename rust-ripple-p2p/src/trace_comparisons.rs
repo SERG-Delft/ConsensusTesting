@@ -161,7 +161,7 @@ impl<T> PriorityTraceGraphSchedulerHandler<T>
     }
 }
 
-fn transform_to_message_type_graph(graph: &Graph<DependencyEvent, ()>) -> Graph<MessageTypeDependencyEvent, ()> {
+pub fn transform_to_message_type_graph(graph: &Graph<DependencyEvent, ()>) -> Graph<MessageTypeDependencyEvent, ()> {
     graph.map(|_ix, node| MessageTypeDependencyEvent::from(node), |_ix, edge| *edge)
 }
 
@@ -377,6 +377,8 @@ impl PreDeterminedDelaySchedulerHandler {
 //         delays
 //     }
 // }
+
+
 
 #[allow(unused)]
 pub fn run_delay_trace_graph_creation<T>(scheduler_sender: Sender<DelayMapPhenotype>, scheduler_receiver: Receiver<T>, node_states: Arc<MutexNodeStates>)
