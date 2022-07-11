@@ -1,13 +1,14 @@
 use std::marker::PhantomData;
 use genevo::genetic::Genotype;
 use genevo::operator::{CrossoverOp, SelectionOp};
-use genevo::operator::prelude::{MaximizeSelector, RouletteWheelSelector};
+use genevo::operator::prelude::{RouletteWheelSelector};
 use crate::ga::crossover::{SimulatedBinaryCrossBreeder};
 use crate::ga::encoding::delay_encoding::DelaysGenotype;
 use crate::ga::encoding::{num_genes, SuperExtendedGenotype};
 use crate::ga::fitness::ExtendedFitness;
 use crate::ga::genetic_algorithm::{ConsensusMessageType, CurrentFitness};
 use crate::ga::encoding::priority_encoding::{PriorityGenotype};
+use crate::ga::selection::MuLambdaSelector;
 
 /// Parameters for the GA
 #[allow(unused)]
@@ -77,7 +78,7 @@ impl<S, C, G> Parameter<S, C, CurrentFitness, G> where S: SelectionOp<G, Current
             max_value: 1000,
             num_genes: num_genes(),
             selection_operator: RouletteWheelSelector::new(0.7, 2),
-            crossover_operator: SimulatedBinaryCrossBreeder::new(0.5),
+            crossover_operator: SimulatedBinaryCrossBreeder::new(0.5, 0, 1000),
             stupid_type_system: PhantomData,
             stupid_type_system_2: PhantomData
         }
@@ -103,37 +104,35 @@ impl<S, C, G> Parameter<S, C, CurrentFitness, G> where S: SelectionOp<G, Current
     // }
 }
 
-pub fn default_mu_lambda_delays(mu: usize, lambda: usize) -> Parameter<MaximizeSelector, SimulatedBinaryCrossBreeder, CurrentFitness, DelaysGenotype> {
-    let reinsertion_ratio = mu as f64 / lambda as f64;
+pub fn default_mu_lambda_delays(mu: usize, lambda: usize) -> Parameter<MuLambdaSelector, SimulatedBinaryCrossBreeder, CurrentFitness, DelaysGenotype> {
     Parameter {
-        population_size: lambda,
+        population_size: mu,
         generation_limit: 5,
         num_individuals_per_parents: 2,
         num_crossover_points: ConsensusMessageType::VALUES.len(),
         mutation_rate: 0.05,
-        mutation_std: 50f64,
-        reinsertion_ratio,
+        mutation_std: 40f64,
+        reinsertion_ratio: 0.0,
         min_value: 0,
-        max_value: 2000,
+        max_value: 4000,
         num_genes: num_genes(),
-        selection_operator: MaximizeSelector::new(reinsertion_ratio, 2),
-        crossover_operator: SimulatedBinaryCrossBreeder::new(0.5),
+        selection_operator: MuLambdaSelector::new(mu, lambda, 2),
+        crossover_operator: SimulatedBinaryCrossBreeder::new(0.5, 0, 4000),
         stupid_type_system: PhantomData,
         stupid_type_system_2: PhantomData
     }
 }
 
-pub fn default_mu_lambda_priorities(mu: usize, lambda: usize) -> PermutationParameters<MaximizeSelector, CurrentFitness, PriorityGenotype> {
-    let reinsertion_ratio = mu as f64 / lambda as f64;
+pub fn default_mu_lambda_priorities(mu: usize, lambda: usize) -> PermutationParameters<MuLambdaSelector, CurrentFitness, PriorityGenotype> {
     PermutationParameters {
-        population_size: lambda,
+        population_size: mu,
         generation_limit: 100,
         num_individuals_per_parents: 2,
         mutation_rate: 0.05,
         mutation_std: 0.1f64,
-        reinsertion_ratio,
+        reinsertion_ratio: 1.0,
         num_genes: num_genes(),
-        selection_operator: MaximizeSelector::new(reinsertion_ratio, 2),
+        selection_operator: MuLambdaSelector::new(mu, lambda, 2),
         stupid_type_system: PhantomData,
         stupid_type_system_2: PhantomData
     }

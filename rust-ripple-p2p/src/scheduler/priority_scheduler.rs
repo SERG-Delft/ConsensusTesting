@@ -2,13 +2,13 @@ use std::cmp::Ordering;
 use std::sync::{Arc, RwLock};
 use std::sync::mpsc::{Receiver as STDReceiver, Sender as STDSender};
 use std::thread;
-use std::time::Duration as STDDuration;
 use chrono::{Duration, Utc};
 use hashbrown::hash_map::DefaultHashBuilder;
 use log::{debug, error, trace};
 use parking_lot::{Condvar, Mutex};
 use priority_queue::priority_queue::PriorityQueue;
 use tokio::sync::mpsc::Receiver as TokioReceiver;
+use spin_sleep::SpinSleeper;
 use crate::collector::RippleMessage;
 use crate::ga::encoding::{ExtendedPhenotype, num_genes};
 use crate::ga::genetic_algorithm::ConsensusMessageType;
@@ -49,10 +49,11 @@ impl PriorityScheduler {
         event_schedule_sender: STDSender<RMOEvent>,
     ) {
         let (run_lock, _run_cvar) = &*run;
+        let sleeper = SpinSleeper::default();
         let mut inbox = PriorityQueue::<RMOEvent, usize, DefaultHashBuilder>::with_default_hasher();
-        let mut rate = (num_genes() * 1000) as f64; // Rate at which events are executed from the queue. Base rate of num_genes / second -> too low?
+        let mut rate = num_genes() as f64; // Rate at which events are executed from the queue. Base rate of num_genes / second -> too low?
         let target_inbox_size = 0.1 * num_genes() as f64; // Target inbox size of 10% of the events mapped -> higher?
-        let sensitivity_ratio = 1.1; // Change rate by 3% at a time
+        let sensitivity_ratio = 1.01; // Change rate by 3% at a time
         let rate_change_percentage = 0.5; // 50% less or more than desired size of inbox
         // let target_duration_in_inbox = Duration::seconds(6);
         loop {
@@ -64,11 +65,11 @@ impl PriorityScheduler {
                 let inbox_size = inbox.len();
                 // rate changes
                 if inbox_size > (target_inbox_size + rate_change_percentage * target_inbox_size) as usize {
-                    debug!("size: {}, Increasing rate to {}", inbox_size, rate);
-                    rate *= sensitivity_ratio;
+                        rate = (rate * sensitivity_ratio).min(num_genes() as f64 * 3f64);
+                        trace!("size: {}, Increasing rate to {}", inbox_size, rate);
                 } else if inbox_size < (target_inbox_size - rate_change_percentage * target_inbox_size) as usize {
-                    debug!("size: {}, Decreasing rate to {}", inbox_size, rate);
-                    rate /= sensitivity_ratio;
+                    trace!("size: {}, Decreasing rate to {}", inbox_size, rate);
+                    rate = (rate / sensitivity_ratio).max(num_genes() as f64 / 3f64);
                 }
                 // Execute event with highest priority
                 if inbox_size > 0 {
@@ -81,15 +82,9 @@ impl PriorityScheduler {
                     event_schedule_sender.send(event).expect("Event scheduler failed");
                 }
             }
-            // We sleep for 1 / rate
-            let duration = match Duration::nanoseconds(1i64.min(((1.0 / rate) * 1000.0 * 1000.0) as i64)).to_std() {
-                Ok(duration) => duration,
-                Err(err) => {
-                    error!("Error creating inbox rate duration: {}", err);
-                    STDDuration::ZERO
-                }
-            };
-            thread::sleep(duration);
+            // We sleep for 1 / rate seconds
+            let duration_s = 1.0 / rate;
+            sleeper.sleep_s(duration_s);
         }
     }
 }
@@ -212,12 +207,11 @@ impl Ord for OrderedRMOEvent {
 
 #[cfg(test)]
 mod priority_scheduler_tests {
-    use std::collections::BinaryHeap;
     use std::sync::{Arc, RwLock};
     use std::sync::mpsc::channel;
     use std::thread;
     use std::time::Duration;
-    use parking_lot::{Condvar, Mutex};
+    use parking_lot::{Condvar};
     use crate::message_handler::RippleMessageObject;
     use crate::protos::ripple::{TMStatusChange, TMValidation};
     use crate::scheduler::priority_scheduler::{OrderedRMOEvent, PriorityScheduler};

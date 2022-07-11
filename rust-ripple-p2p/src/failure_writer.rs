@@ -1,17 +1,16 @@
 use std::fs::File;
-use std::io::{BufWriter, Write};
+use std::io::{BufWriter};
 use std::path::Path;
 use std::sync::Arc;
-use std::sync::mpsc::{Receiver, RecvError};
+use std::sync::mpsc::{Receiver};
 use std::thread;
 use chrono::{DateTime, Utc};
-use itertools::Itertools;
 use log::error;
 use petgraph::Graph;
 use crate::client::{Transaction, ValidatedLedger};
 use crate::collector::RippleMessage;
 use crate::node_state::{DependencyEvent, MutexNodeStates};
-use crate::{LOG_FOLDER, NUM_NODES};
+use crate::{LOG_FOLDER};
 use crate::test_harness::TransactionResultCode;
 
 /// Struct responsible for writing state to failure file in case of consensus property violation
@@ -39,8 +38,8 @@ impl FailureWriter {
             loop {
                 match failure_writer.failure_receiver.recv() {
                     Ok(consensus_properties_violated) => {
-                        let failure = node_states.create_failure_data(consensus_properties_violated);
-                        serde_json::to_writer(&mut failure_writer.failure_writer, &failure);
+                        let failure = failure_writer.node_states.create_failure_data(consensus_properties_violated);
+                        serde_json::to_writer(&mut failure_writer.failure_writer, &failure).expect("Failed writing to failure file");
                     }
                     Err(err) => {
                         error!("Failure channel failed: {}", err);
@@ -50,7 +49,7 @@ impl FailureWriter {
         });
     }
 
-    /// Might use in the future
+    //Might use in the future
     // fn handle_test_failure(failure_writer: &mut BufWriter<File>, failure: Failure) {
     //     error!("Storing failed test info...");
     //     self.failure_writer.write_all(format!("Test failure at time: {}\n", Utc::now()).as_bytes()).unwrap();
@@ -74,7 +73,7 @@ impl FailureWriter {
     // }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct Failure {
     pub time: DateTime<Utc>,
     pub validated_transactions: Vec<Vec<(Transaction, TransactionResultCode)>>,
@@ -85,7 +84,7 @@ pub struct Failure {
     pub consensus_properties_violated: Vec<ConsensusPropertyTypes>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize, PartialEq, Debug)]
 pub enum ConsensusPropertyTypes {
     Termination,
     Validity1,

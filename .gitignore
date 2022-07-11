@@ -21,9 +21,14 @@ db/proxy/*
 db/validator*/*
 logs/*
 config/validator*/*
-rust-ripple-p2p/execution.txt
-rust-ripple-p2p/subscription*.json
 rust-ripple-p2p/trace_graphs.txt
+rust-ripple-p2p/delay_locality.txt
+rust-ripple-p2p/fitness_values.txt
+rust-ripple-p2p/priority_locality.txt
+rust-ripple-p2p/priority_trace_graphs.txt
+rust-ripple-p2p/scaling.txt
+rust-ripple-p2p/run.txt
+
 !documents/results/
 documents/results/*
 !documents/results/TraceComparison1.txt
@@ -32,4 +37,3 @@ documents/results/*
 !documents/results/FitnessFunctionComparison.txt
 
 analysis/venv
-

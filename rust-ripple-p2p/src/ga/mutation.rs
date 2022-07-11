@@ -7,6 +7,24 @@ use genevo::{
 };
 
 #[derive(Clone, Debug, PartialEq)]
+pub struct NoMutation {}
+
+impl GeneticOperator for NoMutation {
+    fn name() -> String {
+        "No-Mutation".to_string()
+    }
+}
+
+impl<G> MutationOp<G> for NoMutation
+    where
+        G: Genotype,
+{
+    fn mutate<R>(&self, genome: G, _rng: &mut R) -> G where R: Rng + Sized {
+        genome
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub struct GaussianMutator {
     mutation_rate: f64,
     standard_deviation: f64,

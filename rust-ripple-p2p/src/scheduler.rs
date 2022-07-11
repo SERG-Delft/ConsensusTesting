@@ -9,7 +9,7 @@ use std::hash::{Hash, Hasher};
 use std::sync::{Arc, RwLock};
 use chrono::{DateTime, MAX_DATETIME, Utc};
 use tokio::sync::mpsc::{Sender as TokioSender, Receiver as TokioReceiver};
-use std::sync::mpsc::{Sender as STDSender, Receiver as STDReceiver, channel, Sender, SendError};
+use std::sync::mpsc::{Sender as STDSender, Receiver as STDReceiver, channel, Sender};
 use std::thread;
 use std::time::Duration;
 use parking_lot::{Mutex, Condvar};
@@ -49,10 +49,12 @@ pub trait Scheduler: Sized {
         let node_states_clone = self.get_state().node_states.clone();
         let node_states_clone_2 = self.get_state().node_states.clone();
         let node_states_clone_3 = self.get_state().node_states.clone();
+        let failure_sender_clone = self.get_state().failure_sender.clone();
+        let failure_sender_clone_2 = self.get_state().failure_sender.clone();
 
         thread::spawn(move || Self::update_current_round(node_states_clone, current_round_clone));
-        thread::spawn(move || Self::update_latest_validated_ledger(node_states_clone_3, latest_validated_ledger_clone));
-        thread::spawn(move || Self::harness_controller(ga_sender, client_senders, client_receiver, account_receiver, balance_receiver,latest_validated_ledger_clone_2, current_round_clone_2, run_clone, node_states_clone_2));
+        thread::spawn(move || Self::update_latest_validated_ledger(node_states_clone_3, latest_validated_ledger_clone, failure_sender_clone));
+        thread::spawn(move || Self::harness_controller(ga_sender, client_senders, failure_sender_clone_2, client_receiver, account_receiver, balance_receiver,latest_validated_ledger_clone_2, current_round_clone_2, run_clone, node_states_clone_2));
 
         // self.start_extension(receiver, ga_receiver);
         let (event_schedule_sender, event_schedule_receiver) = channel();
@@ -193,7 +195,7 @@ pub trait Scheduler: Sized {
                 error!("Liveness bug");
                 match failure_sender.send(vec![ConsensusPropertyTypes::Termination]) {
                     Ok(_) => {}
-                    Err(err) => error!("Failure channel failed")
+                    Err(err) => error!("Failure channel failed: {}", err)
                 };
                 liveness = false;
             } else if !liveness {
@@ -218,6 +220,7 @@ pub trait Scheduler: Sized {
     fn harness_controller(
         ga_sender: STDSender<CurrentFitness>,
         client_senders: Vec<STDSender<Message<'static>>>,
+        failure_sender: STDSender<Vec<ConsensusPropertyTypes>>,
         client_receiver: STDReceiver<(Transaction, String)>,
         account_receiver: STDReceiver<AccountInfo>,
         balance_receiver: STDReceiver<u32>,
@@ -230,7 +233,7 @@ pub trait Scheduler: Sized {
         let (ledger_lock, ledger_cvar) = &*latest_validated_ledger;
         let (round_lock, round_cvar) = &*current_round;
         let (run_lock, run_cvar) = &*run;
-        let mut test_harness = TestHarness::parse_test_harness(client_senders.clone(), client_receiver, balance_receiver, None);
+        let mut test_harness = TestHarness::parse_test_harness(client_senders.clone(), client_receiver, balance_receiver, failure_sender, None);
         node_states.set_harness_transactions(test_harness.transactions.clone());
         Self::stabilize_network(&mut test_harness, node_states.clone(), latest_validated_ledger.clone(), account_receiver);
         // Every loop is one execution of the test harness
@@ -427,7 +430,7 @@ impl Default for RMOEvent {
 mod scheduler_tests {
     use std::thread;
     use std::time::Duration;
-    use chrono::{DateTime, TimeZone, Utc};
+    use chrono::{TimeZone, Utc};
     use crate::ga::encoding::delay_encoding::DROP_THRESHOLD;
     use crate::message_handler::RippleMessageObject;
     use crate::protos::ripple::{TMTransaction as PBTransaction, TransactionStatus};

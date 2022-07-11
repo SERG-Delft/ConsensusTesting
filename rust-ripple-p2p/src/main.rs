@@ -1,7 +1,7 @@
 #[allow(unused_variables)]
 extern crate futures;
 
-use std::{env};
+use std::env;
 use chrono::Utc;
 use log::*;
 use env_logger;

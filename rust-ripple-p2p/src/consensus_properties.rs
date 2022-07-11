@@ -113,6 +113,7 @@ mod consensus_properties_tests {
     use itertools::Itertools;
     use crate::client::ValidatedLedger;
     use crate::consensus_properties::ConsensusProperties;
+    use crate::failure_writer::ConsensusPropertyTypes;
     use crate::message_handler::ParsedValidation;
     use crate::node_state::{MutexNodeStates, NodeState, NodeStates};
     use crate::protos::ripple::{NodeEvent, TMStatusChange};
@@ -126,17 +127,17 @@ mod consensus_properties_tests {
         node_states_vec[1].validated_ledgers.insert(0, ValidatedLedger::default());
         node_states_vec[2].validated_ledgers.insert(1, ValidatedLedger::default());
         let node_states = Arc::new(MutexNodeStates::new(NodeStates::new(node_states_vec)));
-        assert!(ConsensusProperties::check_agreement_properties(&node_states));
+        assert_eq!(ConsensusProperties::check_agreement_properties(&node_states), vec![]);
         let mut different_validation = ValidatedLedger::default();
         different_validation.ledger_hash = "Different ledger hash".to_string();
         node_states.node_states.lock().node_states[1].validated_ledgers.insert(1, different_validation);
-        assert!(!ConsensusProperties::check_agreement_properties(&node_states));
+        assert_eq!(ConsensusProperties::check_agreement_properties(&node_states), vec![ConsensusPropertyTypes::Agreement2]);
         node_states.node_states.lock().node_states[1].validated_ledgers.insert(1, ValidatedLedger::default());
-        assert!(ConsensusProperties::check_agreement_properties(&node_states));
+        assert_eq!(ConsensusProperties::check_agreement_properties(&node_states), vec![]);
         let mut different_status_change = TMStatusChange::default();
         different_status_change.set_ledgerHash(vec![1, 2, 3]);
         node_states.node_states.lock().node_states[2].consensus_constructed_ledgers.insert(0, different_status_change);
-        assert!(!ConsensusProperties::check_agreement_properties(&node_states));
+        assert_eq!(ConsensusProperties::check_agreement_properties(&node_states), vec![ConsensusPropertyTypes::Agreement1]);
     }
 
     #[test]
@@ -147,14 +148,14 @@ mod consensus_properties_tests {
         status_change_1.set_newEvent(NodeEvent::neACCEPTED_LEDGER);
         status_change_1.set_ledgerSeq(0);
         status_change_1.set_ledgerHash(vec![1]);
-        assert_eq!(ConsensusProperties::check_proposal_integrity_property(&node_states, &status_change_1, 0), true);
+        assert_eq!(ConsensusProperties::check_proposal_integrity_property(&node_states, &status_change_1, 0), vec![]);
         let mut status_change_2 = TMStatusChange::default();
         status_change_2.set_newEvent(NodeEvent::neACCEPTED_LEDGER);
         status_change_2.set_ledgerSeq(1);
         status_change_2.set_ledgerHash(vec![1, 2, 3]);
-        assert_eq!(ConsensusProperties::check_proposal_integrity_property(&node_states, &status_change_2, 0), true);
+        assert_eq!(ConsensusProperties::check_proposal_integrity_property(&node_states, &status_change_2, 0), vec![]);
         status_change_1.set_ledgerSeq(1);
-        assert_eq!(ConsensusProperties::check_proposal_integrity_property(&node_states, &status_change_1, 0), false);
+        assert_eq!(ConsensusProperties::check_proposal_integrity_property(&node_states, &status_change_1, 0), vec![ConsensusPropertyTypes::Integrity1]);
     }
 
     #[test]
@@ -164,13 +165,13 @@ mod consensus_properties_tests {
         let mut validation_1 = ParsedValidation::default();
         validation_1.ledger_sequence = 0;
         validation_1.hash = "hash1".to_string();
-        assert_eq!(ConsensusProperties::check_validation_integrity_property(&node_states, validation_1.clone(), 0), true);
+        assert_eq!(ConsensusProperties::check_validation_integrity_property(&node_states, validation_1.clone(), 0), vec![]);
         let mut validation_2 = ParsedValidation::default();
         validation_2.ledger_sequence = 1;
         validation_2.hash = "hash2".to_string();
-        assert_eq!(ConsensusProperties::check_validation_integrity_property(&node_states, validation_2.clone(), 0), true);
+        assert_eq!(ConsensusProperties::check_validation_integrity_property(&node_states, validation_2.clone(), 0), vec![]);
         validation_1.ledger_sequence = 1;
-        assert_eq!(ConsensusProperties::check_validation_integrity_property(&node_states, validation_1.clone(), 0), false);
+        assert_eq!(ConsensusProperties::check_validation_integrity_property(&node_states, validation_1.clone(), 0), vec![ConsensusPropertyTypes::Integrity2]);
     }
 
     #[test]
