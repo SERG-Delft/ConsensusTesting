@@ -26,10 +26,18 @@ use crate::node_state::{MutexNodeStates};
 use crate::NodeKeys;
 use crate::test_harness::TestHarness;
 
-type P2PConnections = HashMap<usize, HashMap<usize, PeerChannel>>;
+pub type P2PConnections = HashMap<usize, HashMap<usize, PeerChannel>>;
 
 pub trait Scheduler: Sized {
     type IndividualPhenotype: Default + Send + 'static;
+
+    fn new(
+        p2p_connections: P2PConnections,
+        collector_sender: STDSender<Box<RippleMessage>>,
+        node_states: Arc<MutexNodeStates>,
+        node_keys: Vec<NodeKeys>,
+        failure_sender: STDSender<Vec<ConsensusPropertyTypes>>,
+    ) -> Self;
 
     fn start(self,
              receiver: TokioReceiver<Event>,

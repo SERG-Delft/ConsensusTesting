@@ -25,7 +25,7 @@ pub fn start_docker_containers(peers: usize, unls: Vec<Vec<usize>>, image_name: 
 pub fn remove_containers(name: &str, image_name: &str) {
     let leftovers = Command::new("docker").arg("ps")
         .args(["--all", "--quiet"])
-        .args(["--filter", &format!("ancestor=mvanmeerten/{}", image_name)])
+        .args(["--filter", "network=ripple-net"])
         .args(["--filter", &format!("name={}", name)])
         .output().unwrap();
     let ids: Vec<&str> = std::str::from_utf8(&*leftovers.stdout).unwrap().lines().collect();

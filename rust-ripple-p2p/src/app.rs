@@ -12,27 +12,28 @@ use itertools::Itertools;
 use websocket::Message;
 
 use super::{EmptyResult};
-use crate::client::{Client, Payment, Transaction};
+use crate::client::{AccountInfo, Client, Payment, Transaction};
 use crate::collector::{Collector, RippleMessage};
 use crate::container_manager::NodeKeys;
 use crate::failure_writer::{ConsensusPropertyTypes, FailureWriter};
 use crate::ga::crossover::NoCrossoverOperator;
-use crate::ga::encoding::delay_encoding::DelayMapPhenotype;
+use crate::ga::encoding::delay_encoding::{DelayMapPhenotype, DelaysGenotype};
+use crate::ga::encoding::{ExtendedGenotype, ExtendedPhenotype};
 use crate::ga::fitness::ExtendedFitness;
 use crate::ga::genetic_algorithm;
 use crate::ga::genetic_algorithm::{CurrentFitness, run_default_mu_lambda_priorities};
 use crate::ga::parameters::{default_mu_lambda_delays, default_mu_lambda_priorities, Parameter};
 use crate::ga::population_builder::{build_delays_population, build_priorities_population};
-use crate::ga::encoding::priority_encoding::PriorityMapPhenotype;
+use crate::ga::encoding::priority_encoding::{PriorityGenotype, PriorityMapPhenotype};
 use crate::locality::{run_locality_experiment_delays, run_locality_experiment_priorities};
 use crate::peer_connection::PeerConnection;
 use crate::scaling::{run_priority_scaling_experiment, run_scaling_experiment};
-use crate::scheduler::{Event, PeerChannel, Scheduler};
+use crate::scheduler::{Event, P2PConnections, PeerChannel, Scheduler};
 use crate::node_state::{MutexNodeStates, NodeState, NodeStates};
 use crate::NUM_NODES;
 use crate::scheduler::delay_scheduler::DelayScheduler;
 use crate::scheduler::priority_scheduler::PriorityScheduler;
-use crate::trace_comparisons::{run_fitness_comparison, run_no_delays, run_predetermined_delays, run_delay_trace_graph_creation, run_priority_trace_graph_creation};
+use crate::trace_comparisons::{run_fitness_comparison, run_no_delays, run_predetermined_delays, run_delay_trace_graph_creation, run_priority_trace_graph_creation, run_predetermined_priorities};
 
 const _NODE_PRIVATE_KEY: &str = "e55dc8f3741ac9668dbe858409e5d64f5ce88380f7228eccfe82b92b2c7848ba";
 const _NODE_PUBLIC_KEY_BASE58: &str = "n9KAa2zVWjPHgfzsE3iZ8HAbzJtPrnoh4H2M2HgE7dfqtvyEb1KJ";
@@ -124,103 +125,79 @@ impl App {
             scheduler_peer_channels.entry(j).or_insert(HashMap::new()).insert(i, PeerChannel::new(tx_scheduler_j));
         }
 
+        let scheduler_data = SchedulerData::new(
+            scheduler_peer_channels,
+            collector_tx,
+            mutex_node_states,
+            self.node_keys.clone(),
+            failure_sender,
+            scheduler_receiver,
+            scheduler_ga_sender,
+            client_senders,
+            test_harness_rx,
+            account_info_rx,
+            balance_receiver
+        );
+
         // Start GA and scheduler
-        let scheduler_type = SchedulerType::ScalingExperiment;
+        let scheduler_type = SchedulerType::PredeterminedPriority;
         match scheduler_type {
             SchedulerType::Priority => {
-                let (ga_scheduler_sender, ga_scheduler_receiver) = std::sync::mpsc::channel();
                 Self::start_default_mu_lambda_priorities(
                     4,
                     4,
-                    ga_scheduler_sender,
-                    ga_scheduler_receiver,
-                    scheduler_ga_sender,
+                    scheduler_data,
                     scheduler_ga_receiver,
-                    scheduler_peer_channels,
-                    collector_tx,
-                    failure_sender,
-                    mutex_node_states,
-                    scheduler_receiver,
-                    client_senders,
-                    test_harness_rx,
-                    account_info_rx,
-                    balance_receiver,
-                    self.node_keys.clone()
                 );
             }
             SchedulerType::Delay => {
-                let (ga_scheduler_sender, ga_scheduler_receiver) = std::sync::mpsc::channel();
                 Self::start_default_mu_lambda_delays(
                     4,
                     4,
-                    ga_scheduler_sender,
-                    ga_scheduler_receiver,
-                    scheduler_ga_sender,
+                    scheduler_data,
                     scheduler_ga_receiver,
-                    scheduler_peer_channels,
-                    collector_tx,
-                    failure_sender,
-                    mutex_node_states,
-                    scheduler_receiver,
-                    client_senders,
-                    test_harness_rx,
-                    account_info_rx,
-                    balance_receiver,
-                    self.node_keys.clone()
                 );
             }
             SchedulerType::DelayTraceGraph => {
-                let (ga_scheduler_sender, ga_scheduler_receiver) = std::sync::mpsc::channel();
-                let mutex_node_states_clone_2 = mutex_node_states.clone();
+                let mutex_node_states_clone_2 = scheduler_data.mutex_node_states.clone();
+                let ga_scheduler_sender = Self::start_scheduler::<DelayScheduler, DelaysGenotype, DelayMapPhenotype>(scheduler_data);
                 threads.push(thread::spawn(|| run_delay_trace_graph_creation(ga_scheduler_sender, scheduler_ga_receiver, mutex_node_states_clone_2)));
-                let scheduler = DelayScheduler::new(scheduler_peer_channels, collector_tx, mutex_node_states, self.node_keys.clone(), failure_sender);
-                threads.push(thread::spawn(move || scheduler.start(scheduler_receiver, scheduler_ga_sender, ga_scheduler_receiver, client_senders, test_harness_rx, account_info_rx, balance_receiver)));
             }
             SchedulerType::PriorityTraceGraph => {
-                let (ga_scheduler_sender, ga_scheduler_receiver) = std::sync::mpsc::channel();
-                let mutex_node_states_clone_2 = mutex_node_states.clone();
+                let mutex_node_states_clone_2 = scheduler_data.mutex_node_states.clone();
+                let ga_scheduler_sender = Self::start_scheduler::<PriorityScheduler, PriorityGenotype, PriorityMapPhenotype>(scheduler_data);
                 threads.push(thread::spawn(|| run_priority_trace_graph_creation(ga_scheduler_sender, scheduler_ga_receiver, mutex_node_states_clone_2)));
-                let scheduler = PriorityScheduler::new(scheduler_peer_channels, collector_tx, mutex_node_states, self.node_keys.clone(), failure_sender);
-                threads.push(thread::spawn(move || scheduler.start(scheduler_receiver, scheduler_ga_sender, ga_scheduler_receiver, client_senders, test_harness_rx, account_info_rx, balance_receiver)));
             }
             SchedulerType::FitnessComparison => {
-                let (ga_scheduler_sender, ga_scheduler_receiver) = std::sync::mpsc::channel();
+                let ga_scheduler_sender = Self::start_scheduler::<DelayScheduler, DelaysGenotype, DelayMapPhenotype>(scheduler_data);
                 threads.push(thread::spawn(|| run_fitness_comparison(ga_scheduler_sender, scheduler_ga_receiver)));
-                let scheduler = DelayScheduler::new(scheduler_peer_channels, collector_tx, mutex_node_states, self.node_keys.clone(), failure_sender);
-                threads.push(thread::spawn(move || scheduler.start(scheduler_receiver, scheduler_ga_sender, ga_scheduler_receiver, client_senders, test_harness_rx, account_info_rx, balance_receiver)));
             }
             SchedulerType::PredeterminedDelay => {
-                let (ga_scheduler_sender, ga_scheduler_receiver) = std::sync::mpsc::channel();
+                let ga_scheduler_sender = Self::start_scheduler::<DelayScheduler, DelaysGenotype, DelayMapPhenotype>(scheduler_data);
                 threads.push(thread::spawn(|| run_predetermined_delays(ga_scheduler_sender, scheduler_ga_receiver, 100)));
-                let scheduler = DelayScheduler::new(scheduler_peer_channels, collector_tx, mutex_node_states, self.node_keys.clone(), failure_sender);
-                threads.push(thread::spawn(move || scheduler.start(scheduler_receiver, scheduler_ga_sender, ga_scheduler_receiver, client_senders, test_harness_rx, account_info_rx, balance_receiver)));
+            }
+            SchedulerType::PredeterminedPriority => {
+                let ga_scheduler_sender = Self::start_scheduler::<PriorityScheduler, PriorityGenotype, PriorityMapPhenotype>(scheduler_data);
+                threads.push(thread::spawn(|| run_predetermined_priorities(ga_scheduler_sender, scheduler_ga_receiver, 100)));
             }
             SchedulerType::DelayLocalityExperiment => {
-                let (ga_scheduler_sender, ga_scheduler_receiver) = std::sync::mpsc::channel();
-                let mutex_node_states_clone_2 = mutex_node_states.clone();
+                let mutex_node_states_clone_2= scheduler_data.mutex_node_states.clone();
+                let ga_scheduler_sender = Self::start_scheduler::<DelayScheduler, DelaysGenotype, DelayMapPhenotype>(scheduler_data);
                 threads.push(thread::spawn(|| run_locality_experiment_delays(ga_scheduler_sender, scheduler_ga_receiver, mutex_node_states_clone_2)));
-                let scheduler = DelayScheduler::new(scheduler_peer_channels, collector_tx, mutex_node_states, self.node_keys.clone(), failure_sender);
-                threads.push(thread::spawn(move || scheduler.start(scheduler_receiver, scheduler_ga_sender, ga_scheduler_receiver, client_senders, test_harness_rx, account_info_rx, balance_receiver)));
             }
             SchedulerType::PriorityLocalityExperiment => {
-                let (ga_scheduler_sender, ga_scheduler_receiver) = std::sync::mpsc::channel();
-                let mutex_node_states_clone_2 = mutex_node_states.clone();
+                let mutex_node_states_clone_2 = scheduler_data.mutex_node_states.clone();
+                let ga_scheduler_sender = Self::start_scheduler::<PriorityScheduler, PriorityGenotype, PriorityMapPhenotype>(scheduler_data);
                 threads.push(thread::spawn(|| run_locality_experiment_priorities(ga_scheduler_sender, scheduler_ga_receiver, mutex_node_states_clone_2)));
-                let scheduler = PriorityScheduler::new(scheduler_peer_channels, collector_tx, mutex_node_states, self.node_keys.clone(), failure_sender);
-                threads.push(thread::spawn(move || scheduler.start(scheduler_receiver, scheduler_ga_sender, ga_scheduler_receiver, client_senders, test_harness_rx, account_info_rx, balance_receiver)));
             }
             SchedulerType::ScalingExperiment => {
-                let (ga_scheduler_sender, ga_scheduler_receiver) = std::sync::mpsc::channel();
-                let mutex_node_states_clone_2 = mutex_node_states.clone();
+                let mutex_node_states_clone_2 = scheduler_data.mutex_node_states.clone();
+                let ga_scheduler_sender = Self::start_scheduler::<PriorityScheduler, PriorityGenotype, PriorityMapPhenotype>(scheduler_data);
                 threads.push(thread::spawn(|| run_priority_scaling_experiment(ga_scheduler_sender, scheduler_ga_receiver, mutex_node_states_clone_2)));
-                let scheduler = PriorityScheduler::new(scheduler_peer_channels, collector_tx, mutex_node_states, self.node_keys.clone(), failure_sender);
-                threads.push(thread::spawn(move || scheduler.start(scheduler_receiver, scheduler_ga_sender, ga_scheduler_receiver, client_senders, test_harness_rx, account_info_rx, balance_receiver)));
             }
             SchedulerType::None => {
-                let (ga_scheduler_sender, ga_scheduler_receiver) = std::sync::mpsc::channel();
+                let ga_scheduler_sender = Self::start_scheduler::<DelayScheduler, DelaysGenotype, DelayMapPhenotype>(scheduler_data);
                 threads.push(thread::spawn(|| run_no_delays(ga_scheduler_sender, scheduler_ga_receiver, 20)));
-                let scheduler = DelayScheduler::new(scheduler_peer_channels, collector_tx, mutex_node_states, self.node_keys.clone(), failure_sender);
-                threads.push(thread::spawn(move || scheduler.start(scheduler_receiver, scheduler_ga_sender, ga_scheduler_receiver, client_senders, test_harness_rx, account_info_rx, balance_receiver)));
             }
         }
 
@@ -280,27 +257,14 @@ impl App {
     fn start_default_mu_lambda_delays(
         mu: usize,
         lambda: usize,
-        ga_scheduler_sender: Sender<DelayMapPhenotype>,
-        ga_scheduler_receiver: Receiver<DelayMapPhenotype>,
-        scheduler_ga_sender: Sender<CurrentFitness>,
+        scheduler_data: SchedulerData,
         scheduler_ga_receiver: Receiver<CurrentFitness>,
-        scheduler_peer_channels: HashMap<usize, HashMap<usize, PeerChannel>>,
-        collector_tx: Sender<Box<RippleMessage>>,
-        failure_sender: Sender<Vec<ConsensusPropertyTypes>>,
-        mutex_node_states: Arc<MutexNodeStates>,
-        scheduler_receiver: TokioReceiver<Event>,
-        client_senders: Vec<Sender<Message<'static>>>,
-        client_receiver: Receiver<(Transaction, String)>,
-        account_info_rx: Receiver<crate::client::AccountInfo>,
-        balance_receiver: Receiver<u32>,
-        node_keys: Vec<NodeKeys>,
     )
     {
+        // Start the scheduler
+        let ga_scheduler_sender = Self::start_scheduler::<DelayScheduler, DelaysGenotype, DelayMapPhenotype>(scheduler_data);
         // Start the GA
         thread::spawn(move || genetic_algorithm::run_default_mu_lambda_delays(mu, lambda, ga_scheduler_sender, scheduler_ga_receiver));
-        // Start the scheduler
-        let scheduler = DelayScheduler::new(scheduler_peer_channels, collector_tx, mutex_node_states, node_keys, failure_sender);
-        thread::spawn(move || scheduler.start(scheduler_receiver, scheduler_ga_sender, ga_scheduler_receiver, client_senders, client_receiver, account_info_rx, balance_receiver));
     }
 
     /// Start the mu lambda GA and priority scheduler
@@ -308,27 +272,73 @@ impl App {
     fn start_default_mu_lambda_priorities(
         mu: usize,
         lambda: usize,
-        ga_scheduler_sender: Sender<PriorityMapPhenotype>,
-        ga_scheduler_receiver: Receiver<PriorityMapPhenotype>,
-        scheduler_ga_sender: Sender<CurrentFitness>,
+        scheduler_data: SchedulerData,
         scheduler_ga_receiver: Receiver<CurrentFitness>,
-        scheduler_peer_channels: HashMap<usize, HashMap<usize, PeerChannel>>,
-        collector_tx: Sender<Box<RippleMessage>>,
-        failure_sender: Sender<Vec<ConsensusPropertyTypes>>,
-        mutex_node_states: Arc<MutexNodeStates>,
-        scheduler_receiver: TokioReceiver<Event>,
-        client_senders: Vec<Sender<Message<'static>>>,
-        client_receiver: Receiver<(Transaction, String)>,
-        account_info_rx: Receiver<crate::client::AccountInfo>,
-        balance_receiver: Receiver<u32>,
-        node_keys: Vec<NodeKeys>
     )
     {
+        // Start the scheduler
+        let ga_scheduler_sender = Self::start_scheduler::<PriorityScheduler, PriorityGenotype, PriorityMapPhenotype>(scheduler_data);
         // Start the GA
         thread::spawn(move || genetic_algorithm::run_default_mu_lambda_priorities(mu, lambda, ga_scheduler_sender, scheduler_ga_receiver));
-        // Start the scheduler
-        let scheduler = PriorityScheduler::new(scheduler_peer_channels, collector_tx, mutex_node_states, node_keys, failure_sender);
-        thread::spawn(move || scheduler.start(scheduler_receiver, scheduler_ga_sender, ga_scheduler_receiver, client_senders, client_receiver, account_info_rx, balance_receiver));
+    }
+
+    fn start_scheduler<S: Scheduler + Scheduler<IndividualPhenotype = P> + Send + 'static, G: ExtendedGenotype, P: ExtendedPhenotype<G> + 'static>(
+        scheduler_data: SchedulerData,
+    ) -> Sender<P> {
+        let (ga_scheduler_sender, ga_scheduler_receiver): (Sender<P>, Receiver<P>) = std::sync::mpsc::channel();
+        let scheduler = S::new(scheduler_data.scheduler_peer_channels, scheduler_data.collector_tx, scheduler_data.mutex_node_states, scheduler_data.node_keys, scheduler_data.failure_sender);
+        thread::spawn(move || scheduler.start(
+            scheduler_data.scheduler_receiver,
+            scheduler_data.scheduler_ga_sender,
+            ga_scheduler_receiver,
+            scheduler_data.client_senders,
+            scheduler_data.test_harness_rx,
+            scheduler_data.account_info_rx,
+            scheduler_data.balance_receiver
+        ));
+        ga_scheduler_sender
+    }
+}
+
+struct SchedulerData {
+    scheduler_peer_channels: P2PConnections,
+    collector_tx: Sender<Box<RippleMessage>>,
+    mutex_node_states: Arc<MutexNodeStates>,
+    node_keys: Vec<NodeKeys>,
+    failure_sender: Sender<Vec<ConsensusPropertyTypes>>,
+    scheduler_receiver: TokioReceiver<Event>,
+    scheduler_ga_sender: Sender<CurrentFitness>,
+    client_senders: Vec<Sender<Message<'static>>>,
+    test_harness_rx: Receiver<(Transaction, String)>,
+    account_info_rx: Receiver<AccountInfo>,
+    balance_receiver: Receiver<u32>,
+}
+
+impl SchedulerData {
+    pub fn new(scheduler_peer_channels: P2PConnections,
+               collector_tx: Sender<Box<RippleMessage>>,
+               mutex_node_states: Arc<MutexNodeStates>,
+               node_keys: Vec<NodeKeys>,
+               failure_sender: Sender<Vec<ConsensusPropertyTypes>>,
+               scheduler_receiver: TokioReceiver<Event>,
+               scheduler_ga_sender: Sender<CurrentFitness>,
+               client_senders: Vec<Sender<Message<'static>>>,
+               test_harness_rx: Receiver<(Transaction, String)>,
+               account_info_rx: Receiver<AccountInfo>,
+               balance_receiver: Receiver<u32>) -> Self {
+        Self {
+            scheduler_peer_channels,
+            collector_tx,
+            mutex_node_states,
+            node_keys,
+            failure_sender,
+            scheduler_receiver,
+            scheduler_ga_sender,
+            client_senders,
+            test_harness_rx,
+            account_info_rx,
+            balance_receiver
+        }
     }
 }
 
@@ -340,6 +350,7 @@ enum SchedulerType {
     PriorityTraceGraph,
     FitnessComparison,
     PredeterminedDelay,
+    PredeterminedPriority,
     DelayLocalityExperiment,
     PriorityLocalityExperiment,
     ScalingExperiment,

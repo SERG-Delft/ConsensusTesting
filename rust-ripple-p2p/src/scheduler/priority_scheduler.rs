@@ -10,13 +10,13 @@ use priority_queue::priority_queue::PriorityQueue;
 use tokio::sync::mpsc::Receiver as TokioReceiver;
 use spin_sleep::SpinSleeper;
 use crate::collector::RippleMessage;
+use crate::failure_writer::ConsensusPropertyTypes;
 use crate::ga::encoding::{ExtendedPhenotype, num_genes};
 use crate::ga::genetic_algorithm::ConsensusMessageType;
 use crate::ga::encoding::priority_encoding::{PriorityMapPhenotype};
 use crate::message_handler::RippleMessageObject;
 use crate::node_state::MutexNodeStates;
-use crate::{NodeKeys};
-use crate::failure_writer::ConsensusPropertyTypes;
+use crate::NodeKeys;
 use crate::scheduler::{Event, P2PConnections, RMOEvent, Scheduler, SchedulerState};
 
 pub struct PriorityScheduler {
@@ -25,19 +25,6 @@ pub struct PriorityScheduler {
 
 
 impl PriorityScheduler {
-    #[allow(unused)]
-    pub fn new(
-        p2p_connections: P2PConnections,
-        collector_sender: STDSender<Box<RippleMessage>>,
-        node_states: Arc<MutexNodeStates>,
-        node_keys: Vec<NodeKeys>,
-        failure_sender: STDSender<Vec<ConsensusPropertyTypes>>,
-    ) -> Self {
-        PriorityScheduler {
-            state: SchedulerState::new(p2p_connections, collector_sender, node_states, node_keys, failure_sender)
-        }
-    }
-
     /// Execute events every t seconds based on size of the inbox.
     /// Do we have a target size of the inbox? ~30 (10% of the different types of events maybe?)
     /// How to determine base t? 1/(num_nodes * num_nodes-1) = 1 / 20? We assume a node broadcasts one message per second
@@ -91,6 +78,18 @@ impl PriorityScheduler {
 
 impl Scheduler for PriorityScheduler {
     type IndividualPhenotype = PriorityMapPhenotype;
+
+    fn new(
+        p2p_connections: P2PConnections,
+        collector_sender: STDSender<Box<RippleMessage>>,
+        node_states: Arc<MutexNodeStates>,
+        node_keys: Vec<NodeKeys>,
+        failure_sender: STDSender<Vec<ConsensusPropertyTypes>>,
+    ) -> Self {
+        Self {
+            state: SchedulerState::new(p2p_connections, collector_sender, node_states, node_keys, failure_sender)
+        }
+    }
 
     /// Wait for new messages delivered by peers
     /// If the network is not stable, immediately relay messages

@@ -50,7 +50,8 @@ fn main() {
     let unls: Vec<Vec<usize>> = get_unls(n, UnlType::Full);
     println!("Unls: {:?}", unls);
 
-    let node_keys = start_docker_containers(n, unls, "rippled-liveness-fix");
+    let image_name = RippledVersion::LivenessBug;
+    let node_keys = start_docker_containers(n, unls, image_name.docker_image_name());
     // let node_keys = get_static_node_keys();
     // let node_keys = start_executables(n, unls);
 
@@ -153,6 +154,20 @@ pub enum UnlType {
     Full,
     Limit,
     Buggy,
+}
+
+pub enum RippledVersion {
+    Fixed,
+    LivenessBug,
+}
+
+impl RippledVersion {
+    pub fn docker_image_name(&self) -> &'static str {
+        match self {
+            RippledVersion::Fixed => "rippled-liveness-fix",
+            RippledVersion::LivenessBug => "rippled-boost-cmake",
+        }
+    }
 }
 
 #[cfg(test)]

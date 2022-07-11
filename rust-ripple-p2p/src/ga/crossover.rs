@@ -34,6 +34,7 @@ impl SimulatedBinaryCrossBreeder {
         SimulatedBinaryCrossBreeder { crossover_probability, min_value, max_value }
     }
 
+    #[allow(unused)]
     pub fn set_crossover_probability(&mut self, value: f32) {
         self.crossover_probability = value;
     }

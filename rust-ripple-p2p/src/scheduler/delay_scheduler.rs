@@ -27,23 +27,20 @@ pub struct DelayScheduler {
     state: SchedulerState
 }
 
-impl DelayScheduler {
-    #[allow(unused)]
-    pub fn new(
+impl Scheduler for DelayScheduler {
+    type IndividualPhenotype = DelayMapPhenotype;
+
+    fn new(
         p2p_connections: P2PConnections,
         collector_sender: STDSender<Box<RippleMessage>>,
         node_states: Arc<MutexNodeStates>,
         node_keys: Vec<NodeKeys>,
         failure_sender: STDSender<Vec<ConsensusPropertyTypes>>,
     ) -> Self {
-        DelayScheduler {
+        Self {
             state: SchedulerState::new(p2p_connections, collector_sender, node_states, node_keys, failure_sender)
         }
     }
-}
-
-impl Scheduler for DelayScheduler {
-    type IndividualPhenotype = DelayMapPhenotype;
 
     /// Wait for new messages delivered by peers
     /// If the network is not stable, immediately relay messages
