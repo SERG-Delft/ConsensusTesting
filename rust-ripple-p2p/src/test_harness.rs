@@ -1,21 +1,20 @@
 use std::collections::HashSet;
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, Write};
-use std::path::Path;
+use std::io::{BufRead, BufReader};
 use std::str::{FromStr};
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, Sender};
 use std::thread;
 use std::time::Duration;
-use chrono::Utc;
 use itertools::{Itertools};
 use log::{debug, error, trace, warn};
+use spin_sleep::SpinSleeper;
 use websocket::Message;
 use crate::client::{Client, Transaction};
 use crate::container_manager::AccountKeys;
 use crate::node_state::MutexNodeStates;
-use crate::{LOG_FOLDER, NUM_NODES};
 use crate::consensus_properties::ConsensusProperties;
+use crate::failure_writer::ConsensusPropertyTypes;
 use crate::test_harness::TestResult::{Failed, InProgress, Success};
 
 const MAX_EVENTS_TEST: usize = 10000;
@@ -35,13 +34,19 @@ pub struct TestHarness<'a> {
     pub succeeded_transactions: HashSet<Transaction>,
     pub unfunded_transactions: HashSet<Transaction>,
     pub transaction_results: Vec<TransactionResult>,
-    pub failure_writer: BufWriter<File>,
+    pub failure_sender: Sender<Vec<ConsensusPropertyTypes>>,
 }
 
 impl TestHarness<'static> {
     // Parse the test harness file
     // execution_sequence is the sequence number of this test harness execution. Used for providing correct sequence numbers to transactions
-    pub fn parse_test_harness(client_senders: Vec<Sender<Message<'static>>>, client_receiver: Receiver<(Transaction, String)>, balance_receiver: Receiver<u32>, file_name: Option<&str>) -> Self {
+    pub fn parse_test_harness(
+        client_senders: Vec<Sender<Message<'static>>>,
+        client_receiver: Receiver<(Transaction, String)>,
+        balance_receiver: Receiver<u32>,
+        failure_sender: Sender<Vec<ConsensusPropertyTypes>>,
+        file_name: Option<&str>
+    ) -> Self {
         let file = match file_name {
             None => File::open("harness.txt").unwrap(),
             Some(file_name) => File::open(file_name).unwrap(),
@@ -78,11 +83,7 @@ impl TestHarness<'static> {
             succeeded_transactions: HashSet::new(),
             unfunded_transactions: HashSet::new(),
             transaction_results,
-            failure_writer: BufWriter::new(
-                File::create(
-                    Path::new(format!("{}\\failure_file.txt", *LOG_FOLDER).as_str()))
-                    .expect("Opening failure file failed")
-            ),
+            failure_sender
         }
     }
 
@@ -226,10 +227,16 @@ impl TestHarness<'static> {
             test_result = TransactionResult::check_transaction_results(&self.transaction_results, &min_validated_transactions, &unfunded_payment_idxs);
         }
         debug!("events during test: {}", node_states.get_consensus_event_count());
-        ConsensusProperties::check_validity_properties(&node_states);
-        ConsensusProperties::check_agreement_properties(&node_states);
+        let mut consensus_properties_violated = ConsensusProperties::check_validity_properties(&node_states);
+        consensus_properties_violated.append(&mut ConsensusProperties::check_agreement_properties(&node_states));
         if test_result == Failed {
-            self.handle_test_failure(node_states.clone());
+            consensus_properties_violated.push(ConsensusPropertyTypes::DoubleSpend);
+        }
+        if !consensus_properties_violated.is_empty() {
+            match self.failure_sender.send(consensus_properties_violated) {
+                Ok(_) => {}
+                Err(err) => error!("Failure channel failed: {}", err)
+            };
         }
         self.succeeded_transactions.clear();
         self.unfunded_transactions.clear();
@@ -246,7 +253,8 @@ impl TestHarness<'static> {
     pub fn schedule_transaction(mut transaction: Transaction, sequence: Option<u32>, secret: String, delay: Duration, client_sender: Sender<Message<'static>>) {
         transaction.sequence = sequence;
         thread::spawn(move ||{
-            thread::sleep(delay);
+            let sleeper = SpinSleeper::default();
+            sleeper.sleep(delay);
             Client::sign_and_submit(
                 &client_sender,
                 "Test harness",
@@ -305,28 +313,6 @@ impl TestHarness<'static> {
                 self.client_senders[0].clone(),
             )
         }
-    }
-
-    fn handle_test_failure(&mut self, node_states: Arc<MutexNodeStates>) {
-        error!("Storing failed test info...");
-        self.failure_writer.write_all(format!("Test failure at time: {}\n", Utc::now()).as_bytes()).unwrap();
-        self.failure_writer.write_all("Transaction state:\n".as_bytes()).unwrap();
-        for i in 0..*NUM_NODES {
-            self.failure_writer.write_all(format!("Peer {} validated transactions: {:?} \n", i, node_states.get_validated_transaction(i)).as_bytes()).unwrap();
-        }
-        self.failure_writer.write_all("Validated ledger state:\n".as_bytes()).unwrap();
-        for i in 0..*NUM_NODES {
-            let validated_ledger = node_states.get_validated_ledger(i);
-            self.failure_writer.write_all(format!("Peer {} latest validated ledger index: {:?}\n", i, validated_ledger).as_bytes()).unwrap();
-        }
-        self.failure_writer.write_all("Current individual:\n".as_bytes()).unwrap();
-        self.failure_writer.write_all(node_states.get_current_individual().as_bytes()).unwrap();
-        self.failure_writer.write_all("Execution trace:\n".as_bytes()).unwrap();
-        for event in node_states.get_executions() {
-            self.failure_writer.write_all(event.to_string().as_bytes()).unwrap();
-        }
-        self.failure_writer.write_all("Dependency graph:\n".as_bytes()).unwrap();
-        self.failure_writer.write_all(format!("{:?}", petgraph::dot::Dot::with_config(&node_states.get_dependency_graph(), &[petgraph::dot::Config::EdgeNoLabel])).as_bytes()).unwrap();
     }
 }
 
@@ -433,7 +419,7 @@ impl TransactionResult {
     }
 }
 
-#[derive(PartialEq, Debug, Copy, Clone, Eq, Hash)]
+#[derive(PartialEq, Debug, Copy, Clone, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum TransactionResultCode {
     TesSuccess,
     TecUnfundedPayment,
@@ -467,8 +453,6 @@ pub enum TestResult {
 #[cfg(test)]
 mod harness_tests {
     use std::collections::HashSet;
-    use std::fs::File;
-    use std::io::{BufWriter};
     use std::sync::Arc;
     #[allow(unused_imports)]
     use std::sync::mpsc::channel;
@@ -495,7 +479,8 @@ mod harness_tests {
         let (_balance_tx, balance_rx) = channel();
         let (_expected_client_tx, expected_client_rx) = channel();
         let (_expected_balance_tx, expected_balance_rx) = channel();
-        let mut actual_harness = TestHarness::parse_test_harness(vec![tx_1.clone(), tx_2.clone()], client_rx, balance_rx, Some("harness_test.txt"));
+        let (failure_tx, _failure_rx) = channel();
+        let mut actual_harness = TestHarness::parse_test_harness(vec![tx_1.clone(), tx_2.clone()], client_rx, balance_rx, failure_tx.clone(), Some("harness_test.txt"));
         for i in 1..actual_harness.accounts.len() {
             actual_harness.accounts[i].transaction_sequence = 1;
         }
@@ -523,9 +508,7 @@ mod harness_tests {
         };
         let transactions = vec![transaction1, transaction2, transaction3];
         let expected_transaction_results = vec![TransactionResult::new(vec![0], true), TransactionResult::new(vec![1,2], true)];
-        let dir = tempfile::tempdir().unwrap();
-        let failure_test = File::create(dir.path().join("failure_test.txt")).unwrap();
-        let expected_harness = TestHarness { transactions, accounts, starting_balances: vec![], client_senders: vec![tx_1.clone(), tx_2.clone()], client_receiver: expected_client_rx, balance_receiver: expected_balance_rx, succeeded_transactions: HashSet::new(), unfunded_transactions: HashSet::new(), transaction_results: expected_transaction_results, failure_writer: BufWriter::new(failure_test) };
+        let expected_harness = TestHarness { transactions, accounts, starting_balances: vec![], client_senders: vec![tx_1.clone(), tx_2.clone()], client_receiver: expected_client_rx, balance_receiver: expected_balance_rx, failure_sender: failure_tx, succeeded_transactions: HashSet::new(), unfunded_transactions: HashSet::new(), transaction_results: expected_transaction_results  };
         (actual_harness, expected_harness, vec![rx_1, rx_2])
     }
 
@@ -619,7 +602,7 @@ mod harness_tests {
     #[ignore]
     fn test_failure_writer() {
         println!("{}", *LOG_FOLDER);
-        let (mut actual_harness, _expected_harness, _receivers) = parse_harness();
+        let (_actual_harness, _expected_harness, _receivers) = parse_harness();
         let node_states = Arc::new(MutexNodeStates::new(NodeStates::new( vec![NodeState::new(0); 5])));
         let mut ripple_message = RippleMessage::default();
         ripple_message.from_node = "Ripple1".to_string();
@@ -632,6 +615,5 @@ mod harness_tests {
         node_states.set_validated_ledger(2, validated_ledger);
         let current_individual: DelayMapPhenotype = DelayMapPhenotype::from_genes(&vec![100u32; num_genes()]);
         node_states.set_current_individual(current_individual.display_genotype_by_message());
-        actual_harness.handle_test_failure(node_states);
     }
 }

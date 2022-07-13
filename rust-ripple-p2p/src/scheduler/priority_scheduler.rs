@@ -1,16 +1,19 @@
 use std::cmp::Ordering;
-use std::collections::{BinaryHeap};
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::sync::mpsc::{Receiver as STDReceiver, Sender as STDSender};
 use std::thread;
-use chrono::Utc;
+use chrono::{Duration, Utc};
+use hashbrown::hash_map::DefaultHashBuilder;
 use log::{debug, error, trace};
 use parking_lot::{Condvar, Mutex};
+use priority_queue::priority_queue::PriorityQueue;
 use tokio::sync::mpsc::Receiver as TokioReceiver;
+use spin_sleep::SpinSleeper;
 use crate::collector::RippleMessage;
-use crate::ga::encoding::ExtendedPhenotype;
+use crate::failure_writer::ConsensusPropertyTypes;
+use crate::ga::encoding::{ExtendedPhenotype, num_genes};
 use crate::ga::genetic_algorithm::ConsensusMessageType;
-use crate::ga::encoding::priority_encoding::{Priority, PriorityMapPhenotype};
+use crate::ga::encoding::priority_encoding::{PriorityMapPhenotype};
 use crate::message_handler::RippleMessageObject;
 use crate::node_state::MutexNodeStates;
 use crate::NodeKeys;
@@ -20,46 +23,54 @@ pub struct PriorityScheduler {
     state: SchedulerState,
 }
 
-const MAX_INBOX_SIZE: usize = 100;
-const MAX_DURATION_MILLIS: i64 = 30;
-
 impl PriorityScheduler {
-    #[allow(unused)]
-    pub fn new(p2p_connections: P2PConnections, collector_sender: STDSender<Box<RippleMessage>>, node_states: Arc<MutexNodeStates>, node_keys: Vec<NodeKeys>) -> Self {
-        PriorityScheduler {
-            state: SchedulerState::new(p2p_connections, collector_sender, node_states, node_keys)
-        }
-    }
-
-    fn inbox_controller(inbox: Arc<(Mutex<BinaryHeap<OrderedRMOEvent>>, Condvar)>, event_schedule_sender: STDSender<RMOEvent>, max_inbox_size: usize, max_duration_millis: i64) {
-        let (inbox_lock, inbox_cvar) = &*inbox;
-        let mut time = Utc::now();
-        let mut size_counter = 0;
-        let mut time_counter = 0;
+    /// Execute events every t seconds based on size of the inbox.
+    /// Do we have a target size of the inbox? ~30 (10% of the different types of events maybe?)
+    /// How to determine base t? 1/(num_nodes * num_nodes-1) = 1 / 20? We assume a node broadcasts one message per second
+    /// If inbox reaches 150% of desired capacity, increase rate (decrease t) by 10%? t / 1.1
+    /// If inbox reaches 50% of desired capacity, decrease rate (increase t) by 10%? t * 1.1
+    fn inbox_controller(
+        inbox_rx: STDReceiver<OrderedRMOEvent>,
+        run: Arc<(RwLock<bool>, Condvar)>,
+        event_schedule_sender: STDSender<RMOEvent>,
+    ) {
+        let (run_lock, _run_cvar) = &*run;
+        let sleeper = SpinSleeper::default();
+        let mut inbox = PriorityQueue::<RMOEvent, usize, DefaultHashBuilder>::with_default_hasher();
+        let mut rate = 0.5 * num_genes() as f64; // Rate at which events are executed from the queue. Base rate of num_genes / second -> too low?
+        let target_inbox_size = 0.2 * num_genes() as f64; // Target inbox size of 10% of the events mapped -> higher?
+        let sensitivity_ratio = 1.01; // Change rate by 3% at a time
+        let rate_change_percentage = 0.5; // 50% less or more than desired size of inbox
+        // let target_duration_in_inbox = Duration::seconds(6);
         loop {
-            let mut inbox_heap = inbox_lock.lock();
-            // inbox_cvar.wait_for(&mut inbox_heap, std::time::Duration::from_millis(MAX_DURATION_MILLIS as u64));
-            inbox_cvar.wait(&mut inbox_heap);
-            {
-                while inbox_heap.len() > max_inbox_size {
-                    event_schedule_sender.send(inbox_heap.pop().unwrap().rmo_event).expect("Event scheduler failed");
-                    size_counter += 1;
-                    time = Utc::now();
-                    if size_counter % 10 == 0 {
-                        trace!("{}", size_counter);
-                    }
+            while let Ok(ordered_event) = inbox_rx.try_recv() {
+                let priority = ordered_event.priority;
+                inbox.push(ordered_event.rmo_event, priority);
+            }
+            if *run_lock.read().unwrap() {
+                let inbox_size = inbox.len();
+                // rate changes
+                if inbox_size > (target_inbox_size + rate_change_percentage * target_inbox_size) as usize {
+                        rate = (rate * sensitivity_ratio).min(num_genes() as f64 * 1.0f64);
+                        trace!("size: {}, Increasing rate to {}", inbox_size, rate);
+                } else if inbox_size < (target_inbox_size - rate_change_percentage * target_inbox_size) as usize {
+                    trace!("size: {}, Decreasing rate to {}", inbox_size, rate);
+                    rate = (rate / sensitivity_ratio).max(num_genes() as f64 / 6f64);
                 }
-                if Utc::now().signed_duration_since(time) > chrono::Duration::milliseconds(max_duration_millis) {
-                    if !inbox_heap.is_empty() {
-                        event_schedule_sender.send(inbox_heap.pop().unwrap().rmo_event).expect("Event scheduler failed");
-                    }
-                    time_counter += 1;
-                    if time_counter % 10 == 0 {
-                        trace!("{}", time_counter);
-                    }
-                    time = Utc::now();
+                // Execute event with highest priority
+                if inbox_size > 0 {
+                    let rmo_event = inbox.pop().unwrap().0;
+                    event_schedule_sender.send(rmo_event).expect("Event scheduler failed");
+                }
+            } else {
+                while let Some((event, _)) = inbox.pop() {
+                    trace!("Emptying inbox");
+                    event_schedule_sender.send(event).expect("Event scheduler failed");
                 }
             }
+            // We sleep for 1 / rate seconds
+            let duration_s = 1.0 / rate;
+            sleeper.sleep_s(duration_s);
         }
     }
 }
@@ -67,31 +78,42 @@ impl PriorityScheduler {
 impl Scheduler for PriorityScheduler {
     type IndividualPhenotype = PriorityMapPhenotype;
 
+    fn new(
+        p2p_connections: P2PConnections,
+        collector_sender: STDSender<Box<RippleMessage>>,
+        node_states: Arc<MutexNodeStates>,
+        node_keys: Vec<NodeKeys>,
+        failure_sender: STDSender<Vec<ConsensusPropertyTypes>>,
+    ) -> Self {
+        Self {
+            state: SchedulerState::new(p2p_connections, collector_sender, node_states, node_keys, failure_sender)
+        }
+    }
+
     /// Wait for new messages delivered by peers
     /// If the network is not stable, immediately relay messages
     /// Else collect messages in inbox and schedule based on priority
     fn schedule_controller(mut receiver: TokioReceiver<Event>,
-                           run: Arc<(Mutex<bool>, Condvar)>,
+                           run: Arc<(RwLock<bool>, Condvar)>,
                            current_individual: Arc<Mutex<Self::IndividualPhenotype>>,
                            node_states: Arc<MutexNodeStates>,
                            event_schedule_sender: STDSender<RMOEvent>
     )
     {
         let (run_lock, _run_cvar) = &*run;
-        let inbox = Arc::new((Mutex::new(BinaryHeap::new()), Condvar::new()));
+        let (inbox_tx, inbox_rx) = std::sync::mpsc::channel();
         let event_schedule_sender_2 = event_schedule_sender.clone();
-        let inbox_2 = inbox.clone();
-        thread::spawn(move || Self::inbox_controller(inbox_2, event_schedule_sender_2, MAX_INBOX_SIZE, MAX_DURATION_MILLIS));
-        let (inbox_lock, inbox_cvar) = &*inbox;
+        let run_2 = run.clone();
+        thread::spawn(move || Self::inbox_controller(inbox_rx, run_2, event_schedule_sender_2));
         loop {
             match receiver.blocking_recv() {
                 Some(event) => {
                     let rmo_event = RMOEvent::from(&event);
                     Self::check_message_for_round_update(&rmo_event, &node_states);
                     // If the network is ready to apply the test case, collect messages in inbox, else immediately relay
-                    if *run_lock.lock() {
+                    if *run_lock.read().unwrap() {
                         if Self::is_consensus_rmo(&rmo_event.message) {
-                            node_states.add_send_dependency(*RippleMessage::new(format!("Ripple{}", rmo_event.from + 1), format!("Ripple{}", rmo_event.to + 1), Utc::now(), rmo_event.message.clone()));
+                            node_states.add_send_dependency(*RippleMessage::new(format!("Ripple{}", rmo_event.from + 1), format!("Ripple{}", rmo_event.to + 1), Duration::zero(), Utc::now(), rmo_event.message.clone()));
                             let message_type_map = current_individual.lock().priority_map.get(&rmo_event.from).unwrap().get(&rmo_event.to).unwrap().clone();
 
                             let priority = match &rmo_event.message {
@@ -113,18 +135,14 @@ impl Scheduler for PriorityScheduler {
                                 RippleMessageObject::TMTransaction(_) => message_type_map.get(&ConsensusMessageType::TMTransaction).unwrap(),
                                 RippleMessageObject::TMLedgerData(_) => message_type_map.get(&ConsensusMessageType::TMLedgerData).unwrap(),
                                 RippleMessageObject::TMGetLedger(_) => message_type_map.get(&ConsensusMessageType::TMGetLedger).unwrap(),
-                                _ => &Priority(0f32)
+                                _ => &0
                             };
-                            inbox_lock.lock().push(OrderedRMOEvent::new(rmo_event, *priority));
-                            inbox_cvar.notify_all();
+                            inbox_tx.send(OrderedRMOEvent::new(rmo_event, *priority)).expect("Inbox sender failed");
                         } else {
                             event_schedule_sender.send(rmo_event).expect("Event scheduler failed");
                         }
                     } else {
                         event_schedule_sender.send(rmo_event).expect("Event scheduler failed");
-                        while let Some(event) =  inbox_lock.lock().pop() {
-                            event_schedule_sender.send(event.rmo_event).expect("Event scheduler failed");
-                        }
                     }
                 },
                 None => error!("Peer senders failed")
@@ -150,14 +168,14 @@ impl Scheduler for PriorityScheduler {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash)]
 pub struct OrderedRMOEvent {
     rmo_event: RMOEvent,
-    priority: Priority,
+    priority: usize,
 }
 
 impl OrderedRMOEvent {
-    pub fn new(rmo_event: RMOEvent, priority: Priority) -> Self {
+    pub fn new(rmo_event: RMOEvent, priority: usize) -> Self {
         Self { rmo_event, priority }
     }
 }
@@ -187,13 +205,11 @@ impl Ord for OrderedRMOEvent {
 
 #[cfg(test)]
 mod priority_scheduler_tests {
-    use std::collections::BinaryHeap;
-    use std::sync::Arc;
+    use std::sync::{Arc, RwLock};
     use std::sync::mpsc::channel;
     use std::thread;
     use std::time::Duration;
-    use parking_lot::{Condvar, Mutex};
-    use crate::ga::encoding::priority_encoding::Priority;
+    use parking_lot::{Condvar};
     use crate::message_handler::RippleMessageObject;
     use crate::protos::ripple::{TMStatusChange, TMValidation};
     use crate::scheduler::priority_scheduler::{OrderedRMOEvent, PriorityScheduler};
@@ -201,31 +217,18 @@ mod priority_scheduler_tests {
 
     #[test]
     fn test_inbox_controller() {
-        let inbox = Arc::new((Mutex::new(BinaryHeap::new()), Condvar::new()));
-        let inbox_clone = inbox.clone();
-        let (inbox_lock, inbox_cvar) = &*inbox;
+        let (inbox_tx, inbox_rx) = std::sync::mpsc::channel();
+        let run = Arc::new((RwLock::new(false), Condvar::new()));
         let (event_schedule_sender, event_scheduler_receiver) = channel();
-        let max_inbox_size = 10usize;
-        let max_duration_millis = 500;
-        thread::spawn(move || PriorityScheduler::inbox_controller(inbox_clone, event_schedule_sender, max_inbox_size, max_duration_millis));
+        thread::spawn(move || PriorityScheduler::inbox_controller(inbox_rx, run, event_schedule_sender,));
         thread::sleep(Duration::from_millis(100));
         let mut rmo_event_size = RMOEvent::default();
         rmo_event_size.message = RippleMessageObject::TMStatusChange(TMStatusChange::new());
         let mut rmo_event_time = RMOEvent::default();
         rmo_event_time.message = RippleMessageObject::TMValidation(TMValidation::new());
-        for i in 0..max_inbox_size+1 {
-            let mut inbox_heap = inbox_lock.lock();
-            if i == max_inbox_size {
-                inbox_heap.push(OrderedRMOEvent::new(rmo_event_size.clone(), Priority(i as f32)));
-                println!("Sending message {} to inbox", i);
-            } else if i == max_inbox_size - 1 {
-                inbox_heap.push(OrderedRMOEvent::new(rmo_event_time.clone(), Priority(i as f32)));
-            } else {
-                inbox_heap.push(OrderedRMOEvent::new(RMOEvent::default(), Priority(i as f32)));
-                println!("Sending message {} to inbox", i);
-            }
-            println!("woke up {} threads", inbox_cvar.notify_all());
-        }
+        inbox_tx.send(OrderedRMOEvent::new(rmo_event_size.clone(), 2)).unwrap();
+        inbox_tx.send(OrderedRMOEvent::new(rmo_event_time.clone(), 1)).unwrap();
+        thread::sleep(Duration::from_millis(100));
         let res = event_scheduler_receiver.recv();
         assert_eq!(res, Ok(rmo_event_size));
         let res = event_scheduler_receiver.recv();

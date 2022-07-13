@@ -1,13 +1,15 @@
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::sync::mpsc::{Sender as STDSender, Receiver as STDReceiver};
 use tokio::sync::mpsc::{Receiver as TokioReceiver};
 use std::thread;
 use std::time::Duration;
-use chrono::Utc;
+use chrono::{Utc, Duration as ChronoDuration};
 use genevo::genetic::Phenotype;
 use log::{debug, error, trace};
 use parking_lot::{Condvar, Mutex};
+use spin_sleep::SpinSleeper;
 use crate::collector::RippleMessage;
+use crate::failure_writer::ConsensusPropertyTypes;
 use crate::ga::genetic_algorithm::{ConsensusMessageType};
 #[allow(unused_imports)]
 use crate::ga::encoding::delay_encoding::{DelayMapPhenotype, DROP_THRESHOLD};
@@ -26,23 +28,26 @@ pub struct DelayScheduler {
     state: SchedulerState
 }
 
-impl DelayScheduler {
-    #[allow(unused)]
-    pub fn new(p2p_connections: P2PConnections, collector_sender: STDSender<Box<RippleMessage>>, node_states: Arc<MutexNodeStates>, node_keys: Vec<NodeKeys>) -> Self {
-        DelayScheduler {
-            state: SchedulerState::new(p2p_connections, collector_sender, node_states, node_keys)
-        }
-    }
-}
-
 impl Scheduler for DelayScheduler {
     type IndividualPhenotype = DelayMapPhenotype;
+
+    fn new(
+        p2p_connections: P2PConnections,
+        collector_sender: STDSender<Box<RippleMessage>>,
+        node_states: Arc<MutexNodeStates>,
+        node_keys: Vec<NodeKeys>,
+        failure_sender: STDSender<Vec<ConsensusPropertyTypes>>,
+    ) -> Self {
+        Self {
+            state: SchedulerState::new(p2p_connections, collector_sender, node_states, node_keys, failure_sender)
+        }
+    }
 
     /// Wait for new messages delivered by peers
     /// If the network is not stable, immediately relay messages
     /// Else schedule messages with a certain delay
     fn schedule_controller(mut receiver: TokioReceiver<Event>,
-                           run: Arc<(Mutex<bool>, Condvar)>,
+                           run: Arc<(RwLock<bool>, Condvar)>,
                            current_delays: Arc<Mutex<Self::IndividualPhenotype>>,
                            node_states: Arc<MutexNodeStates>,
                            event_schedule_sender: STDSender<RMOEvent>
@@ -56,9 +61,9 @@ impl Scheduler for DelayScheduler {
                     Self::check_message_for_round_update(&rmo_event, &node_states);
                     let ms: u32;
                     // If the network is ready to apply the test case, determine delay of message, else delay = 0
-                    if *run_lock.lock() {
+                    if *run_lock.read().unwrap() {
                         if Self::is_consensus_rmo(&rmo_event.message) {
-                            node_states.add_send_dependency(*RippleMessage::new(format!("Ripple{}", rmo_event.from + 1), format!("Ripple{}", rmo_event.to + 1), Utc::now(), rmo_event.message.clone()));
+                            node_states.add_send_dependency(*RippleMessage::new(format!("Ripple{}", rmo_event.from + 1), format!("Ripple{}", rmo_event.to + 1), ChronoDuration::zero(), Utc::now(), rmo_event.message.clone()));
                         }
                         let message_type_map = current_delays.lock().delay_map.get(&rmo_event.from).unwrap().get(&rmo_event.to).unwrap().clone();
                         ms = match &rmo_event.message {
@@ -131,8 +136,9 @@ impl ScheduledEvent {
         //     return
         // } else {
             thread::spawn(move || {
+                let sleeper = SpinSleeper::default();
                 trace!("Sleeping for {} ms for message: {} -> {}: {:?}", duration.as_millis(), event.from, event.to, event.message);
-                thread::sleep(duration);
+                sleeper.sleep(duration);
                 trace!("Sending event to executor: {} -> {}: {:?}", event.from, event.to, event.message);
                 sender.send(event).expect("Scheduler receiver failed");
             });

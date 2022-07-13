@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use log::error;
 use itertools::Itertools;
+use crate::failure_writer::ConsensusPropertyTypes;
 use crate::message_handler::ParsedValidation;
 use crate::node_state::{MutexNodeStates};
 use crate::protos::ripple::{NodeEvent, TMStatusChange};
@@ -9,34 +10,40 @@ use crate::protos::ripple::{NodeEvent, TMStatusChange};
 pub struct ConsensusProperties {}
 
 impl ConsensusProperties {
-    pub fn check_proposal_integrity_property(node_states: &Arc<MutexNodeStates>, status_change: &TMStatusChange, sender: usize) -> bool {
+    /// I1 Check whether a proposal has already declared consensus on a transaction set for one ledger
+    pub fn check_proposal_integrity_property(node_states: &Arc<MutexNodeStates>, status_change: &TMStatusChange, sender: usize) -> Vec<ConsensusPropertyTypes> {
         if status_change.has_newEvent() && status_change.get_newEvent() == NodeEvent::neACCEPTED_LEDGER {
             let mut node_states_vec = node_states.node_states.lock();
             let already_present = node_states_vec.add_consensus_constructed_ledger(status_change.clone(), sender);
             if let Some(earlier_status_change) = already_present {
                 if earlier_status_change != *status_change {
                     error!("(I1) Node has declared consensus on two transaction sets for the same ledger sequence\nOld: {:?}\nNew: {:?}", earlier_status_change, status_change);
-                    return false;
+                    return vec![ConsensusPropertyTypes::Integrity1];
                 }
             }
         }
-        true
+        vec![]
     }
 
-    pub fn check_validation_integrity_property(node_states: &Arc<MutexNodeStates>, validation: ParsedValidation, sender: usize) -> bool {
+    /// I2 Check whether a node has already issued a validation for a ledger
+    pub fn check_validation_integrity_property(node_states: &Arc<MutexNodeStates>, validation: ParsedValidation, sender: usize) -> Vec<ConsensusPropertyTypes> {
         let mut node_states_vec = node_states.node_states.lock();
         let already_present = node_states_vec.add_sent_validation(validation.clone(), sender);
         if let Some(earlier_validation) = already_present {
             if earlier_validation != validation {
                 error!("(I2) Node validated twice for one ledger sequence\nOld: {:?}\nNew: {:?}", earlier_validation, validation);
-                return false
+                return vec![ConsensusPropertyTypes::Integrity2];
             }
         }
-        true
+        vec![]
     }
 
-    pub fn check_agreement_properties(node_states: &Arc<MutexNodeStates>) -> bool {
-        let mut agreement = true;
+    /// Check agreement consensus properties
+    /// A1 is a weaker safety property, as validation is specifically designed to remedy that situation
+    /// A1 Check whether two nodes created different ledgers / declared consensus on two different tx sets
+    /// A2 Check whether two nodes validated two different ledgers
+    pub fn check_agreement_properties(node_states: &Arc<MutexNodeStates>) -> Vec<ConsensusPropertyTypes> {
+        let mut consensus_properties_violated = vec![];
         let node_states_vec = &node_states.node_states.lock().node_states;
         let seqs = node_states_vec.iter()
             .map(|node| node.validated_ledgers.keys().map(|key| *key).collect::<HashSet<usize>>())
@@ -52,22 +59,23 @@ impl ConsensusProperties {
                 .all_equal();
             if !validation_agreement {
                 error!("(A2) Conflicting ledgers validated");
-                agreement = false
+                consensus_properties_violated.push(ConsensusPropertyTypes::Agreement2);
             }
             if !proposal_agreement {
                 error!("(A1) Conflicting ledgers created");
-                agreement = false
+                consensus_properties_violated.push(ConsensusPropertyTypes::Agreement1);
             }
         }
-        agreement
+        consensus_properties_violated
     }
 
     /// Check validity consensus properties
     /// V1 Check whether the transaction sets on which the nodes declared consensus are actually in the proposed transaction sets
     /// V2 Check whether the transaction sets (consensus_hash) in nodes' validation messages are actually in the proposed transaction sets
-    pub fn check_validity_properties(node_states: &Arc<MutexNodeStates>) {
+    pub fn check_validity_properties(node_states: &Arc<MutexNodeStates>) -> Vec<ConsensusPropertyTypes> {
         let node_states_vec = &node_states.node_states.lock().node_states;
         let seqs = node_states_vec.iter().map(|node| node.proposed_tx_sets.keys().map(|key| *key).collect::<HashSet<usize>>()).flatten().collect::<HashSet<usize>>();
+        let mut consensus_properties_violated = vec![];
         for seq in seqs {
             let proposed_tx_sets = node_states_vec.iter()
                 .filter_map(|node| node.proposed_tx_sets.get(&seq)).flatten()
@@ -86,14 +94,18 @@ impl ConsensusProperties {
                 }).collect::<HashSet<Vec<u8>>>();
             let is_v2_violated = validations.difference(&proposed_tx_sets).count() > 0;
             if is_v1_violated {
+                consensus_properties_violated.push(ConsensusPropertyTypes::Validity1);
                 error!("(V1) Node declared consensus on a tx_set that was never proposed");
             }
             if is_v2_violated {
+                consensus_properties_violated.push(ConsensusPropertyTypes::Validity2);
                 error!("(V2) Node sent a validation for a ledger that was never constructed");
             }
         }
+        consensus_properties_violated
     }
 }
+
 
 #[cfg(test)]
 mod consensus_properties_tests {
@@ -101,6 +113,7 @@ mod consensus_properties_tests {
     use itertools::Itertools;
     use crate::client::ValidatedLedger;
     use crate::consensus_properties::ConsensusProperties;
+    use crate::failure_writer::ConsensusPropertyTypes;
     use crate::message_handler::ParsedValidation;
     use crate::node_state::{MutexNodeStates, NodeState, NodeStates};
     use crate::protos::ripple::{NodeEvent, TMStatusChange};
@@ -114,17 +127,17 @@ mod consensus_properties_tests {
         node_states_vec[1].validated_ledgers.insert(0, ValidatedLedger::default());
         node_states_vec[2].validated_ledgers.insert(1, ValidatedLedger::default());
         let node_states = Arc::new(MutexNodeStates::new(NodeStates::new(node_states_vec)));
-        assert!(ConsensusProperties::check_agreement_properties(&node_states));
+        assert_eq!(ConsensusProperties::check_agreement_properties(&node_states), vec![]);
         let mut different_validation = ValidatedLedger::default();
         different_validation.ledger_hash = "Different ledger hash".to_string();
         node_states.node_states.lock().node_states[1].validated_ledgers.insert(1, different_validation);
-        assert!(!ConsensusProperties::check_agreement_properties(&node_states));
+        assert_eq!(ConsensusProperties::check_agreement_properties(&node_states), vec![ConsensusPropertyTypes::Agreement2]);
         node_states.node_states.lock().node_states[1].validated_ledgers.insert(1, ValidatedLedger::default());
-        assert!(ConsensusProperties::check_agreement_properties(&node_states));
+        assert_eq!(ConsensusProperties::check_agreement_properties(&node_states), vec![]);
         let mut different_status_change = TMStatusChange::default();
         different_status_change.set_ledgerHash(vec![1, 2, 3]);
         node_states.node_states.lock().node_states[2].consensus_constructed_ledgers.insert(0, different_status_change);
-        assert!(!ConsensusProperties::check_agreement_properties(&node_states));
+        assert_eq!(ConsensusProperties::check_agreement_properties(&node_states), vec![ConsensusPropertyTypes::Agreement1]);
     }
 
     #[test]
@@ -135,14 +148,14 @@ mod consensus_properties_tests {
         status_change_1.set_newEvent(NodeEvent::neACCEPTED_LEDGER);
         status_change_1.set_ledgerSeq(0);
         status_change_1.set_ledgerHash(vec![1]);
-        assert_eq!(ConsensusProperties::check_proposal_integrity_property(&node_states, &status_change_1, 0), true);
+        assert_eq!(ConsensusProperties::check_proposal_integrity_property(&node_states, &status_change_1, 0), vec![]);
         let mut status_change_2 = TMStatusChange::default();
         status_change_2.set_newEvent(NodeEvent::neACCEPTED_LEDGER);
         status_change_2.set_ledgerSeq(1);
         status_change_2.set_ledgerHash(vec![1, 2, 3]);
-        assert_eq!(ConsensusProperties::check_proposal_integrity_property(&node_states, &status_change_2, 0), true);
+        assert_eq!(ConsensusProperties::check_proposal_integrity_property(&node_states, &status_change_2, 0), vec![]);
         status_change_1.set_ledgerSeq(1);
-        assert_eq!(ConsensusProperties::check_proposal_integrity_property(&node_states, &status_change_1, 0), false);
+        assert_eq!(ConsensusProperties::check_proposal_integrity_property(&node_states, &status_change_1, 0), vec![ConsensusPropertyTypes::Integrity1]);
     }
 
     #[test]
@@ -152,13 +165,13 @@ mod consensus_properties_tests {
         let mut validation_1 = ParsedValidation::default();
         validation_1.ledger_sequence = 0;
         validation_1.hash = "hash1".to_string();
-        assert_eq!(ConsensusProperties::check_validation_integrity_property(&node_states, validation_1.clone(), 0), true);
+        assert_eq!(ConsensusProperties::check_validation_integrity_property(&node_states, validation_1.clone(), 0), vec![]);
         let mut validation_2 = ParsedValidation::default();
         validation_2.ledger_sequence = 1;
         validation_2.hash = "hash2".to_string();
-        assert_eq!(ConsensusProperties::check_validation_integrity_property(&node_states, validation_2.clone(), 0), true);
+        assert_eq!(ConsensusProperties::check_validation_integrity_property(&node_states, validation_2.clone(), 0), vec![]);
         validation_1.ledger_sequence = 1;
-        assert_eq!(ConsensusProperties::check_validation_integrity_property(&node_states, validation_1.clone(), 0), false);
+        assert_eq!(ConsensusProperties::check_validation_integrity_property(&node_states, validation_1.clone(), 0), vec![ConsensusPropertyTypes::Integrity2]);
     }
 
     #[test]

@@ -5,3 +5,5 @@ pub mod crossover;
 pub mod parameters;
 pub mod population_builder;
 pub mod encoding;
+mod selection;
+mod reinsertion;

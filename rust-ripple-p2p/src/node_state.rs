@@ -2,6 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Formatter};
+use chrono::Utc;
 use itertools::{Itertools};
 use log::{error, trace};
 use parking_lot::{Mutex, Condvar};
@@ -9,7 +10,8 @@ use petgraph::Graph;
 use petgraph::prelude::NodeIndex;
 use crate::client::{PeerServerStateObject, ServerStateObject, Transaction, ValidatedLedger};
 use crate::collector::RippleMessage;
-use crate::ga::encoding::delay_encoding::DelaysGenotype;
+use crate::failure_writer::{ConsensusPropertyTypes, Failure};
+use crate::ga::encoding::delay_encoding::DelayGenotype;
 use crate::message_handler::ParsedValidation;
 use crate::protos::ripple::TMStatusChange;
 use crate::test_harness::{TransactionResultCode, TransactionTimed};
@@ -73,7 +75,7 @@ pub struct NodeStates {
     pub executions: Vec<RippleMessage>,
     pub dependency_graph: Graph<DependencyEvent, ()>,
     pub current_individual: String,
-    pub current_delays: DelaysGenotype,
+    pub current_delays: DelayGenotype,
     pub server_state_updates: Vec<bool>,
     pub highest_propose_seq: u32,
     pub bow_outs: u32,
@@ -206,7 +208,7 @@ impl NodeStates {
         self.current_individual.clone()
     }
 
-    pub fn set_current_delays(&mut self, delays: DelaysGenotype) {
+    pub fn set_current_delays(&mut self, delays: DelayGenotype) {
         self.current_delays = delays;
     }
 
@@ -367,11 +369,11 @@ impl MutexNodeStates {
         self.node_states.lock().get_current_individual()
     }
 
-    pub fn set_current_delays(&self, delays: DelaysGenotype) {
+    pub fn set_current_delays(&self, delays: DelayGenotype) {
         self.node_states.lock().set_current_delays(delays);
     }
 
-    pub fn get_current_delays(&self) -> DelaysGenotype {
+    pub fn get_current_delays(&self) -> DelayGenotype {
         self.node_states.lock().current_delays.clone()
     }
 
@@ -509,6 +511,44 @@ impl MutexNodeStates {
 
     pub fn clear_consensus_property_data(&self) {
         self.node_states.lock().clear_consensus_property_data()
+    }
+
+    pub fn create_failure_data(&self, consensus_properties_violated: Vec<ConsensusPropertyTypes>, with_execution: bool, with_trace_graph: bool) -> Failure {
+        let node_states = self.node_states.lock();
+        Failure {
+            time: Utc::now(),
+            validated_transactions: (0..self.number_of_nodes).map(|i| node_states.node_states[i].validated_transactions.clone()).collect_vec(),
+            validated_ledgers: (0..self.number_of_nodes).map(|i| node_states.node_states[i].last_validated_ledger.clone()).collect_vec(),
+            current_individual: node_states.current_individual.clone(),
+            execution: if with_execution{
+                Some(node_states.executions.clone())
+            } else {
+                None
+            },
+            trace_graph: if with_trace_graph {
+                Some(node_states.dependency_graph.clone())
+            } else {
+                None
+            },
+            consensus_properties_violated
+        }
+    }
+}
+
+#[derive(Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq, Hash, Default, Debug)]
+pub struct MessageTypeDependencyEvent {
+    pub message_type: String,
+    pub from_node: usize,
+    pub to_node: usize,
+}
+
+impl MessageTypeDependencyEvent {
+    pub fn from(event: &DependencyEvent) -> Self {
+        Self {
+            message_type: event.ripple_message.message_type(),
+            from_node: event.ripple_message.sender_index(),
+            to_node: event.ripple_message.receiver_index(),
+        }
     }
 }
 

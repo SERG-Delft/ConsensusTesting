@@ -11,13 +11,13 @@ use serde::{Deserialize};
 use crate::LOG_FOLDER;
 
 #[allow(unused)]
-pub fn start_docker_containers(peers: usize, unls: Vec<Vec<usize>>) -> Vec<NodeKeys> {
+pub fn start_docker_containers(peers: usize, unls: Vec<Vec<usize>>, image_name: &str) -> Vec<NodeKeys> {
     remove_containers("validator");
     let node_keys = get_node_keys(peers);
     create_configs(peers, &node_keys);
     configure_unls(unls, &node_keys);
     let folders = create_log_folders(peers);
-    run_nodes(peers, folders);
+    run_nodes(peers, image_name, folders);
     thread::sleep(Duration::from_secs(3));
     node_keys
 }
@@ -25,7 +25,7 @@ pub fn start_docker_containers(peers: usize, unls: Vec<Vec<usize>>) -> Vec<NodeK
 pub fn remove_containers(name: &str) {
     let leftovers = Command::new("docker").arg("ps")
         .args(["--all", "--quiet"])
-        .args(["--filter", "ancestor=mvanmeerten/rippled-boost-cmake"])
+        // .args(["--filter", "network=ripple-net"])
         .args(["--filter", &format!("name={}", name)])
         .output().unwrap();
     let ids: Vec<&str> = std::str::from_utf8(&*leftovers.stdout).unwrap().lines().collect();
@@ -62,7 +62,7 @@ pub fn start_key_generator() {
     if already_running.len() == 0 {
         debug!("trying to start key generator");
         remove_containers("key_generator");
-        start_node_with_options("key_generator", 0, false, None);
+        start_node_with_options("key_generator", "rippled-boost-cmake", 0, false, None);
         thread::sleep(Duration::from_secs(1));
     }
 }
@@ -120,16 +120,16 @@ pub fn create_log_folders(peers: usize) -> Vec<String> {
 }
 
 #[allow(unused)]
-fn run_nodes(peers: usize, log_folders: Vec<String>) {
-    (0..peers).into_par_iter().for_each(|i| start_node(i, &log_folders[i]));
+fn run_nodes(peers: usize, image_name: &str, log_folders: Vec<String>) {
+    (0..peers).into_par_iter().for_each(|i| start_node(i, image_name, &log_folders[i]));
 }
 
 #[allow(unused)]
-fn start_node(id: usize, log_folder: &str) {
-    start_node_with_options(&format!("validator_{}", id), id, true, Some(log_folder));
+fn start_node(id: usize, image_name: &str, log_folder: &str) {
+    start_node_with_options(&format!("validator_{}", id), image_name, id, true, Some(log_folder));
 }
 
-fn start_node_with_options(name: &str, offset: usize, expose_to_network: bool, log_folder: Option<&str>) {
+fn start_node_with_options(name: &str, image_name: &str, offset: usize, expose_to_network: bool, log_folder: Option<&str>) {
     debug!("Starting node: {}, expose_to_network: {}, log_folder: {:?}", name, expose_to_network, log_folder);
     let mut command = Command::new("docker");
     let mut command = command
@@ -145,7 +145,7 @@ fn start_node_with_options(name: &str, offset: usize, expose_to_network: bool, l
             .args(["-p", &format!("{}:6005", 6005 + offset)])
             .args(["-p", &format!("{}:51235", 51235 + offset)])
     }
-    command.arg("mvanmeerten/rippled-boost-cmake").output().unwrap();
+    command.arg(&format!("mvanmeerten/{}", image_name)).output().unwrap();
     debug!("started {}", name);
 }
 

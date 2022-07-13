@@ -1,19 +1,33 @@
 ### Scheduler
 The control flow for executing test harnesses and delaying messages can be found in [scheduler.rs](scheduler.rs).
 The `start` function spawns several threads. The `listen_to_peers` function listens to messages sent by peers and
-relays the message (with delay if applicable) to their destination. The `listen_to_ga` function continually listens
-to the genetic algorithm for a new set of delays. The `update_current_round` and `update_latest_validated_ledger` functions
+relays the message, based on the current schedule, to their destination. The `listen_to_ga` function continually listens
+to the genetic algorithm for a new individual. The `update_current_round` and `update_latest_validated_ledger` functions
 keep track of when all nodes have started on a new round or validated a new ledger. The `harness_controller` is responsible for
 checking and updating the stability of the network, starting the test harness and sending the found fitness to the ga component.
+Priority-based scheduling and delay-based scheduling can be found in [priority_scheduler.rs](scheduler/priority_scheduler.rs)
+and [delay_scheduler.rs](scheduler/delay_scheduler.rs) respectively. These schedulers implement the scheduler trait and
+define their own logic for how to schedule messages.
+
+### Consensus Properties
+The consensus properties of RCA are checked after and during each test run.
+[consensus_properties.rs](consensus_properties.rs) contains integrity, agreement and validity checks.
+[scheduler.rs](scheduler.rs) contains the bounded liveness check in `update_latest_validated_ledger`.
+Most of the properties are violated during temporary disconnects and long delays in messages. 
+When Agreement2 (A2) or DoubleSpend are violated, two different ledgers are validated and the consensus algorithm has truly failed.
 
 ### Genetic Algorithm
 The genetic algorithm uses [genevo](../../genevo) as a base implementation.
-In [genetic_algorithm.rs](ga/genetic_algorithm.rs) the `run` function
-starts the ga and configures the parameters used in the run. This function also starts the [scheduler handler](ga/fitness.rs).
-The scheduler handler is responsible for communicating new chromosome/scheduler/delays to the scheduler. Fitness functions request evaluations from this handler.
+In [genetic_algorithm.rs](ga/genetic_algorithm.rs) the `run_ga` and `run_permutation_ga` function
+starts the ga for delay scheduling and priority scheduling. This function also starts the [scheduler handler](ga/fitness.rs).
+The scheduler handler is responsible for communicating new individuals to the scheduler. Fitness functions request evaluations from this handler.
 
-#### Gaussian Mutation
+#### Variation Operators
 The guassian mutation operator is implemented in [mutation.rs](ga/mutation.rs). The logic can be found [here](https://github.com/SERG-Delft/ConsensusTesting/blob/37aa4476e6d59b886c2529fe1052e0a26aad3962/rust-ripple-p2p/src/ga/mutation.rs#L69).
+The swap mutation operator and PMX are from genevo. The SBX implementation can be found in [crossover.rs](ga/crossover.rs).
+
+#### Encodings
+The different ecndoings can be foun in [encoding](ga/encoding)
 
 ### Fitness Functions
 The different fitness functions are found in the [fitness](ga/fitness) folder. All fitness functions implement the trait
@@ -31,6 +45,9 @@ To use a different fitness function, change the CurrentFitness type in [genetic_
 In [node_state.rs](node_state.rs) the state of the different nodes is tracked. This struct is a mutex which allows it to be shared and edited by many different threads.
 Almost all components of the system use the node state in some way. It is used by the fitness functions to poll state before and after a test harness.
 The scheduler informs the node state of message [sends](https://github.com/SERG-Delft/ConsensusTesting/blob/37aa4476e6d59b886c2529fe1052e0a26aad3962/rust-ripple-p2p/src/scheduler.rs#L123) and [receives](https://github.com/SERG-Delft/ConsensusTesting/blob/37aa4476e6d59b886c2529fe1052e0a26aad3962/rust-ripple-p2p/src/scheduler.rs#L96) to build the trace graphs.
+
+### Container Manager
+In [container_manager.rs](container_manager.rs), the docker containers are removed and started programmatically.
 
 ### Client
 The [client.rs](client.rs) file contains code for sending client commands to the nodes and receiving their responses.
@@ -52,3 +69,6 @@ The [trace_comparisons.rs](trace_comparisons.rs) file contains code for collecti
 Instead of running the genetic algorithm [scheduler handler](ga/fitness.rs) and starting the GA, a custom SchedulerHandler is used which supplies predetermined delays and writes their fitness to disk.
 For the fitness comparison experiment, use the [compared_fitness_functions.rs](ga/fitness/compared_fitness_functions.rs) as the CurrentFitness type. This combines different fitness functions. See the `run_harness` function.
 The experiments are conducted in the [trace_comparisons](trace_comparisons) folder.
+
+The [scaling.rs](scaling.rs) file contains code for collecting and executing the scaling experiment.
+The [locality.rs](locality.rs) file contains code collecting and executing the locality experiments.

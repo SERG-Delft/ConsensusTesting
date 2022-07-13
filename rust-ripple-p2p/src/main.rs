@@ -1,15 +1,19 @@
 #[allow(unused_variables)]
 extern crate futures;
 
-use std::{env};
-use chrono::Utc;
+use std::{env, fs};
+use std::io::BufReader;
+use chrono::{Duration, Utc};
 use log::*;
 use env_logger;
 use lazy_static::lazy_static;
+use serde_with::{serde_as, DurationSeconds};
+use crate::app::SchedulerType;
 #[allow(unused_imports)]
 use crate::container_manager::{NodeKeys, start_docker_containers};
 #[allow(unused_imports)]
 use crate::executable_manager::start_executables;
+use crate::failure_writer::ConsensusPropertyTypes;
 
 mod app;
 mod protos;
@@ -26,34 +30,39 @@ mod deserialization;
 mod container_manager;
 mod executable_manager;
 mod consensus_properties;
+mod locality;
+mod scaling;
+mod failure_writer;
 
 type AnyError = Box<dyn std::error::Error + Send + Sync>;
 type AnyResult<T> = Result<T, AnyError>;
 type EmptyResult = AnyResult<()>;
 
 lazy_static! {
-    pub static ref NUM_NODES: usize = get_num_nodes();
+    pub static ref CONFIG: Configuration = get_config();
+    pub static ref NUM_NODES: usize = CONFIG.num_nodes;
     pub static ref LOG_FOLDER: String = get_log_path();
 }
 
 fn main() {
     let runtime = tokio::runtime::Runtime::new().unwrap();
 
-    let args: Vec<String> = env::args().collect();
-    let n: usize = (&args[1]).parse().unwrap();
+    let config = CONFIG.clone();
 
     env_logger::Builder::new().parse_default_env().init();
+    debug!("Starting with config: {:?}", config);
 
-    let unls: Vec<Vec<usize>> = get_unls(n, UnlType::Full);
+    let unls: Vec<Vec<usize>> = get_unls(config.num_nodes, config.unl_type);
     println!("Unls: {:?}", unls);
 
-    let node_keys = start_docker_containers(n, unls);
+    let image_name = config.rippled_version;
+    let node_keys = start_docker_containers(config.num_nodes, unls, image_name.docker_image_name());
     // let node_keys = get_static_node_keys();
     // let node_keys = start_executables(n, unls);
 
-    let app = app::App::new(n as u16, node_keys);
+    let app = app::App::new(config.num_nodes as u16, node_keys);
 
-    if let Err(error) = runtime.block_on(app.start()) {
+    if let Err(error) = runtime.block_on(app.start(config.scheduler_type)) {
         error!("Error: {}", error);
         std::process::exit(1);
     }
@@ -61,12 +70,13 @@ fn main() {
     std::process::exit(0);
 }
 
-pub fn get_num_nodes() -> usize {
+pub fn get_config() -> Configuration {
     let args: Vec<String> = env::args().collect();
-    match (&args[1]).parse() {
-        Ok(n) => n,
-        Err(_) => 5 // default 5 nodes
-    }
+    Configuration::parse_file(&args[1])
+    // match (&args[1]).parse() {
+    //     Ok(file_name) => Configuration::parse_file(file_name),
+    //     Err(_) => Configuration::default() // default config
+    // }
 }
 
 pub fn get_log_path() -> String {
@@ -146,15 +156,78 @@ pub fn get_static_node_keys() -> Vec<NodeKeys> {
 }
 
 #[allow(unused)]
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
 pub enum UnlType {
     Full,
     Limit,
     Buggy,
 }
 
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
+pub enum RippledVersion {
+    Fixed,
+    LivenessBug,
+}
+
+impl RippledVersion {
+    pub fn docker_image_name(&self) -> &'static str {
+        match self {
+            RippledVersion::Fixed => "rippled-liveness-fix",
+            RippledVersion::LivenessBug => "rippled-boost-cmake",
+        }
+    }
+
+    pub fn termination_condition(&self) -> Option<ConsensusPropertyTypes> {
+        match self {
+            RippledVersion::Fixed => None,
+            RippledVersion::LivenessBug => Some(ConsensusPropertyTypes::Termination)
+        }
+    }
+}
+
+#[serde_as]
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
+pub struct Configuration {
+    num_nodes: usize,
+    unl_type: UnlType,
+    rippled_version: RippledVersion,
+    scheduler_type: SchedulerType,
+    #[serde_as(as = "DurationSeconds<i64>")]
+    search_budget: Duration,
+}
+
+impl Configuration {
+    pub fn parse_file(file_name: &str) -> Self {
+        let file = match fs::File::open(file_name) {
+            Ok(file) => file,
+            Err(err) => {
+                error!("Failed opening config file, using default config: {}", err);
+                return Configuration::default()
+            }
+        };
+        let mut reader = BufReader::new(file);
+        serde_json::from_reader(&mut reader).unwrap()
+    }
+}
+
+impl Default for Configuration {
+    fn default() -> Self {
+        Configuration {
+            num_nodes: 5,
+            unl_type: UnlType::Full,
+            rippled_version: RippledVersion::Fixed,
+            scheduler_type: SchedulerType::Delay,
+            search_budget: Duration::seconds(3600),
+        }
+    }
+}
+
 #[cfg(test)]
 mod config_tests {
-    use crate::{get_unls, UnlType};
+    use std::fs::File;
+    use std::io::{BufWriter};
+    use std::path::Path;
+    use crate::{Configuration, get_unls, UnlType};
 
     const FULL_5_UNL: [[usize; 5]; 5] = [
         [0, 1, 2, 3, 4],
@@ -241,5 +314,18 @@ mod config_tests {
             vec![4, 5, 6, 7, 8],
             vec![4, 5, 6, 7, 8]
         ]);
+    }
+
+    #[test]
+    fn write_configuration() {
+        let configuration = Configuration {
+            num_nodes: 5,
+            unl_type: UnlType::Full,
+            rippled_version: crate::RippledVersion::Fixed,
+            scheduler_type: crate::SchedulerType::Priority,
+            search_budget: chrono::Duration::seconds(3600),
+        };
+        let mut config_writer = BufWriter::new(File::create(Path::new("config_example.json")).expect("Creating config file failed"));
+        serde_json::to_writer(&mut config_writer, &configuration).expect("Failed writing to config file");
     }
 }

@@ -1,11 +1,16 @@
 # Consensus Testing
-This repository contains the code for testing Ripple's consensus algorithm.
+This repository contains the code for a tool that tests Ripple's consensus algorithm (RCA).
+The tool tests RCA for distributed concurrency bugs. It creates schedules
+based on an evolutionary algorithm, which are executed by running a test case.
+This test case consists of submitting transactions to the network, and waiting
+for these transactions to be included in a validated ledger.
 
-## How to run a private Ripple network on Windows
+## How to run the tool on Windows
 ### Requirements
 [Docker](https://docs.docker.com/get-started/) \
 [Rust](https://www.rust-lang.org/learn/get-started) \
-[OpenSSL](https://www.openssl.org/source/)  (1.0.1 - 1.1.1)
+[OpenSSL](https://www.openssl.org/source/)  (1.0.1 - 1.1.1) \
+Docker containers for the different Rippled versions
 
 ### Run the network
 To run the network, follow the steps below.
@@ -13,21 +18,24 @@ To run the network, follow the steps below.
 `git clone https://github.com/SERG-Delft/ConsensusTesting`
 3. Create the docker network ripple-net `docker network create ripple-net`
 4. Change directory to rust-ripple-p2p `cd ../rust-ripple-p2p`
-5. Run the proxy
-    - PowerShell: `$Env:RUST_LOG="error";$Env:OPENSSL_DIR="[path/to/openssl/dir]"; cargo run [n]`
-    - Other: `RUST_LOG=error;OPENSSL_DIR=[path/to/openssl/dir] cargo run [n]`
+5. Run the tool
+    - PowerShell: `$Env:RUST_LOG="error";$Env:OPENSSL_DIR="[path/to/openssl/dir]"; cargo run [path_to_config_file]`
+    - Other: `RUST_LOG=error;OPENSSL_DIR=[path/to/openssl/dir] cargo run [path_to_config_file]`
 
 ## Mac
 Coming soon
 
-### Is the network validating ledgers?
-If the network is running as expected, it should be validating ledgers. \
-Run the script `.\LastValidatedLedger.ps1 [i (1-5)]` to see the latest ledger that has been validated by the network according to node i.
-If the output of the script is similar to the image below, the network is valiating correctly.
-![image](https://user-images.githubusercontent.com/9784016/137471993-fbc688db-73e3-4961-8f43-9588f31653ed.png)
+## Config
+The settings and configurations for the tool can be set in [config.json](rust-ripple-p2p/config.json).
+- num_nodes: The number of nodes in the network.
+- unl_type: The type of unl configuration [Full, Limit, Buggy].
+- rippled_version: The version of rippled to run [Fixed, LivenessBug]
+- scheduler_type: The type of scheduler to run [Delay, Priority, RandomDelay, RandomPriority, DelayTraceGraph, PriorityTraceGraph, PredeterminedDelay, DelayLocalityExperiment, PriorityLocalityExperiment, ScalingExperiment, None].
+- search_budget: The time in seconds to run the ga for.
 
-If the output is similar to the image below, the node is either not yet synced to the network correctly or the network is not running correctly. The first ledger should be validated after ~5 seconds.
-![image](https://user-images.githubusercontent.com/9784016/137471932-06099354-987c-4532-9e8a-5c8beca98eec.png)
+### Logs
+Logs of a run can be found in the [logs](logs) folder. Each run of the tool creates
+a new folder with the current date and time [yyyy-mm-ddThh-mm-ss] in UTC.
 
 ## Code Guide
 
