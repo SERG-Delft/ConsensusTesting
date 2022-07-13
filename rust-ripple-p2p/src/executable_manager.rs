@@ -20,7 +20,7 @@ const DB_BASE_PATH: &str = "C:\\Users\\Martijn.vanMeerten\\Documents\\rippled\\c
 #[allow(unused)]
 pub fn start_executables(peers: usize, unls: Vec<Vec<usize>>) -> Vec<NodeKeys> {
     kill_executables();
-    remove_containers("validator", "rippled-boost-cmake");
+    remove_containers("validator");
     let node_keys = get_node_keys(peers);
     let folders = create_log_folders(peers);
     create_db_folders(peers);

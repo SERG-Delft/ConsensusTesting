@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::{BufWriter};
+use std::io::{BufWriter, Write};
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver};
@@ -10,7 +10,7 @@ use petgraph::Graph;
 use crate::client::{Transaction, ValidatedLedger};
 use crate::collector::RippleMessage;
 use crate::node_state::{DependencyEvent, MutexNodeStates};
-use crate::{LOG_FOLDER};
+use crate::{CONFIG, LOG_FOLDER};
 use crate::test_harness::TransactionResultCode;
 
 /// Struct responsible for writing state to failure file in case of consensus property violation
@@ -35,11 +35,22 @@ impl FailureWriter {
             node_states,
         };
         thread::spawn(move ||{
+            let start_time = Utc::now();
             loop {
                 match failure_writer.failure_receiver.recv() {
                     Ok(consensus_properties_violated) => {
-                        let failure = failure_writer.node_states.create_failure_data(consensus_properties_violated);
+                        let failure = failure_writer.node_states.create_failure_data(consensus_properties_violated, false, false);
                         serde_json::to_writer(&mut failure_writer.failure_writer, &failure).expect("Failed writing to failure file");
+                        if let Some(target_consensus_property) = &CONFIG.rippled_version.termination_condition() {
+                            if failure.consensus_properties_violated.contains(target_consensus_property) {
+                                println!("Successfully found bug!");
+                                failure_writer.failure_writer.write_all(
+                                    format!("Success after {} seconds", Utc::now() - start_time).as_bytes())
+                                    .expect("Failed writing to failure file");
+                                failure_writer.failure_writer.flush().unwrap();
+                                std::process::exit(0);
+                            }
+                        }
                     }
                     Err(err) => {
                         error!("Failure channel failed: {}", err);
@@ -79,8 +90,8 @@ pub struct Failure {
     pub validated_transactions: Vec<Vec<(Transaction, TransactionResultCode)>>,
     pub validated_ledgers: Vec<ValidatedLedger>,
     pub current_individual: String,
-    pub execution: Vec<RippleMessage>,
-    pub trace_graph: Graph<DependencyEvent, ()>,
+    pub execution: Option<Vec<RippleMessage>>,
+    pub trace_graph: Option<Graph<DependencyEvent, ()>>,
     pub consensus_properties_violated: Vec<ConsensusPropertyTypes>,
 }
 

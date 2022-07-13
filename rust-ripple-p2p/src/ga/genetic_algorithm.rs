@@ -1,17 +1,24 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::fs::File;
 use std::hash::Hash;
+use std::io::{BufWriter, Write};
+use std::path::Path;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, RwLock};
 use std::thread;
+use serde_with::{serde_as, DurationSeconds};
+use chrono::Duration;
 use genevo::ga::genetic_algorithm;
 use genevo::mutation::order::SwapOrderMutator;
 use genevo::operator::{CrossoverOp, SelectionOp};
 use genevo::operator::prelude::{MaximizeSelector, PartiallyMappedCrossover};
-use genevo::prelude::{GenerationLimit, Population, SimResult, simulate, Simulation, SimulationBuilder};
+use genevo::prelude::{Population, SimResult, simulate, Simulation, SimulationBuilder, TimeLimit};
+use log::error;
+use crate::{CONFIG, LOG_FOLDER};
 use crate::ga::crossover::SimulatedBinaryCrossBreeder;
-use crate::ga::encoding::delay_encoding::{DelayMapPhenotype, DelaysGenotype};
-use crate::ga::encoding::{ExtendedPhenotype, num_genes, SuperExtendedGenotype};
+use crate::ga::encoding::delay_encoding::{DelayMapPhenotype, DelayGenotype};
+use crate::ga::encoding::{ExtendedGenotype, ExtendedPhenotype, num_genes, SuperExtendedGenotype};
 #[allow(unused_imports)]
 use crate::ga::fitness::state_accounting_fitness::StateAccountFitness;
 use crate::ga::fitness::{ExtendedFitness, FitnessCalculation, SchedulerHandler, SchedulerHandlerTrait};
@@ -60,11 +67,11 @@ pub fn run_default_mu_lambda_delays(mu: usize, lambda: usize, scheduler_sender: 
     let population = build_delays_population(params.num_genes, params.min_value, params.max_value, lambda);
 
     let (fitness_sender, fitness_receiver) = channel();
-    let fitness_values: Arc<RwLock<HashMap<DelaysGenotype, CurrentFitness>>> = Arc::new(RwLock::new(HashMap::new()));
+    let fitness_values: Arc<RwLock<HashMap<DelayGenotype, CurrentFitness>>> = Arc::new(RwLock::new(HashMap::new()));
     let scheduler_handler = SchedulerHandler::new(scheduler_sender, scheduler_receiver, fitness_receiver, fitness_values.clone());
     let fitness_calculation = FitnessCalculation { fitness_values: fitness_values.clone(), sender: fitness_sender };
 
-    run_ga::<MaximizeSelector, SimulatedBinaryCrossBreeder, CurrentFitness, SchedulerHandler<CurrentFitness, DelaysGenotype, DelayMapPhenotype>, DelaysGenotype, DelayMapPhenotype>(scheduler_handler, fitness_calculation, params, population);
+    run_ga::<MaximizeSelector, SimulatedBinaryCrossBreeder, CurrentFitness, SchedulerHandler<CurrentFitness, DelayGenotype, DelayMapPhenotype>, DelayGenotype, DelayMapPhenotype>(scheduler_handler, fitness_calculation, params, population);
 }
 
 /// Run a standard mu lambda GA with priority encoding
@@ -89,8 +96,8 @@ pub fn run_no_ga(number_of_tests: usize) {
     }
 }
 
-pub fn run_ga<S, C, T, H, G, P>(scheduler_handler: H, fitness_calculation: FitnessCalculation<T, G>, params: Parameter<MuLambdaSelector, SimulatedBinaryCrossBreeder, CurrentFitness, DelaysGenotype>, initial_population: Population<G>)
-    where S: SelectionOp<G, T> + Debug, C: CrossoverOp<G> + Debug + Sync, T: ExtendedFitness + 'static, H: SchedulerHandlerTrait + Send + 'static, G: SuperExtendedGenotype, P: ExtendedPhenotype<G>
+pub fn run_ga<S, C, T, H, G, P>(scheduler_handler: H, fitness_calculation: FitnessCalculation<T, G>, params: Parameter<MuLambdaSelector, SimulatedBinaryCrossBreeder, CurrentFitness, DelayGenotype>, initial_population: Population<G>)
+    where S: SelectionOp<G, T> + Debug, C: CrossoverOp<G> + Debug + Sync, T: ExtendedFitness + serde::Serialize + 'static, H: SchedulerHandlerTrait + Send + 'static, G: SuperExtendedGenotype + serde::Serialize, P: ExtendedPhenotype<G>
 {
     println!("{:?}", initial_population);
 
@@ -109,8 +116,15 @@ pub fn run_ga<S, C, T, H, G, P>(scheduler_handler: H, fitness_calculation: Fitne
         .build();
 
     let mut sim = simulate(ga)
-        .until(GenerationLimit::new(params.generation_limit))
+        .until(TimeLimit::new(CONFIG.search_budget))
         .build();
+
+    let mut ga_writer = create_ga_writer();
+    match serde_json::to_writer_pretty(&mut ga_writer, &params) {
+        Ok(_) => {}
+        Err(err) => error!("Failed writing to ga file: {}", err)
+    };
+    ga_writer.flush().expect("GA writer flush failed");
 
     println!("Starting GA with: {:?}", params);
     loop {
@@ -119,34 +133,41 @@ pub fn run_ga<S, C, T, H, G, P>(scheduler_handler: H, fitness_calculation: Fitne
             Ok(SimResult::Intermediate(step)) => {
                 let evaluated_population = step.result.evaluated_population;
                 let best_solution = step.result.best_solution;
-                println!(
-                    "Step: generation: {}, average_fitness: {:?}, \
-                     best fitness: {:?}, duration: {}, processing_time: {}",
+                let generation_info: GaStepInfo<T, G> = GaStepInfo::new(
                     step.iteration,
-                    evaluated_population.average_fitness(),
+                    evaluated_population.average_fitness().clone(),
                     best_solution.solution.fitness,
+                    best_solution.solution.genome,
                     step.duration,
-                    step.processing_time
                 );
-                println!("Best individual:");
-                println!("{}", P::from_genes(&best_solution.solution.genome).display_genotype_by_message());
+                println!("{}", serde_json::to_string(&generation_info).unwrap());
+                match serde_json::to_writer_pretty(&mut ga_writer, &generation_info) {
+                    Ok(_) => {}
+                    Err(err) => error!("Failed writing to ga file: {}", err)
+                };
+                ga_writer.flush().expect("GA writer flush failed");
                 //                println!("| population: [{}]", result.population.iter().map(|g| g.as_text())
                 //                    .collect::<Vec<String>>().join("], ["));
             },
-            Ok(SimResult::Final(step, processing_time, duration, stop_reason)) => {
+            Ok(SimResult::Final(step, _processing_time, duration, stop_reason)) => {
+                let evaluated_population = step.result.evaluated_population;
                 let best_solution = step.result.best_solution;
-                println!("{}", stop_reason);
-                println!(
-                    "Final result after {}: generation: {}, \
-                     best solution with fitness {:?} found in generation {}, processing_time: {}",
-                    duration,
+                let generation_info: GaStepInfo<T, G> = GaStepInfo::new(
                     step.iteration,
+                    evaluated_population.average_fitness().clone(),
                     best_solution.solution.fitness,
-                    best_solution.generation,
-                    processing_time
+                    best_solution.solution.genome,
+                    duration,
                 );
+                match serde_json::to_writer_pretty(&mut ga_writer, &generation_info) {
+                    Ok(_) => {}
+                    Err(err) => error!("Failed writing to ga file: {}", err)
+                };
+                ga_writer.flush().expect("GA writer flush failed");
+                println!("{}", stop_reason);
+                println!("{}", serde_json::to_string(&generation_info).unwrap());
                 print!("      ");
-                println!("{}", P::from_genes(&best_solution.solution.genome).display_genotype_by_message());
+                println!("{}", P::from_genes(&generation_info.best_individual).display_genotype_by_message());
                 break;
             },
             Err(error) => {
@@ -159,7 +180,7 @@ pub fn run_ga<S, C, T, H, G, P>(scheduler_handler: H, fitness_calculation: Fitne
 }
 
 pub fn run_permutation_ga<S, T, H>(scheduler_handler: H, fitness_calculation: FitnessCalculation<T, PriorityGenotype>, params: PermutationParameters<MuLambdaSelector, CurrentFitness, PriorityGenotype>, initial_population: Population<PriorityGenotype>)
-    where S: SelectionOp<PriorityGenotype, T> + Debug, T: ExtendedFitness + 'static, H: SchedulerHandlerTrait + Send + 'static
+    where S: SelectionOp<PriorityGenotype, T> + Debug, T: ExtendedFitness + serde::Serialize + 'static, H: SchedulerHandlerTrait + Send + 'static
 {
     println!("{:?}", initial_population);
 
@@ -178,8 +199,15 @@ pub fn run_permutation_ga<S, T, H>(scheduler_handler: H, fitness_calculation: Fi
         .build();
 
     let mut sim = simulate(ga)
-        .until(GenerationLimit::new(params.generation_limit))
+        .until(TimeLimit::new(CONFIG.search_budget))
         .build();
+
+    let mut ga_writer = create_ga_writer();
+    match serde_json::to_writer_pretty(&mut ga_writer, &params) {
+        Ok(_) => {}
+        Err(err) => error!("Failed writing to ga file: {}", err)
+    };
+    ga_writer.flush().expect("GA writer flush failed");
 
     println!("Starting GA with: {:?}", params);
     loop {
@@ -188,34 +216,43 @@ pub fn run_permutation_ga<S, T, H>(scheduler_handler: H, fitness_calculation: Fi
             Ok(SimResult::Intermediate(step)) => {
                 let evaluated_population = step.result.evaluated_population;
                 let best_solution = step.result.best_solution;
-                println!(
-                    "Step: generation: {}, average_fitness: {:?}, \
-                     best fitness: {:?}, duration: {}, processing_time: {}",
+                let generation_info: GaStepInfo<T, PriorityGenotype> = GaStepInfo::new(
                     step.iteration,
-                    evaluated_population.average_fitness(),
+                    evaluated_population.average_fitness().clone(),
                     best_solution.solution.fitness,
+                    best_solution.solution.genome,
                     step.duration,
-                    step.processing_time
                 );
-                println!("Best individual:");
-                println!("{}", PriorityMapPhenotype::from_genes(&best_solution.solution.genome).display_genotype_by_message());
+                println!("{}", serde_json::to_string(&generation_info).unwrap());
+                match serde_json::to_writer_pretty(&mut ga_writer, &generation_info) {
+                    Ok(_) => {}
+                    Err(err) => error!("Failed writing to ga file: {}", err)
+                };
+                ga_writer.flush().expect("GA writer flush failed");
+                // println!("Best individual:");
+                // println!("{}", PriorityMapPhenotype::from_genes(&best_solution.solution.genome).display_genotype_by_message());
                 //                println!("| population: [{}]", result.population.iter().map(|g| g.as_text())
                 //                    .collect::<Vec<String>>().join("], ["));
             },
-            Ok(SimResult::Final(step, processing_time, duration, stop_reason)) => {
+            Ok(SimResult::Final(step, _processing_time, duration, stop_reason)) => {
+                let evaluated_population = step.result.evaluated_population;
                 let best_solution = step.result.best_solution;
-                println!("{}", stop_reason);
-                println!(
-                    "Final result after {}: generation: {}, \
-                     best solution with fitness {:?} found in generation {}, processing_time: {}",
-                    duration,
+                let generation_info: GaStepInfo<T, PriorityGenotype> = GaStepInfo::new(
                     step.iteration,
+                    evaluated_population.average_fitness().clone(),
                     best_solution.solution.fitness,
-                    best_solution.generation,
-                    processing_time
+                    best_solution.solution.genome,
+                    duration,
                 );
+                match serde_json::to_writer_pretty(&mut ga_writer, &generation_info) {
+                    Ok(_) => {}
+                    Err(err) => error!("Failed writing to ga file: {}", err)
+                };
+                ga_writer.flush().expect("GA writer flush failed");
+                println!("{}", stop_reason);
+                println!("{}", serde_json::to_string(&generation_info).unwrap());
                 print!("      ");
-                println!("{}", PriorityMapPhenotype::from_genes(&best_solution.solution.genome).display_genotype_by_message());
+                println!("{}", PriorityMapPhenotype::from_genes(&generation_info.best_individual).display_genotype_by_message());
                 break;
             },
             Err(error) => {
@@ -227,6 +264,37 @@ pub fn run_permutation_ga<S, T, H>(scheduler_handler: H, fitness_calculation: Fi
     std::process::exit(0);
 }
 
+pub fn create_ga_writer() -> BufWriter<File> {
+    BufWriter::new(
+        File::create(
+            Path::new(format!("{}\\ga.txt", *LOG_FOLDER).as_str())
+        ).expect("Creating ga file failed")
+    )
+}
+
+#[serde_as]
+#[derive(serde::Serialize)]
+struct GaStepInfo<F: ExtendedFitness, G: ExtendedGenotype> {
+    iteration: u64,
+    average_fitness: F,
+    best_fitness: F,
+    best_individual: G,
+    #[serde_as(as = "DurationSeconds<i64>")]
+    duration: Duration,
+}
+
+impl<F: ExtendedFitness, G: ExtendedGenotype> GaStepInfo<F, G> {
+    pub fn new(iteration: u64, average_fitness: F, best_fitness: F, best_individual: G, duration: Duration) -> Self {
+        Self {
+            iteration,
+            average_fitness,
+            best_fitness,
+            best_individual,
+            duration
+        }
+    }
+}
+
 #[cfg(test)]
 mod ga_tests {
     use std::collections::HashMap;
@@ -236,7 +304,7 @@ mod ga_tests {
     use std::time::Duration;
     use genevo::ga::genetic_algorithm;
     use genevo::prelude::{GenerationLimit, SimResult, simulate, Simulation, SimulationBuilder};
-    use crate::ga::encoding::delay_encoding::{DelayMapPhenotype, DelaysGenotype};
+    use crate::ga::encoding::delay_encoding::{DelayMapPhenotype, DelayGenotype};
     use crate::ga::encoding::num_genes;
     use crate::ga::fitness::{FitnessCalculation, SchedulerHandlerTrait};
     use crate::ga::genetic_algorithm::{ConsensusMessageType, ExtendedPhenotype, CurrentFitness};
@@ -249,7 +317,7 @@ mod ga_tests {
     #[ignore]
     fn test_phenotype() {
         //let genotype: DelaysGenotype = (1..81).collect_vec();
-        let genotype: DelaysGenotype = vec![100u32; num_genes()];
+        let genotype: DelayGenotype = vec![100u32; num_genes()];
         let phenotype = DelayMapPhenotype::from_genes(&genotype);
         println!("{:?}", phenotype.delay_map);
         println!("{:?}", phenotype.message_type_delays(&ConsensusMessageType::TMValidation));
@@ -265,7 +333,7 @@ mod ga_tests {
         let population = build_delays_population(params.num_genes, params.min_value, params.max_value, params.population_size);
 
         let (fitness_sender, fitness_receiver) = std::sync::mpsc::channel();
-        let fitness_values: Arc<RwLock<HashMap<DelaysGenotype, CurrentFitness>>> = Arc::new(RwLock::new(HashMap::new()));
+        let fitness_values: Arc<RwLock<HashMap<DelayGenotype, CurrentFitness>>> = Arc::new(RwLock::new(HashMap::new()));
         let scheduler_handler = TestSchedulerHandler::new(fitness_receiver, fitness_values.clone());
         let fitness_calculation = FitnessCalculation { fitness_values: fitness_values.clone(), sender: fitness_sender };
 
@@ -333,14 +401,14 @@ mod ga_tests {
     }
 
     struct TestSchedulerHandler {
-        fitness_receiver: Receiver<DelaysGenotype>,
-        fitness_values: Arc<RwLock<HashMap<DelaysGenotype, CurrentFitness>>>
+        fitness_receiver: Receiver<DelayGenotype>,
+        fitness_values: Arc<RwLock<HashMap<DelayGenotype, CurrentFitness>>>
     }
 
     impl TestSchedulerHandler {
         pub fn new(
-            fitness_receiver: Receiver<DelaysGenotype>,
-            fitness_values: Arc<RwLock<HashMap<DelaysGenotype, CurrentFitness>>>,
+            fitness_receiver: Receiver<DelayGenotype>,
+            fitness_values: Arc<RwLock<HashMap<DelayGenotype, CurrentFitness>>>,
         ) -> Self {
             TestSchedulerHandler { fitness_receiver, fitness_values }
         }

@@ -9,11 +9,11 @@ use crate::NUM_NODES;
 pub const DROP_THRESHOLD: u32 = 1800;
 
 // The genotype
-pub(crate) type DelaysGenotype = Vec<u32>;
+pub(crate) type DelayGenotype = Vec<u32>;
 
-impl ExtendedGenotype for DelaysGenotype{}
+impl ExtendedGenotype for DelayGenotype {}
 
-impl SuperExtendedGenotype for DelaysGenotype{}
+impl SuperExtendedGenotype for DelayGenotype {}
 
 // The phenotype from -> to -> message_type -> delay (ms)
 type DelayMap = HashMap<usize, HashMap<usize, HashMap<ConsensusMessageType, u32>>>;
@@ -22,7 +22,7 @@ type DelayMap = HashMap<usize, HashMap<usize, HashMap<ConsensusMessageType, u32>
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct DelayMapPhenotype {
     pub delay_map: DelayMap,
-    delays: DelaysGenotype
+    delays: DelayGenotype
 }
 
 impl DelayMapPhenotype {
@@ -37,18 +37,18 @@ impl DelayMapPhenotype {
     }
 }
 
-impl Phenotype<DelaysGenotype> for DelayMapPhenotype {
-    fn genes(&self) -> DelaysGenotype {
+impl Phenotype<DelayGenotype> for DelayMapPhenotype {
+    fn genes(&self) -> DelayGenotype {
         self.delays.clone()
     }
 
-    fn derive(&self, new_genes: DelaysGenotype) -> Self {
+    fn derive(&self, new_genes: DelayGenotype) -> Self {
         DelayMapPhenotype::from_genes(&new_genes)
     }
 }
 
-impl ExtendedPhenotype<DelaysGenotype> for DelayMapPhenotype {
-    fn from_genes(genes: &DelaysGenotype) -> Self {
+impl ExtendedPhenotype<DelayGenotype> for DelayMapPhenotype {
+    fn from_genes(genes: &DelayGenotype) -> Self {
         let index_factor_1 = ConsensusMessageType::VALUES.len() * (*NUM_NODES-1);
         let index_factor_2 = ConsensusMessageType::VALUES.len();
         let mut from_node = HashMap::new();

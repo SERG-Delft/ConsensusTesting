@@ -8,6 +8,7 @@ use std::thread;
 use std::time::Duration;
 use itertools::{Itertools};
 use log::{debug, error, trace, warn};
+use spin_sleep::SpinSleeper;
 use websocket::Message;
 use crate::client::{Client, Transaction};
 use crate::container_manager::AccountKeys;
@@ -252,7 +253,8 @@ impl TestHarness<'static> {
     pub fn schedule_transaction(mut transaction: Transaction, sequence: Option<u32>, secret: String, delay: Duration, client_sender: Sender<Message<'static>>) {
         transaction.sequence = sequence;
         thread::spawn(move ||{
-            thread::sleep(delay);
+            let sleeper = SpinSleeper::default();
+            sleeper.sleep(delay);
             Client::sign_and_submit(
                 &client_sender,
                 "Test harness",

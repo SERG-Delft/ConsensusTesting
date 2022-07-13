@@ -1,10 +1,10 @@
 use genevo::population::{build_population, GenomeBuilder, Population, ValueEncodedGenomeBuilder};
 use genevo::prelude::Rng;
 use rand::prelude::SliceRandom;
-use crate::ga::encoding::delay_encoding::DelaysGenotype;
+use crate::ga::encoding::delay_encoding::DelayGenotype;
 use crate::ga::encoding::priority_encoding::{PriorityGenotype};
 
-pub fn build_delays_population(num_genes: usize, min_delay: u32, max_delay: u32, population_size: usize) -> Population<DelaysGenotype> {
+pub fn build_delays_population(num_genes: usize, min_delay: u32, max_delay: u32, population_size: usize) -> Population<DelayGenotype> {
     build_population()
         .with_genome_builder(ValueEncodedGenomeBuilder::new(num_genes, min_delay, max_delay))
         .of_size(population_size)

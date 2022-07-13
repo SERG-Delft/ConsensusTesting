@@ -14,7 +14,7 @@ use rand::Rng;
 /// This `MuLambdaSelector` can be used for single-objective fitness values
 /// as well as multi-objective fitness values.
 #[allow(missing_copy_implementations)]
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize)]
 pub struct MuLambdaSelector {
     /// Mu: the number of individuals to select as parents
     /// lambda: The number of parents tuples to create

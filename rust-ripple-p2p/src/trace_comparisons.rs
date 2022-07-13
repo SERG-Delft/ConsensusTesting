@@ -4,17 +4,20 @@ use std::path::Path;
 use std::sync::Arc;
 use std::sync::mpsc::{Sender, Receiver};
 use std::thread;
+use chrono::{Duration, Utc};
 use itertools::chain;
+use log::debug;
 use petgraph::Graph;
 use rand::distributions::Uniform;
-use rand::Rng;
+use rand::{Rng, thread_rng};
 use rand_chacha::ChaCha8Rng;
 use rand_chacha::rand_core::SeedableRng;
-use crate::ga::encoding::delay_encoding::{DelayMapPhenotype, DelaysGenotype};
+use crate::ga::encoding::delay_encoding::{DelayMapPhenotype, DelayGenotype};
 use crate::ga::encoding::{ExtendedPhenotype, num_genes};
 use crate::ga::encoding::priority_encoding::{PriorityGenotype, PriorityMapPhenotype};
 use crate::ga::fitness::ExtendedFitness;
 use crate::ga::genetic_algorithm::{ConsensusMessageType, CurrentFitness};
+use crate::locality::{sample_delays_genotype, sample_priority_genotype};
 use crate::node_state::{DependencyEvent, MessageTypeDependencyEvent, MutexNodeStates};
 use crate::NUM_NODES;
 
@@ -288,7 +291,7 @@ impl PreDeterminedDelaySchedulerHandler {
         std::process::exit(0);
     }
 
-    fn create_delays() -> DelaysGenotype {
+    fn create_delays() -> DelayGenotype {
         let index_factor_1 = ConsensusMessageType::VALUES.len() * (*NUM_NODES-1);
         let index_factor_2 = ConsensusMessageType::VALUES.len();
         let mut delays = vec![0u32; num_genes()];
@@ -400,4 +403,30 @@ pub fn run_predetermined_delays(scheduler_sender: Sender<DelayMapPhenotype>, sch
 pub fn run_predetermined_priorities(scheduler_sender: Sender<PriorityMapPhenotype>, scheduler_receiver: Receiver<CurrentFitness>, number_of_tests: usize) {
     let mut scheduler_handler = PreDeterminedPrioritySchedulerHandler::new(scheduler_sender, scheduler_receiver, number_of_tests);
     thread::spawn(move || scheduler_handler.run());
+}
+
+#[allow(unused)]
+pub fn run_random_priorities(scheduler_sender: Sender<PriorityMapPhenotype>, scheduler_receiver: Receiver<CurrentFitness>, search_budget: Duration) {
+    let start_time = Utc::now();
+    while Utc::now() - start_time < search_budget {
+        let priorities = sample_priority_genotype(num_genes(), &mut thread_rng());
+        debug!("Running random priorities: {:?}", priorities);
+        scheduler_sender.send(PriorityMapPhenotype::from_genes(&priorities)).expect("Scheduler receiver failed");
+        scheduler_receiver.recv().expect("Scheduler sender failed");
+    }
+    println!("Exiting: Search budget exceeded.");
+    std::process::exit(0);
+}
+
+#[allow(unused)]
+pub fn run_random_delays(scheduler_sender: Sender<DelayMapPhenotype>, scheduler_receiver: Receiver<CurrentFitness>, search_budget: Duration) {
+    let start_time = Utc::now();
+    while Utc::now() - start_time < search_budget {
+        let delays = sample_delays_genotype(num_genes(), 0, 4000, &mut thread_rng());
+        debug!("Running random delays: {:?}", delays);
+        scheduler_sender.send(DelayMapPhenotype::from_genes(&delays)).expect("Scheduler receiver failed");
+        scheduler_receiver.recv().expect("Scheduler sender failed");
+    }
+    println!("Exiting: Search budget exceeded.");
+    std::process::exit(0);
 }

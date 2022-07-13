@@ -4,7 +4,7 @@ use std::io::Write;
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 
-use crate::{ga::{encoding::{delay_encoding::{DelayMapPhenotype, DelaysGenotype}, ExtendedPhenotype, num_genes}, genetic_algorithm::CurrentFitness}, node_state::MutexNodeStates, locality::sample_delays_genotype};
+use crate::{ga::{encoding::{delay_encoding::{DelayMapPhenotype, DelayGenotype}, ExtendedPhenotype, num_genes}, genetic_algorithm::CurrentFitness}, node_state::MutexNodeStates, locality::sample_delays_genotype};
 use crate::ga::encoding::priority_encoding::{PriorityGenotype, PriorityMapPhenotype};
 use crate::locality::sample_priority_genotype;
 use crate::trace_comparisons::transform_to_message_type_graph;
@@ -47,7 +47,7 @@ impl ScalingExperiment {
 	}
 
 	#[allow(unused)]
-	fn execute_schedule(&self, genotype: &DelaysGenotype) {
+	fn execute_schedule(&self, genotype: &DelayGenotype) {
         self.scheduler_sender.send(DelayMapPhenotype::from_genes(&genotype)).expect("Scheduler receiver failed");
         // If the event cap is exceeded, something went wrong and we need to run again
         match self.scheduler_receiver.recv() {

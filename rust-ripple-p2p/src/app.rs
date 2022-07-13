@@ -17,7 +17,7 @@ use crate::collector::{Collector, RippleMessage};
 use crate::container_manager::NodeKeys;
 use crate::failure_writer::{ConsensusPropertyTypes, FailureWriter};
 use crate::ga::crossover::NoCrossoverOperator;
-use crate::ga::encoding::delay_encoding::{DelayMapPhenotype, DelaysGenotype};
+use crate::ga::encoding::delay_encoding::{DelayMapPhenotype, DelayGenotype};
 use crate::ga::encoding::{ExtendedGenotype, ExtendedPhenotype};
 use crate::ga::fitness::ExtendedFitness;
 use crate::ga::genetic_algorithm;
@@ -30,10 +30,10 @@ use crate::peer_connection::PeerConnection;
 use crate::scaling::{run_priority_scaling_experiment, run_scaling_experiment};
 use crate::scheduler::{Event, P2PConnections, PeerChannel, Scheduler};
 use crate::node_state::{MutexNodeStates, NodeState, NodeStates};
-use crate::NUM_NODES;
+use crate::{CONFIG, Configuration, NUM_NODES};
 use crate::scheduler::delay_scheduler::DelayScheduler;
 use crate::scheduler::priority_scheduler::PriorityScheduler;
-use crate::trace_comparisons::{run_fitness_comparison, run_no_delays, run_predetermined_delays, run_delay_trace_graph_creation, run_priority_trace_graph_creation, run_predetermined_priorities};
+use crate::trace_comparisons::{run_fitness_comparison, run_no_delays, run_predetermined_delays, run_delay_trace_graph_creation, run_priority_trace_graph_creation, run_predetermined_priorities, run_random_priorities, run_random_delays};
 
 const _NODE_PRIVATE_KEY: &str = "e55dc8f3741ac9668dbe858409e5d64f5ce88380f7228eccfe82b92b2c7848ba";
 const _NODE_PUBLIC_KEY_BASE58: &str = "n9KAa2zVWjPHgfzsE3iZ8HAbzJtPrnoh4H2M2HgE7dfqtvyEb1KJ";
@@ -67,7 +67,7 @@ impl App {
     /// Every p2p connection has two senders and receivers for relaying messages to and from the scheduler
     /// Every message gets relayed by the scheduler
     /// A separate thread is created for each node which handles websocket client requests
-    pub async fn start(&self) -> EmptyResult {
+    pub async fn start(&self, scheduler_type: SchedulerType) -> EmptyResult {
         let mut tokio_tasks = vec![];
         let mut threads = vec![];
         let (collector_tx, collector_rx) = std::sync::mpsc::channel();
@@ -140,7 +140,6 @@ impl App {
         );
 
         // Start GA and scheduler
-        let scheduler_type = SchedulerType::PredeterminedPriority;
         match scheduler_type {
             SchedulerType::Priority => {
                 Self::start_default_mu_lambda_priorities(
@@ -158,9 +157,17 @@ impl App {
                     scheduler_ga_receiver,
                 );
             }
+            SchedulerType::RandomPriority => {
+                let ga_scheduler_sender = Self::start_scheduler::<PriorityScheduler, PriorityGenotype, PriorityMapPhenotype>(scheduler_data);
+                threads.push(thread::spawn(|| run_random_priorities(ga_scheduler_sender, scheduler_ga_receiver, CONFIG.search_budget)));
+            }
+            SchedulerType::RandomDelay => {
+                let ga_scheduler_sender = Self::start_scheduler::<DelayScheduler, DelayGenotype, DelayMapPhenotype>(scheduler_data);
+                threads.push(thread::spawn(|| run_random_delays(ga_scheduler_sender, scheduler_ga_receiver, CONFIG.search_budget)));
+            }
             SchedulerType::DelayTraceGraph => {
                 let mutex_node_states_clone_2 = scheduler_data.mutex_node_states.clone();
-                let ga_scheduler_sender = Self::start_scheduler::<DelayScheduler, DelaysGenotype, DelayMapPhenotype>(scheduler_data);
+                let ga_scheduler_sender = Self::start_scheduler::<DelayScheduler, DelayGenotype, DelayMapPhenotype>(scheduler_data);
                 threads.push(thread::spawn(|| run_delay_trace_graph_creation(ga_scheduler_sender, scheduler_ga_receiver, mutex_node_states_clone_2)));
             }
             SchedulerType::PriorityTraceGraph => {
@@ -169,11 +176,11 @@ impl App {
                 threads.push(thread::spawn(|| run_priority_trace_graph_creation(ga_scheduler_sender, scheduler_ga_receiver, mutex_node_states_clone_2)));
             }
             SchedulerType::FitnessComparison => {
-                let ga_scheduler_sender = Self::start_scheduler::<DelayScheduler, DelaysGenotype, DelayMapPhenotype>(scheduler_data);
+                let ga_scheduler_sender = Self::start_scheduler::<DelayScheduler, DelayGenotype, DelayMapPhenotype>(scheduler_data);
                 threads.push(thread::spawn(|| run_fitness_comparison(ga_scheduler_sender, scheduler_ga_receiver)));
             }
             SchedulerType::PredeterminedDelay => {
-                let ga_scheduler_sender = Self::start_scheduler::<DelayScheduler, DelaysGenotype, DelayMapPhenotype>(scheduler_data);
+                let ga_scheduler_sender = Self::start_scheduler::<DelayScheduler, DelayGenotype, DelayMapPhenotype>(scheduler_data);
                 threads.push(thread::spawn(|| run_predetermined_delays(ga_scheduler_sender, scheduler_ga_receiver, 100)));
             }
             SchedulerType::PredeterminedPriority => {
@@ -182,7 +189,7 @@ impl App {
             }
             SchedulerType::DelayLocalityExperiment => {
                 let mutex_node_states_clone_2= scheduler_data.mutex_node_states.clone();
-                let ga_scheduler_sender = Self::start_scheduler::<DelayScheduler, DelaysGenotype, DelayMapPhenotype>(scheduler_data);
+                let ga_scheduler_sender = Self::start_scheduler::<DelayScheduler, DelayGenotype, DelayMapPhenotype>(scheduler_data);
                 threads.push(thread::spawn(|| run_locality_experiment_delays(ga_scheduler_sender, scheduler_ga_receiver, mutex_node_states_clone_2)));
             }
             SchedulerType::PriorityLocalityExperiment => {
@@ -196,7 +203,7 @@ impl App {
                 threads.push(thread::spawn(|| run_priority_scaling_experiment(ga_scheduler_sender, scheduler_ga_receiver, mutex_node_states_clone_2)));
             }
             SchedulerType::None => {
-                let ga_scheduler_sender = Self::start_scheduler::<DelayScheduler, DelaysGenotype, DelayMapPhenotype>(scheduler_data);
+                let ga_scheduler_sender = Self::start_scheduler::<DelayScheduler, DelayGenotype, DelayMapPhenotype>(scheduler_data);
                 threads.push(thread::spawn(|| run_no_delays(ga_scheduler_sender, scheduler_ga_receiver, 20)));
             }
         }
@@ -262,7 +269,7 @@ impl App {
     )
     {
         // Start the scheduler
-        let ga_scheduler_sender = Self::start_scheduler::<DelayScheduler, DelaysGenotype, DelayMapPhenotype>(scheduler_data);
+        let ga_scheduler_sender = Self::start_scheduler::<DelayScheduler, DelayGenotype, DelayMapPhenotype>(scheduler_data);
         // Start the GA
         thread::spawn(move || genetic_algorithm::run_default_mu_lambda_delays(mu, lambda, ga_scheduler_sender, scheduler_ga_receiver));
     }
@@ -343,9 +350,12 @@ impl SchedulerData {
 }
 
 #[allow(unused)]
-enum SchedulerType {
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
+pub enum SchedulerType {
     Priority,
     Delay,
+    RandomPriority,
+    RandomDelay,
     DelayTraceGraph,
     PriorityTraceGraph,
     FitnessComparison,

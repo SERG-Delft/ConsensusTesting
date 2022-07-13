@@ -7,6 +7,7 @@ use chrono::{Utc, Duration as ChronoDuration};
 use genevo::genetic::Phenotype;
 use log::{debug, error, trace};
 use parking_lot::{Condvar, Mutex};
+use spin_sleep::SpinSleeper;
 use crate::collector::RippleMessage;
 use crate::failure_writer::ConsensusPropertyTypes;
 use crate::ga::genetic_algorithm::{ConsensusMessageType};
@@ -135,8 +136,9 @@ impl ScheduledEvent {
         //     return
         // } else {
             thread::spawn(move || {
+                let sleeper = SpinSleeper::default();
                 trace!("Sleeping for {} ms for message: {} -> {}: {:?}", duration.as_millis(), event.from, event.to, event.message);
-                thread::sleep(duration);
+                sleeper.sleep(duration);
                 trace!("Sending event to executor: {} -> {}: {:?}", event.from, event.to, event.message);
                 sender.send(event).expect("Scheduler receiver failed");
             });

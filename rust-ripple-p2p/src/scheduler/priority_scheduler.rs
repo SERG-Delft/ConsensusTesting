@@ -23,7 +23,6 @@ pub struct PriorityScheduler {
     state: SchedulerState,
 }
 
-
 impl PriorityScheduler {
     /// Execute events every t seconds based on size of the inbox.
     /// Do we have a target size of the inbox? ~30 (10% of the different types of events maybe?)
@@ -38,8 +37,8 @@ impl PriorityScheduler {
         let (run_lock, _run_cvar) = &*run;
         let sleeper = SpinSleeper::default();
         let mut inbox = PriorityQueue::<RMOEvent, usize, DefaultHashBuilder>::with_default_hasher();
-        let mut rate = num_genes() as f64; // Rate at which events are executed from the queue. Base rate of num_genes / second -> too low?
-        let target_inbox_size = 0.1 * num_genes() as f64; // Target inbox size of 10% of the events mapped -> higher?
+        let mut rate = 0.5 * num_genes() as f64; // Rate at which events are executed from the queue. Base rate of num_genes / second -> too low?
+        let target_inbox_size = 0.2 * num_genes() as f64; // Target inbox size of 10% of the events mapped -> higher?
         let sensitivity_ratio = 1.01; // Change rate by 3% at a time
         let rate_change_percentage = 0.5; // 50% less or more than desired size of inbox
         // let target_duration_in_inbox = Duration::seconds(6);
@@ -52,11 +51,11 @@ impl PriorityScheduler {
                 let inbox_size = inbox.len();
                 // rate changes
                 if inbox_size > (target_inbox_size + rate_change_percentage * target_inbox_size) as usize {
-                        rate = (rate * sensitivity_ratio).min(num_genes() as f64 * 3f64);
+                        rate = (rate * sensitivity_ratio).min(num_genes() as f64 * 1.0f64);
                         trace!("size: {}, Increasing rate to {}", inbox_size, rate);
                 } else if inbox_size < (target_inbox_size - rate_change_percentage * target_inbox_size) as usize {
                     trace!("size: {}, Decreasing rate to {}", inbox_size, rate);
-                    rate = (rate / sensitivity_ratio).max(num_genes() as f64 / 3f64);
+                    rate = (rate / sensitivity_ratio).max(num_genes() as f64 / 6f64);
                 }
                 // Execute event with highest priority
                 if inbox_size > 0 {

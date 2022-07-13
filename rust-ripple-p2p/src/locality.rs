@@ -10,7 +10,7 @@ use rand::prelude::SliceRandom;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 use serde::{Serialize, Deserialize};
-use crate::ga::encoding::delay_encoding::{DelayMapPhenotype, DelaysGenotype};
+use crate::ga::encoding::delay_encoding::{DelayMapPhenotype, DelayGenotype};
 use crate::ga::encoding::{ExtendedPhenotype, num_genes};
 use crate::ga::encoding::priority_encoding::{PriorityGenotype, PriorityMapPhenotype};
 use crate::ga::genetic_algorithm::CurrentFitness;
@@ -114,9 +114,9 @@ impl DelayLocalityExperiment {
         // Maximum euclidean distance is n.sqrt()*(max - min) 260.sqrt() * 4000, take half that:
         let max_distance = 260f64.sqrt() * 4000f64 / 4.0;
         println!("Starting delay locality experiment");
-        let distant_delay_genotypes: Vec<DelaysGenotype> = sample_n_distant_delay_genotypes(10, num_genes(), max_distance, &mut rng);
+        let distant_delay_genotypes: Vec<DelayGenotype> = sample_n_distant_delay_genotypes(10, num_genes(), max_distance, &mut rng);
         println!("Done creating genotypes");
-        let mut neighbors_list: Vec<Vec<DelaysGenotype>> = vec![];
+        let mut neighbors_list: Vec<Vec<DelayGenotype>> = vec![];
         for genotype in distant_delay_genotypes.iter() {
             let neighbors = sample_n_neighbors_delay_genotypes(10, &genotype, &mut rng);
             neighbors_list.push(neighbors);
@@ -144,7 +144,7 @@ impl DelayLocalityExperiment {
         std::process::exit(0);
     }
 
-    fn execute_delay_schedule(&self, delay_genotype: &DelaysGenotype) {
+    fn execute_delay_schedule(&self, delay_genotype: &DelayGenotype) {
         self.scheduler_sender.send(DelayMapPhenotype::from_genes(&delay_genotype)).expect("Scheduler receiver failed");
         // If the event cap is exceeded, something went wrong and we need to run again
         match self.scheduler_receiver.recv() {
@@ -163,7 +163,7 @@ impl DelayLocalityExperiment {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-struct DelayGenotypePhenotypePair((DelaysGenotype, Graph<MessageTypeDependencyEvent, ()>, EvaluationType));
+struct DelayGenotypePhenotypePair((DelayGenotype, Graph<MessageTypeDependencyEvent, ()>, EvaluationType));
 
 #[derive(Serialize, Deserialize, Debug)]
 struct PriorityGenotypePhenotypePair((PriorityGenotype, Graph<MessageTypeDependencyEvent, ()>, EvaluationType));
@@ -185,7 +185,7 @@ pub fn run_locality_experiment_delays(scheduler_sender: Sender<DelayMapPhenotype
 }
 
 /// Sample n closest neighbors of delay genotype (+1 / -1 for one gene)
-pub fn sample_n_neighbors_delay_genotypes(n: usize, genotype: &DelaysGenotype, rng: &mut impl Rng) -> Vec<DelaysGenotype> {
+pub fn sample_n_neighbors_delay_genotypes(n: usize, genotype: &DelayGenotype, rng: &mut impl Rng) -> Vec<DelayGenotype> {
     // Technically we can sample 2*num_genes distinct neighbors (up and down)
     if n > genotype.len() {
         error!("Cannot sample more than num_genes distinct neighbors");
@@ -220,7 +220,7 @@ pub fn sample_n_neighbors_priority_genotypes(n: usize, genotype: &PriorityGenoty
     res
 }
 
-pub fn sample_n_distant_delay_genotypes(n: usize, num_genes: usize, min_distance: f64, rng: &mut impl Rng) -> Vec<DelaysGenotype> {
+pub fn sample_n_distant_delay_genotypes(n: usize, num_genes: usize, min_distance: f64, rng: &mut impl Rng) -> Vec<DelayGenotype> {
     let mut res = vec![];
     for _ in 0..n {
         loop {
@@ -251,7 +251,7 @@ pub fn sample_n_distant_priority_genotypes(n: usize, num_genes: usize, min_dista
 /// 2 * 4 = 8
 /// Maximum euclidean distance is n*((max - min)^2).sqrt()
 #[allow(unused)]
-pub fn delay_genotype_euclidean_distance(genotype_1: &DelaysGenotype, genotype_2: &DelaysGenotype) -> f64 {
+pub fn delay_genotype_euclidean_distance(genotype_1: &DelayGenotype, genotype_2: &DelayGenotype) -> f64 {
     if genotype_1.len() != genotype_2.len() {
         return f64::NAN
     }
@@ -294,7 +294,7 @@ pub fn priority_genotype_kendall_tau_distance(genotype_1: &PriorityGenotype, gen
 }
 
 #[allow(unused)]
-pub fn sample_delays_genotype(n: usize, min: u32, max: u32, rng: &mut impl Rng) -> DelaysGenotype {
+pub fn sample_delays_genotype(n: usize, min: u32, max: u32, rng: &mut impl Rng) -> DelayGenotype {
     let mut genotype = vec![];
     for i in 0..n {
         let gene = rng.gen_range(min..=max);

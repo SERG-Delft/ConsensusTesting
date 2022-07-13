@@ -199,13 +199,15 @@ pub trait Scheduler: Sized {
             // Liveness check!
             let now = Utc::now();
             node_states.validated_ledger_cvar.wait_for(&mut node_states_mutex, Duration::from_secs(65));
-            if Utc::now() - chrono::Duration::seconds(65) >= now && liveness {
-                error!("Liveness bug");
-                match failure_sender.send(vec![ConsensusPropertyTypes::Termination]) {
-                    Ok(_) => {}
-                    Err(err) => error!("Failure channel failed: {}", err)
-                };
-                liveness = false;
+            if Utc::now() - chrono::Duration::seconds(65) >= now {
+                if liveness {
+                    error!("Bounded liveness bug");
+                    match failure_sender.send(vec![ConsensusPropertyTypes::Termination]) {
+                        Ok(_) => {}
+                        Err(err) => error!("Failure channel failed: {}", err)
+                    };
+                    liveness = false;
+                }
             } else if !liveness {
                 liveness = true;
             }

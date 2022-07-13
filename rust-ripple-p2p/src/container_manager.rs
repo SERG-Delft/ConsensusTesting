@@ -12,7 +12,7 @@ use crate::LOG_FOLDER;
 
 #[allow(unused)]
 pub fn start_docker_containers(peers: usize, unls: Vec<Vec<usize>>, image_name: &str) -> Vec<NodeKeys> {
-    remove_containers("validator", image_name);
+    remove_containers("validator");
     let node_keys = get_node_keys(peers);
     create_configs(peers, &node_keys);
     configure_unls(unls, &node_keys);
@@ -22,10 +22,10 @@ pub fn start_docker_containers(peers: usize, unls: Vec<Vec<usize>>, image_name: 
     node_keys
 }
 
-pub fn remove_containers(name: &str, image_name: &str) {
+pub fn remove_containers(name: &str) {
     let leftovers = Command::new("docker").arg("ps")
         .args(["--all", "--quiet"])
-        .args(["--filter", "network=ripple-net"])
+        // .args(["--filter", "network=ripple-net"])
         .args(["--filter", &format!("name={}", name)])
         .output().unwrap();
     let ids: Vec<&str> = std::str::from_utf8(&*leftovers.stdout).unwrap().lines().collect();
@@ -61,7 +61,7 @@ pub fn start_key_generator() {
         .output().unwrap().stdout;
     if already_running.len() == 0 {
         debug!("trying to start key generator");
-        remove_containers("key_generator", "rippled-boost-cmake");
+        remove_containers("key_generator");
         start_node_with_options("key_generator", "rippled-boost-cmake", 0, false, None);
         thread::sleep(Duration::from_secs(1));
     }

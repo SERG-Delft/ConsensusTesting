@@ -22,7 +22,7 @@ impl<G> CrossoverOp<G> for NoCrossoverOperator
 
 
 #[allow(missing_copy_implementations)]
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize)]
 pub struct SimulatedBinaryCrossBreeder {
     crossover_probability: f32,
     min_value: u32,
