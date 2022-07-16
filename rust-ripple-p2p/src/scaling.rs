@@ -1,25 +1,26 @@
-use std::{io::BufWriter, fs::File, sync::{mpsc::{Sender, Receiver}, Arc}, path::Path, time::Duration};
+use std::{io::BufWriter, fs::File, sync::{mpsc::{Sender, Receiver}, Arc}, path::Path};
 use std::io::Write;
 
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 
-use crate::{ga::{encoding::{delay_encoding::{DelayMapPhenotype, DelayGenotype}, ExtendedPhenotype, num_genes}, genetic_algorithm::CurrentFitness}, node_state::MutexNodeStates, locality::sample_delays_genotype};
+use crate::{ga::{encoding::{delay_encoding::{DelayMapPhenotype, DelayGenotype}, ExtendedPhenotype, num_genes}}, node_state::MutexNodeStates, locality::sample_delays_genotype};
 use crate::ga::encoding::priority_encoding::{PriorityGenotype, PriorityMapPhenotype};
+use crate::ga::fitness::ExtendedFitness;
 use crate::locality::sample_priority_genotype;
 use crate::trace_comparisons::transform_to_message_type_graph;
 
 #[allow(unused)]
-pub struct ScalingExperiment {
+pub struct ScalingExperiment<F: ExtendedFitness> {
 	scaling_file: BufWriter<File>,
 	scheduler_sender: Sender<DelayMapPhenotype>,
-	scheduler_receiver: Receiver<CurrentFitness>,
+	scheduler_receiver: Receiver<F>,
 	node_states: Arc<MutexNodeStates>
 }
 
-impl ScalingExperiment {
+impl<F: ExtendedFitness> ScalingExperiment<F> {
 	#[allow(unused)]
-	pub fn new(scheduler_sender: Sender<DelayMapPhenotype>, scheduler_receiver: Receiver<CurrentFitness>, node_states: Arc<MutexNodeStates>) -> Self {
+	pub fn new(scheduler_sender: Sender<DelayMapPhenotype>, scheduler_receiver: Receiver<F>, node_states: Arc<MutexNodeStates>) -> Self {
 		let scaling_file = File::create(Path::new("scaling.txt")).expect("Creating scaling file failed");
 		Self {
 			scaling_file: BufWriter::new(scaling_file),
@@ -51,7 +52,7 @@ impl ScalingExperiment {
         self.scheduler_sender.send(DelayMapPhenotype::from_genes(&genotype)).expect("Scheduler receiver failed");
         // If the event cap is exceeded, something went wrong and we need to run again
         match self.scheduler_receiver.recv() {
-            Ok(fit) => if fit.value == Duration::default() {
+            Ok(fit) => if fit == F::lowest_possible_fitness() {
                 self.execute_schedule(&genotype);
             }
             Err(_) => {}
@@ -60,16 +61,16 @@ impl ScalingExperiment {
 }
 
 #[allow(unused)]
-pub struct PriorityScalingExperiment {
+pub struct PriorityScalingExperiment<F: ExtendedFitness> {
 	scaling_file: BufWriter<File>,
 	scheduler_sender: Sender<PriorityMapPhenotype>,
-	scheduler_receiver: Receiver<CurrentFitness>,
+	scheduler_receiver: Receiver<F>,
 	node_states: Arc<MutexNodeStates>
 }
 
-impl PriorityScalingExperiment {
+impl<F: ExtendedFitness> PriorityScalingExperiment<F> {
 	#[allow(unused)]
-	pub fn new(scheduler_sender: Sender<PriorityMapPhenotype>, scheduler_receiver: Receiver<CurrentFitness>, node_states: Arc<MutexNodeStates>) -> Self {
+	pub fn new(scheduler_sender: Sender<PriorityMapPhenotype>, scheduler_receiver: Receiver<F>, node_states: Arc<MutexNodeStates>) -> Self {
 		let scaling_file = File::create(Path::new("scaling.txt")).expect("Creating scaling file failed");
 		Self {
 			scaling_file: BufWriter::new(scaling_file),
@@ -101,7 +102,7 @@ impl PriorityScalingExperiment {
 		self.scheduler_sender.send(PriorityMapPhenotype::from_genes(&genotype)).expect("Scheduler receiver failed");
 		// If the event cap is exceeded, something went wrong and we need to run again
 		match self.scheduler_receiver.recv() {
-			Ok(fit) => if fit.value == Duration::default() {
+			Ok(fit) => if fit == F::lowest_possible_fitness() {
 				self.execute_schedule(&genotype);
 			}
 			Err(_) => {}
@@ -110,13 +111,13 @@ impl PriorityScalingExperiment {
 }
 
 #[allow(unused)]
-pub fn run_scaling_experiment(scheduler_sender: Sender<DelayMapPhenotype>, scheduler_receiver: Receiver<CurrentFitness>, node_states: Arc<MutexNodeStates>) {
+pub fn run_scaling_experiment<F: ExtendedFitness>(scheduler_sender: Sender<DelayMapPhenotype>, scheduler_receiver: Receiver<F>, node_states: Arc<MutexNodeStates>) {
     let mut exp = ScalingExperiment::new(scheduler_sender, scheduler_receiver, node_states);
     exp.create_random_schedules();
 }
 
 #[allow(unused)]
-pub fn run_priority_scaling_experiment(scheduler_sender: Sender<PriorityMapPhenotype>, scheduler_receiver: Receiver<CurrentFitness>, node_states: Arc<MutexNodeStates>) {
+pub fn run_priority_scaling_experiment<F: ExtendedFitness>(scheduler_sender: Sender<PriorityMapPhenotype>, scheduler_receiver: Receiver<F>, node_states: Arc<MutexNodeStates>) {
 	let mut exp = PriorityScalingExperiment::new(scheduler_sender, scheduler_receiver, node_states);
 	exp.create_random_schedules();
 }

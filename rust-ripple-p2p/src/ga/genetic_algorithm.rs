@@ -36,8 +36,6 @@ use crate::ga::reinsertion::MuLambdaReinserter;
 use crate::message_handler::RippleMessageObject;
 use super::mutation::GaussianMutator;
 
-pub type CurrentFitness = TimeFitness;
-
 /// The message types that will be subject to delay
 #[derive(Debug, Eq, PartialEq, Hash, Clone, Copy)]
 pub enum ConsensusMessageType {
@@ -87,30 +85,30 @@ impl ConsensusMessageType {
 
 /// Run a standard mu lambda GA with delay encoding
 #[allow(unused)]
-pub fn run_default_mu_lambda_delays(mu: usize, lambda: usize, scheduler_sender: Sender<DelayMapPhenotype>, scheduler_receiver: Receiver<CurrentFitness>) {
+pub fn run_default_mu_lambda_delays<F: ExtendedFitness>(mu: usize, lambda: usize, scheduler_sender: Sender<DelayMapPhenotype>, scheduler_receiver: Receiver<F>) {
     let params = default_mu_lambda_delays(mu, lambda);
     let population = build_delays_population(params.num_genes, params.min_value, params.max_value, lambda);
 
     let (fitness_sender, fitness_receiver) = channel();
-    let fitness_values: Arc<RwLock<HashMap<DelayGenotype, CurrentFitness>>> = Arc::new(RwLock::new(HashMap::new()));
+    let fitness_values: Arc<RwLock<HashMap<DelayGenotype, F>>> = Arc::new(RwLock::new(HashMap::new()));
     let scheduler_handler = SchedulerHandler::new(scheduler_sender, scheduler_receiver, fitness_receiver, fitness_values.clone());
     let fitness_calculation = FitnessCalculation { fitness_values: fitness_values.clone(), sender: fitness_sender };
 
-    run_ga::<MaximizeSelector, SimulatedBinaryCrossBreeder, CurrentFitness, SchedulerHandler<CurrentFitness, DelayGenotype, DelayMapPhenotype>, DelayGenotype, DelayMapPhenotype>(scheduler_handler, fitness_calculation, params, population);
+    run_ga::<MaximizeSelector, SimulatedBinaryCrossBreeder, F, SchedulerHandler<F, DelayGenotype, DelayMapPhenotype>, DelayGenotype, DelayMapPhenotype>(scheduler_handler, fitness_calculation, params, population);
 }
 
 /// Run a standard mu lambda GA with priority encoding
 #[allow(unused)]
-pub fn run_default_mu_lambda_priorities(mu: usize, lambda: usize, scheduler_sender: Sender<PriorityMapPhenotype>, scheduler_receiver: Receiver<CurrentFitness>) {
-    let params = default_mu_lambda_priorities(mu, lambda);
+pub fn run_default_mu_lambda_priorities<F: ExtendedFitness>(mu: usize, lambda: usize, scheduler_sender: Sender<PriorityMapPhenotype>, scheduler_receiver: Receiver<F>) {
+    let params = default_mu_lambda_priorities::<F>(mu, lambda);
     let population = build_priorities_population(params.num_genes, params.population_size);
 
     let (fitness_sender, fitness_receiver) = channel();
-    let fitness_values: Arc<RwLock<HashMap<PriorityGenotype, CurrentFitness>>> = Arc::new(RwLock::new(HashMap::new()));
+    let fitness_values: Arc<RwLock<HashMap<PriorityGenotype, F>>> = Arc::new(RwLock::new(HashMap::new()));
     let scheduler_handler = SchedulerHandler::new(scheduler_sender, scheduler_receiver, fitness_receiver, fitness_values.clone());
     let fitness_calculation = FitnessCalculation { fitness_values: fitness_values.clone(), sender: fitness_sender };
 
-    run_permutation_ga::<MaximizeSelector, CurrentFitness, SchedulerHandler<CurrentFitness, PriorityGenotype, PriorityMapPhenotype>>(scheduler_handler, fitness_calculation, params, population);
+    run_permutation_ga::<MaximizeSelector, F, SchedulerHandler<F, PriorityGenotype, PriorityMapPhenotype>>(scheduler_handler, fitness_calculation, params, population);
 }
 
 #[allow(unused)]
@@ -121,7 +119,7 @@ pub fn run_no_ga(number_of_tests: usize) {
     }
 }
 
-pub fn run_ga<S, C, T, H, G, P>(scheduler_handler: H, fitness_calculation: FitnessCalculation<T, G>, params: Parameter<MuLambdaSelector, SimulatedBinaryCrossBreeder, CurrentFitness, DelayGenotype>, initial_population: Population<G>)
+pub fn run_ga<S, C, T, H, G, P>(scheduler_handler: H, fitness_calculation: FitnessCalculation<T, G>, params: Parameter<MuLambdaSelector, SimulatedBinaryCrossBreeder, T, DelayGenotype>, initial_population: Population<G>)
     where S: SelectionOp<G, T> + Debug, C: CrossoverOp<G> + Debug + Sync, T: ExtendedFitness + serde::Serialize + 'static, H: SchedulerHandlerTrait + Send + 'static, G: SuperExtendedGenotype + serde::Serialize, P: ExtendedPhenotype<G>
 {
     println!("{:?}", initial_population);
@@ -204,7 +202,7 @@ pub fn run_ga<S, C, T, H, G, P>(scheduler_handler: H, fitness_calculation: Fitne
     std::process::exit(0);
 }
 
-pub fn run_permutation_ga<S, T, H>(scheduler_handler: H, fitness_calculation: FitnessCalculation<T, PriorityGenotype>, params: PermutationParameters<MuLambdaSelector, CurrentFitness, PriorityGenotype>, initial_population: Population<PriorityGenotype>)
+pub fn run_permutation_ga<S, T, H>(scheduler_handler: H, fitness_calculation: FitnessCalculation<T, PriorityGenotype>, params: PermutationParameters<MuLambdaSelector, T, PriorityGenotype>, initial_population: Population<PriorityGenotype>)
     where S: SelectionOp<PriorityGenotype, T> + Debug, T: ExtendedFitness + serde::Serialize + 'static, H: SchedulerHandlerTrait + Send + 'static
 {
     println!("{:?}", initial_population);

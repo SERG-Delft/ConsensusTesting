@@ -16,7 +16,7 @@ use crate::ga::encoding::delay_encoding::{DelayMapPhenotype, DelayGenotype};
 use crate::ga::encoding::{ExtendedPhenotype, num_genes};
 use crate::ga::encoding::priority_encoding::{PriorityGenotype, PriorityMapPhenotype};
 use crate::ga::fitness::ExtendedFitness;
-use crate::ga::genetic_algorithm::{ConsensusMessageType, CurrentFitness};
+use crate::ga::genetic_algorithm::{ConsensusMessageType};
 use crate::locality::{sample_delays_genotype, sample_priority_genotype};
 use crate::node_state::{DependencyEvent, MessageTypeDependencyEvent, MutexNodeStates};
 use crate::NUM_NODES;
@@ -168,16 +168,16 @@ pub fn transform_to_message_type_graph(graph: &Graph<DependencyEvent, ()>) -> Gr
     graph.map(|_ix, node| MessageTypeDependencyEvent::from(node), |_ix, edge| *edge)
 }
 
-pub struct FitnessComparisonSchedulerHandler {
+pub struct FitnessComparisonSchedulerHandler<F: ExtendedFitness> {
     scheduler_sender: Sender<DelayMapPhenotype>,
-    scheduler_receiver: Receiver<CurrentFitness>,
+    scheduler_receiver: Receiver<F>,
     fitness_file: BufWriter<File>,
 }
 
-impl FitnessComparisonSchedulerHandler {
+impl<F: ExtendedFitness> FitnessComparisonSchedulerHandler<F> {
     pub fn new(
         scheduler_sender: Sender<DelayMapPhenotype>,
-        scheduler_receiver: Receiver<CurrentFitness>,
+        scheduler_receiver: Receiver<F>,
     ) -> Self
     {
         let fitness_file = File::create(Path::new("fitness_values.txt")).expect("Opening execution file failed");
@@ -228,16 +228,16 @@ impl FitnessComparisonSchedulerHandler {
     }
 }
 
-pub struct NoDelaySchedulerHandler {
+pub struct NoDelaySchedulerHandler<F: ExtendedFitness> {
     scheduler_sender: Sender<DelayMapPhenotype>,
-    scheduler_receiver: Receiver<CurrentFitness>,
+    scheduler_receiver: Receiver<F>,
     number_of_tests: usize,
 }
 
-impl NoDelaySchedulerHandler {
+impl<F: ExtendedFitness> NoDelaySchedulerHandler<F> {
     pub fn new(
         scheduler_sender: Sender<DelayMapPhenotype>,
-        scheduler_receiver: Receiver<CurrentFitness>,
+        scheduler_receiver: Receiver<F>,
         number_of_tests: usize,
     ) -> Self
     {
@@ -260,16 +260,16 @@ impl NoDelaySchedulerHandler {
     }
 }
 
-pub struct PreDeterminedDelaySchedulerHandler {
+pub struct PreDeterminedDelaySchedulerHandler<F: ExtendedFitness> {
     scheduler_sender: Sender<DelayMapPhenotype>,
-    scheduler_receiver: Receiver<CurrentFitness>,
+    scheduler_receiver: Receiver<F>,
     number_of_tests: usize,
 }
 
-impl PreDeterminedDelaySchedulerHandler {
+impl<F: ExtendedFitness> PreDeterminedDelaySchedulerHandler<F> {
     pub fn new(
         scheduler_sender: Sender<DelayMapPhenotype>,
-        scheduler_receiver: Receiver<CurrentFitness>,
+        scheduler_receiver: Receiver<F>,
         number_of_tests: usize,
     ) -> Self
     {
@@ -348,16 +348,16 @@ impl PreDeterminedDelaySchedulerHandler {
     }
 }
 
-pub struct PreDeterminedPrioritySchedulerHandler {
+pub struct PreDeterminedPrioritySchedulerHandler<F: ExtendedFitness> {
     scheduler_sender: Sender<PriorityMapPhenotype>,
-    scheduler_receiver: Receiver<CurrentFitness>,
+    scheduler_receiver: Receiver<F>,
     number_of_tests: usize,
 }
 
-impl PreDeterminedPrioritySchedulerHandler {
+impl<F: ExtendedFitness> PreDeterminedPrioritySchedulerHandler<F> {
     pub fn new(
         scheduler_sender: Sender<PriorityMapPhenotype>,
-        scheduler_receiver: Receiver<CurrentFitness>,
+        scheduler_receiver: Receiver<F>,
         number_of_tests: usize,
     ) -> Self
     {
@@ -401,47 +401,43 @@ impl PreDeterminedPrioritySchedulerHandler {
 }
 
 #[allow(unused)]
-pub fn run_delay_trace_graph_creation<T>(scheduler_sender: Sender<DelayMapPhenotype>, scheduler_receiver: Receiver<T>, node_states: Arc<MutexNodeStates>)
-    where T: ExtendedFitness + 'static
-{
+pub fn run_delay_trace_graph_creation<F: ExtendedFitness>(scheduler_sender: Sender<DelayMapPhenotype>, scheduler_receiver: Receiver<F>, node_states: Arc<MutexNodeStates>) {
     let mut scheduler_handler = DelayTraceGraphSchedulerHandler::new(scheduler_sender, scheduler_receiver);
     thread::spawn(move || scheduler_handler.delay_trace_graph_creation(node_states));
 }
 
 #[allow(unused)]
-pub fn run_priority_trace_graph_creation<T>(scheduler_sender: Sender<PriorityMapPhenotype>, scheduler_receiver: Receiver<T>, node_states: Arc<MutexNodeStates>)
-    where T: ExtendedFitness + 'static
-{
+pub fn run_priority_trace_graph_creation<F: ExtendedFitness>(scheduler_sender: Sender<PriorityMapPhenotype>, scheduler_receiver: Receiver<F>, node_states: Arc<MutexNodeStates>) {
     let mut scheduler_handler = PriorityTraceGraphSchedulerHandler::new(scheduler_sender, scheduler_receiver);
     thread::spawn(move || scheduler_handler.priority_trace_graph_creation(node_states));
 }
 
 #[allow(unused)]
-pub fn run_fitness_comparison(scheduler_sender: Sender<DelayMapPhenotype>, scheduler_receiver: Receiver<CurrentFitness>) {
+pub fn run_fitness_comparison<F: ExtendedFitness>(scheduler_sender: Sender<DelayMapPhenotype>, scheduler_receiver: Receiver<F>) {
     let mut scheduler_handler = FitnessComparisonSchedulerHandler::new(scheduler_sender, scheduler_receiver);
     thread::spawn(move || scheduler_handler.fitness_comparison());
 }
 
 #[allow(unused)]
-pub fn run_no_delays(scheduler_sender: Sender<DelayMapPhenotype>, scheduler_receiver: Receiver<CurrentFitness>, number_of_tests: usize) {
+pub fn run_no_delays<F: ExtendedFitness>(scheduler_sender: Sender<DelayMapPhenotype>, scheduler_receiver: Receiver<F>, number_of_tests: usize) {
     let mut scheduler_handler = NoDelaySchedulerHandler::new(scheduler_sender, scheduler_receiver, number_of_tests);
     thread::spawn(move || scheduler_handler.run());
 }
 
 #[allow(unused)]
-pub fn run_predetermined_delays(scheduler_sender: Sender<DelayMapPhenotype>, scheduler_receiver: Receiver<CurrentFitness>, number_of_tests: usize) {
+pub fn run_predetermined_delays<F: ExtendedFitness>(scheduler_sender: Sender<DelayMapPhenotype>, scheduler_receiver: Receiver<F>, number_of_tests: usize) {
     let mut scheduler_handler = PreDeterminedDelaySchedulerHandler::new(scheduler_sender, scheduler_receiver, number_of_tests);
     thread::spawn(move || scheduler_handler.run());
 }
 
 #[allow(unused)]
-pub fn run_predetermined_priorities(scheduler_sender: Sender<PriorityMapPhenotype>, scheduler_receiver: Receiver<CurrentFitness>, number_of_tests: usize) {
+pub fn run_predetermined_priorities<F: ExtendedFitness>(scheduler_sender: Sender<PriorityMapPhenotype>, scheduler_receiver: Receiver<F>, number_of_tests: usize) {
     let mut scheduler_handler = PreDeterminedPrioritySchedulerHandler::new(scheduler_sender, scheduler_receiver, number_of_tests);
     thread::spawn(move || scheduler_handler.run());
 }
 
 #[allow(unused)]
-pub fn run_random_priorities(scheduler_sender: Sender<PriorityMapPhenotype>, scheduler_receiver: Receiver<CurrentFitness>, search_budget: Duration) {
+pub fn run_random_priorities<F: ExtendedFitness>(scheduler_sender: Sender<PriorityMapPhenotype>, scheduler_receiver: Receiver<F>, search_budget: Duration) {
     let start_time = Utc::now();
     while Utc::now() - start_time < search_budget {
         let priorities = sample_priority_genotype(num_genes(), &mut thread_rng());
@@ -454,7 +450,7 @@ pub fn run_random_priorities(scheduler_sender: Sender<PriorityMapPhenotype>, sch
 }
 
 #[allow(unused)]
-pub fn run_random_delays(scheduler_sender: Sender<DelayMapPhenotype>, scheduler_receiver: Receiver<CurrentFitness>, search_budget: Duration) {
+pub fn run_random_delays<F: ExtendedFitness>(scheduler_sender: Sender<DelayMapPhenotype>, scheduler_receiver: Receiver<F>, search_budget: Duration) {
     let start_time = Utc::now();
     while Utc::now() - start_time < search_budget {
         let delays = sample_delays_genotype(num_genes(), 0, 4000, &mut thread_rng());

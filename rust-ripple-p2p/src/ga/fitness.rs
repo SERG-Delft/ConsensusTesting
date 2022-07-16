@@ -20,7 +20,7 @@ use crate::ga::encoding::{ExtendedGenotype, ExtendedPhenotype};
 use crate::node_state::MutexNodeStates;
 use crate::test_harness::TestHarness;
 
-pub trait ExtendedFitness: Fitness + AsScalar + Clone + Send + Sync + Display {
+pub trait ExtendedFitness: Fitness + AsScalar + Clone + Send + Sync + Display + serde::Serialize + 'static {
     fn average(a: &[Self]) -> Self;
 
     fn highest_possible_fitness() -> Self;

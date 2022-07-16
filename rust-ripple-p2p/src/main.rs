@@ -14,6 +14,7 @@ use crate::container_manager::{NodeKeys, start_docker_containers};
 #[allow(unused_imports)]
 use crate::executable_manager::start_executables;
 use crate::failure_writer::ConsensusPropertyTypes;
+use crate::ga::fitness::propose_seq_fitness::ProposeSeqFitness;
 
 mod app;
 mod protos;
@@ -61,10 +62,18 @@ fn main() {
 
     let app = app::App::new(config.num_nodes as u16, node_keys);
 
-    if let Err(error) = runtime.block_on(app.start(config.scheduler_type)) {
+    if let Err(error) = match config.fitness_function {
+        FitnessFunctionType::TimeFitness => runtime.block_on(app.start::<ga::fitness::time_fitness::TimeFitness>(config.scheduler_type)),
+        FitnessFunctionType::ProposalFitness => runtime.block_on(app.start::<ProposeSeqFitness>(config.scheduler_type))
+    } {
         error!("Error: {}", error);
         std::process::exit(1);
     }
+    //
+    // if let Err(error) = runtime.block_on(future) {
+    //     error!("Error: {}", error);
+    //     std::process::exit(1);
+    // }
 
     std::process::exit(0);
 }
@@ -190,6 +199,12 @@ impl RippledVersion {
     }
 }
 
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
+pub enum FitnessFunctionType {
+    TimeFitness,
+    ProposalFitness,
+}
+
 #[serde_as]
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
 pub struct Configuration {
@@ -197,6 +212,7 @@ pub struct Configuration {
     unl_type: UnlType,
     rippled_version: RippledVersion,
     scheduler_type: SchedulerType,
+    fitness_function: FitnessFunctionType,
     #[serde_as(as = "DurationSeconds<i64>")]
     search_budget: Duration,
 }
@@ -222,6 +238,7 @@ impl Default for Configuration {
             unl_type: UnlType::Full,
             rippled_version: RippledVersion::Fixed,
             scheduler_type: SchedulerType::Delay,
+            fitness_function: FitnessFunctionType::TimeFitness,
             search_budget: Duration::seconds(3600),
         }
     }
@@ -328,6 +345,7 @@ mod config_tests {
             unl_type: UnlType::Full,
             rippled_version: crate::RippledVersion::Fixed,
             scheduler_type: crate::SchedulerType::Priority,
+            fitness_function: crate::FitnessFunctionType::TimeFitness,
             search_budget: chrono::Duration::seconds(3600),
         };
         let mut config_writer = BufWriter::new(File::create(Path::new("config_example.json")).expect("Creating config file failed"));

@@ -3,7 +3,6 @@ use std::io::{BufWriter, Write, Result};
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, Sender};
-use std::time::Duration;
 use log::error;
 use petgraph::Graph;
 use rand::prelude::SliceRandom;
@@ -13,19 +12,19 @@ use serde::{Serialize, Deserialize};
 use crate::ga::encoding::delay_encoding::{DelayMapPhenotype, DelayGenotype};
 use crate::ga::encoding::{ExtendedPhenotype, num_genes};
 use crate::ga::encoding::priority_encoding::{PriorityGenotype, PriorityMapPhenotype};
-use crate::ga::genetic_algorithm::CurrentFitness;
+use crate::ga::fitness::ExtendedFitness;
 use crate::node_state::{MessageTypeDependencyEvent, MutexNodeStates};
 use crate::trace_comparisons::transform_to_message_type_graph;
 
-pub struct PriorityLocalityExperiment {
+pub struct PriorityLocalityExperiment<F: ExtendedFitness> {
     priority_result_file: BufWriter<File>,
     scheduler_sender: Sender<PriorityMapPhenotype>,
-    scheduler_receiver: Receiver<CurrentFitness>,
+    scheduler_receiver: Receiver<F>,
     node_states: Arc<MutexNodeStates>
 }
 
-impl PriorityLocalityExperiment {
-    pub fn new(scheduler_sender: Sender<PriorityMapPhenotype>, scheduler_receiver: Receiver<CurrentFitness>, node_states: Arc<MutexNodeStates>) -> Self {
+impl<F: ExtendedFitness> PriorityLocalityExperiment<F> {
+    pub fn new(scheduler_sender: Sender<PriorityMapPhenotype>, scheduler_receiver: Receiver<F>, node_states: Arc<MutexNodeStates>) -> Self {
         let priority_file = File::create(Path::new("priority_locality.txt")).expect("Creating result file failed");
         Self {
             priority_result_file: BufWriter::new(priority_file),
@@ -77,7 +76,7 @@ impl PriorityLocalityExperiment {
         self.scheduler_sender.send(PriorityMapPhenotype::from_genes(&priority_genotype)).expect("Scheduler receiver failed");
         // If the event cap is exceeded, something went wrong and we need to run again
         match self.scheduler_receiver.recv() {
-            Ok(fit) => if fit.value == Duration::default() {
+            Ok(fit) => if fit == F::lowest_possible_fitness() {
                 self.execute_priority_schedule(&priority_genotype);
             }
             Err(_) => {}
@@ -91,15 +90,15 @@ impl PriorityLocalityExperiment {
     }
 }
 
-pub struct DelayLocalityExperiment {
+pub struct DelayLocalityExperiment<F: ExtendedFitness> {
     delay_result_file: BufWriter<File>,
     scheduler_sender: Sender<DelayMapPhenotype>,
-    scheduler_receiver: Receiver<CurrentFitness>,
+    scheduler_receiver: Receiver<F>,
     node_states: Arc<MutexNodeStates>
 }
 
-impl DelayLocalityExperiment {
-    pub fn new(scheduler_sender: Sender<DelayMapPhenotype>, scheduler_receiver: Receiver<CurrentFitness>, node_states: Arc<MutexNodeStates>) -> Self {
+impl<F: ExtendedFitness> DelayLocalityExperiment<F> {
+    pub fn new(scheduler_sender: Sender<DelayMapPhenotype>, scheduler_receiver: Receiver<F>, node_states: Arc<MutexNodeStates>) -> Self {
         let delay_file = File::create(Path::new("delay_locality.txt")).expect("Creating result file failed");
         Self {
             delay_result_file: BufWriter::new(delay_file),
@@ -148,7 +147,7 @@ impl DelayLocalityExperiment {
         self.scheduler_sender.send(DelayMapPhenotype::from_genes(&delay_genotype)).expect("Scheduler receiver failed");
         // If the event cap is exceeded, something went wrong and we need to run again
         match self.scheduler_receiver.recv() {
-            Ok(fit) => if fit.value == Duration::default() {
+            Ok(fit) => if fit == F::lowest_possible_fitness() {
                 self.execute_delay_schedule(&delay_genotype);
             }
             Err(_) => {}
@@ -174,12 +173,12 @@ enum EvaluationType {
     NeighborGenotype,
 }
 
-pub fn run_locality_experiment_priorities(scheduler_sender: Sender<PriorityMapPhenotype>, scheduler_receiver: Receiver<CurrentFitness>, node_states: Arc<MutexNodeStates>) {
+pub fn run_locality_experiment_priorities<F: ExtendedFitness>(scheduler_sender: Sender<PriorityMapPhenotype>, scheduler_receiver: Receiver<F>, node_states: Arc<MutexNodeStates>) {
     let mut loc_exp = PriorityLocalityExperiment::new(scheduler_sender, scheduler_receiver, node_states);
     loc_exp.run_locality_experiment_priorities();
 }
 
-pub fn run_locality_experiment_delays(scheduler_sender: Sender<DelayMapPhenotype>, scheduler_receiver: Receiver<CurrentFitness>, node_states: Arc<MutexNodeStates>) {
+pub fn run_locality_experiment_delays<F: ExtendedFitness>(scheduler_sender: Sender<DelayMapPhenotype>, scheduler_receiver: Receiver<F>, node_states: Arc<MutexNodeStates>) {
     let mut loc_exp = DelayLocalityExperiment::new(scheduler_sender, scheduler_receiver, node_states);
     loc_exp.run_locality_experiment_delays();
 }

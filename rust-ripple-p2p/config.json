@@ -1,1 +1,1 @@
-{"num_nodes":5,"unl_type":"Full","rippled_version":"ProposalBug","scheduler_type":"Delay","search_budget": 600}
+{"num_nodes":5,"unl_type":"Full","rippled_version":"ProposalBug","scheduler_type":"Delay","fitness_function": "ProposalFitness","search_budget": 600}

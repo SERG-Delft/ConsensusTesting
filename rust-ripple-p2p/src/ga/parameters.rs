@@ -6,7 +6,7 @@ use crate::ga::crossover::{SimulatedBinaryCrossBreeder};
 use crate::ga::encoding::delay_encoding::DelayGenotype;
 use crate::ga::encoding::{num_genes, SuperExtendedGenotype};
 use crate::ga::fitness::ExtendedFitness;
-use crate::ga::genetic_algorithm::{ConsensusMessageType, CurrentFitness};
+use crate::ga::genetic_algorithm::{ConsensusMessageType};
 use crate::ga::encoding::priority_encoding::{PriorityGenotype};
 use crate::ga::selection::MuLambdaSelector;
 
@@ -33,7 +33,7 @@ pub struct Parameter<S, C, T, G>
 }
 
 #[allow(unused)]
-impl<S, C, G> Parameter<S, C, CurrentFitness, G> where S: SelectionOp<G, CurrentFitness>, C: CrossoverOp<G>, G: SuperExtendedGenotype {
+impl<S, C, F, G> Parameter<S, C, F, G> where S: SelectionOp<G, F>, C: CrossoverOp<G>, F: ExtendedFitness, G: SuperExtendedGenotype {
     pub fn new(population_size: usize,
                generation_limit: u64,
                num_individuals_per_parents: usize,
@@ -65,7 +65,7 @@ impl<S, C, G> Parameter<S, C, CurrentFitness, G> where S: SelectionOp<G, Current
         }
     }
 
-    pub fn default_delays() -> Parameter<RouletteWheelSelector, SimulatedBinaryCrossBreeder, CurrentFitness, DelayGenotype> {
+    pub fn default_delays() -> Parameter<RouletteWheelSelector, SimulatedBinaryCrossBreeder, F, DelayGenotype> {
         Parameter {
             population_size: 8,
             generation_limit: 5,
@@ -104,7 +104,7 @@ impl<S, C, G> Parameter<S, C, CurrentFitness, G> where S: SelectionOp<G, Current
     // }
 }
 
-pub fn default_mu_lambda_delays(mu: usize, lambda: usize) -> Parameter<MuLambdaSelector, SimulatedBinaryCrossBreeder, CurrentFitness, DelayGenotype> {
+pub fn default_mu_lambda_delays<F: ExtendedFitness>(mu: usize, lambda: usize) -> Parameter<MuLambdaSelector, SimulatedBinaryCrossBreeder, F, DelayGenotype> {
     Parameter {
         population_size: mu,
         generation_limit: 5,
@@ -123,7 +123,7 @@ pub fn default_mu_lambda_delays(mu: usize, lambda: usize) -> Parameter<MuLambdaS
     }
 }
 
-pub fn default_mu_lambda_priorities(mu: usize, lambda: usize) -> PermutationParameters<MuLambdaSelector, CurrentFitness, PriorityGenotype> {
+pub fn default_mu_lambda_priorities<F: ExtendedFitness>(mu: usize, lambda: usize) -> PermutationParameters<MuLambdaSelector, F, PriorityGenotype> {
     PermutationParameters {
         population_size: mu,
         generation_limit: 100,

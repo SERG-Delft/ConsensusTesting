@@ -20,7 +20,7 @@ use crate::collector::RippleMessage;
 use crate::consensus_properties::ConsensusProperties;
 use crate::failure_writer::ConsensusPropertyTypes;
 use crate::ga::fitness::ExtendedFitness;
-use crate::ga::genetic_algorithm::{CurrentFitness, ConsensusMessageType};
+use crate::ga::genetic_algorithm::{ConsensusMessageType};
 use crate::message_handler::{parse_protocol_message, ParsedValidation, RippleMessageObject, rmo_to_bytes};
 use crate::node_state::{MutexNodeStates};
 use crate::NodeKeys;
@@ -38,10 +38,10 @@ pub trait Scheduler: Sized {
         failure_sender: STDSender<Vec<ConsensusPropertyTypes>>,
     ) -> Self;
 
-    fn start(self,
+    fn start<F: ExtendedFitness>(self,
              receiver: TokioReceiver<Event>,
              p2p_connections: P2PConnections,
-             ga_sender: STDSender<CurrentFitness>,
+             ga_sender: STDSender<F>,
              ga_receiver: STDReceiver<Self::IndividualPhenotype>,
              client_senders: Vec<STDSender<Message<'static>>>,
              client_receiver: STDReceiver<(Transaction, String)>,
@@ -258,8 +258,8 @@ pub trait Scheduler: Sized {
     /// 1. Checking/updating stability of network (through validated ledger after harness)
     /// 2. Checking progress of harness
     /// 3. Relaying fitness of chromosome over harness
-    fn harness_controller(
-        ga_sender: STDSender<CurrentFitness>,
+    fn harness_controller<F: ExtendedFitness>(
+        ga_sender: STDSender<F>,
         client_senders: Vec<STDSender<Message<'static>>>,
         failure_sender: STDSender<Vec<ConsensusPropertyTypes>>,
         client_receiver: STDReceiver<(Transaction, String)>,
@@ -300,7 +300,7 @@ pub trait Scheduler: Sized {
                     }
                     println!("Starting test harness run");
                     run_cvar.notify_all();
-                    let fitness = CurrentFitness::run_harness(&mut test_harness, node_states.clone());
+                    let fitness = F::run_harness(&mut test_harness, node_states.clone());
                     // Send fitness of test case to GA
                     ga_sender.send(fitness).expect("GA receiver failed");
                     {
