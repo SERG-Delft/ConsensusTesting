@@ -56,6 +56,7 @@ fn main() {
     let unls: Vec<Vec<usize>> = get_unls(config.num_nodes, config.unl_type);
     println!("Unls: {:?}", unls);
 
+    println!("Image: {}", config.rippled_version.docker_image_name());
     let node_keys = start_docker_containers(config.num_nodes, unls, config.rippled_version.docker_image_name());
     // let node_keys = get_static_node_keys();
     // let node_keys = start_executables(config.num_nodes, unls);
@@ -88,6 +89,14 @@ pub fn get_config() -> Configuration {
 }
 
 pub fn get_log_path() -> String {
+    let args: Vec<String> = env::args().collect();
+    if args.len() >= 3 {
+        let log_path = format!("{}\\..\\logs\\{}", env::current_dir().unwrap().to_str().unwrap(), &args[2]);
+        if !std::path::Path::new(&log_path).exists() {
+            std::fs::create_dir_all(&log_path).expect("Creating log directory failed");
+        }
+        return log_path
+    }
     let now = Utc::now();
     let date_string = now.format("%FT%H-%M-%S").to_string();
     let log_path = format!("{}\\..\\logs\\{}", env::current_dir().unwrap().to_str().unwrap(), date_string);
@@ -215,6 +224,7 @@ pub struct Configuration {
     fitness_function: FitnessFunctionType,
     #[serde_as(as = "DurationSeconds<i64>")]
     search_budget: Duration,
+    create_ripple_log_folders: bool,
 }
 
 impl Configuration {
@@ -240,16 +250,18 @@ impl Default for Configuration {
             scheduler_type: SchedulerType::Delay,
             fitness_function: FitnessFunctionType::TimeFitness,
             search_budget: Duration::seconds(3600),
+            create_ripple_log_folders: true,
         }
     }
 }
 
 #[cfg(test)]
 mod config_tests {
+    use std::env;
     use std::fs::File;
     use std::io::{BufWriter};
     use std::path::Path;
-    use crate::{Configuration, get_unls, UnlType};
+    use crate::{Configuration, FitnessFunctionType, get_unls, RippledVersion, SchedulerType, UnlType};
 
     const FULL_5_UNL: [[usize; 5]; 5] = [
         [0, 1, 2, 3, 4],
@@ -347,8 +359,82 @@ mod config_tests {
             scheduler_type: crate::SchedulerType::Priority,
             fitness_function: crate::FitnessFunctionType::TimeFitness,
             search_budget: chrono::Duration::seconds(3600),
+            create_ripple_log_folders: false,
         };
         let mut config_writer = BufWriter::new(File::create(Path::new("config_example.json")).expect("Creating config file failed"));
         serde_json::to_writer(&mut config_writer, &configuration).expect("Failed writing to config file");
+    }
+
+    #[test]
+    fn create_experiment_config_files() {
+        let config_path = format!("{}\\..\\vm-setup\\configs\\", env::current_dir().unwrap().to_str().unwrap());
+        if !std::path::Path::new(&config_path).exists() {
+            std::fs::create_dir_all(&config_path).expect("Creating log directory failed");
+        }
+        let scheduler_types = [SchedulerType::Delay, SchedulerType::Priority];
+        let fitness_functions = [FitnessFunctionType::ProposalFitness, FitnessFunctionType::TimeFitness];
+        let bugs = [RippledVersion::ValidationBug, RippledVersion::LivenessBug, RippledVersion::ProposalBug];
+        let mut configurations = vec![];
+        for bug in bugs {
+            configurations.push(Configuration {
+                num_nodes: 5,
+                unl_type: UnlType::Full,
+                rippled_version: bug.clone(),
+                scheduler_type: SchedulerType::RandomDelay,
+                fitness_function: FitnessFunctionType::TimeFitness,
+                search_budget: chrono::Duration::seconds(3600),
+                create_ripple_log_folders: false
+            });
+            configurations.push(Configuration {
+                num_nodes: 5,
+                unl_type: UnlType::Full,
+                rippled_version: bug.clone(),
+                scheduler_type: SchedulerType::RandomPriority,
+                fitness_function: FitnessFunctionType::TimeFitness,
+                search_budget: chrono::Duration::seconds(3600),
+                create_ripple_log_folders: false
+            });
+            for scheduler_type in &scheduler_types {
+                for fitness_function in &fitness_functions {
+                    let config = Configuration {
+                        num_nodes: 5,
+                        unl_type: UnlType::Full,
+                        rippled_version: bug.clone(),
+                        scheduler_type: scheduler_type.clone(),
+                        fitness_function: fitness_function.clone(),
+                        search_budget: chrono::Duration::seconds(3600),
+                        create_ripple_log_folders: false
+                    };
+                    configurations.push(config);
+                }
+            }
+        }
+        for config in configurations {
+            let bug_folder = match config.rippled_version {
+                RippledVersion::Fixed => panic!(),
+                RippledVersion::ProposalBug => "b1",
+                RippledVersion::ValidationBug => "b2",
+                RippledVersion::LivenessBug => "b3",
+            };
+            let mut fitness_name = match config.fitness_function {
+                FitnessFunctionType::TimeFitness => "time",
+                FitnessFunctionType::ProposalFitness => "proposal",
+            };
+            let scheduler_name = match config.scheduler_type {
+                SchedulerType::Priority => "priority",
+                SchedulerType::Delay => "delay",
+                SchedulerType::RandomPriority => {
+                    fitness_name = "rand";
+                    "priority"
+                }
+                SchedulerType::RandomDelay => {
+                    fitness_name = "rand";
+                    "delay"
+                }
+                _ => panic!()
+            };
+            let mut config_writer = BufWriter::new(File::create(Path::new(&format!("{}\\{}\\{}-{}.json", config_path, bug_folder, scheduler_name, fitness_name))).expect("Creating config file failed"));
+            serde_json::to_writer(&mut config_writer, &config).expect("Failed writing to config file");
+        }
     }
 }

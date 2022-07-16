@@ -8,15 +8,19 @@ use std::time::Duration;
 use log::{debug, error};
 use rayon::prelude::*;
 use serde::{Deserialize};
-use crate::LOG_FOLDER;
+use crate::{CONFIG, LOG_FOLDER};
 
 #[allow(unused)]
 pub fn start_docker_containers(peers: usize, unls: Vec<Vec<usize>>, image_name: &str) -> Vec<NodeKeys> {
     remove_containers("validator");
-    let node_keys = get_node_keys(peers);
+    let node_keys = get_node_keys(peers, image_name);
     create_configs(peers, &node_keys);
     configure_unls(unls, &node_keys);
-    let folders = create_log_folders(peers);
+    let folders = if CONFIG.create_ripple_log_folders {
+        Some(create_log_folders(peers))
+    } else {
+        None
+    };
     run_nodes(peers, image_name, folders);
     thread::sleep(Duration::from_secs(3));
     node_keys
@@ -25,7 +29,6 @@ pub fn start_docker_containers(peers: usize, unls: Vec<Vec<usize>>, image_name: 
 pub fn remove_containers(name: &str) {
     let leftovers = Command::new("docker").arg("ps")
         .args(["--all", "--quiet"])
-        // .args(["--filter", "network=ripple-net"])
         .args(["--filter", &format!("name={}", name)])
         .output().unwrap();
     let ids: Vec<&str> = std::str::from_utf8(&*leftovers.stdout).unwrap().lines().collect();
@@ -47,23 +50,23 @@ pub struct NodeKeys {
     pub validation_seed: String,
 }
 
-pub fn get_node_keys(n: usize) -> Vec<NodeKeys> {
-    start_key_generator();
+pub fn get_node_keys(n: usize, image_name: &str) -> Vec<NodeKeys> {
+    start_key_generator(image_name);
     debug!("acquiring node keys");
     let keys: Vec<NodeKeys> = (0..n).into_par_iter().map(|_| acquire_keys()).collect();
     debug!("acquired {} node keys", keys.len());
     keys
 }
 
-pub fn start_key_generator() {
+pub fn start_key_generator(image_name: &str) {
     let already_running = Command::new("docker")
         .args(["ps", "--filter", "name=key_generator", "--quiet"])
         .output().unwrap().stdout;
     if already_running.len() == 0 {
         debug!("trying to start key generator");
         remove_containers("key_generator");
-        start_node_with_options("key_generator", "rippled-boost-cmake", 0, false, None);
-        thread::sleep(Duration::from_secs(1));
+        start_node_with_options("key_generator", image_name, 0, false, None);
+        thread::sleep(Duration::from_secs(2));
     }
 }
 
@@ -120,13 +123,17 @@ pub fn create_log_folders(peers: usize) -> Vec<String> {
 }
 
 #[allow(unused)]
-fn run_nodes(peers: usize, image_name: &str, log_folders: Vec<String>) {
-    (0..peers).into_par_iter().for_each(|i| start_node(i, image_name, &log_folders[i]));
+fn run_nodes(peers: usize, image_name: &str, log_folders: Option<Vec<String>>) {
+    if let Some(log_folders) = log_folders {
+        (0..peers).into_par_iter().for_each(|i| start_node(i, image_name, Some(&log_folders[i])));
+    } else {
+        (0..peers).into_par_iter().for_each(|i| start_node(i, image_name, None));
+    }
 }
 
 #[allow(unused)]
-fn start_node(id: usize, image_name: &str, log_folder: &str) {
-    start_node_with_options(&format!("validator_{}", id), image_name, id, true, Some(log_folder));
+fn start_node(id: usize, image_name: &str, log_folder: Option<&str>) {
+    start_node_with_options(&format!("validator_{}", id), image_name, id, true, log_folder);
 }
 
 fn start_node_with_options(name: &str, image_name: &str, offset: usize, expose_to_network: bool, log_folder: Option<&str>) {
@@ -150,7 +157,7 @@ fn start_node_with_options(name: &str, image_name: &str, offset: usize, expose_t
 }
 
 pub fn create_account() -> AccountKeys {
-    start_key_generator();
+    // start_key_generator();
     let output = Command::new("docker").arg("exec")
         .args(["key_generator", "/bin/sh", "-c"])
         .args(["./rippled/my_build/rippled wallet_propose"])

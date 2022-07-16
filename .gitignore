@@ -19,7 +19,11 @@ out/
 
 db/proxy/*
 db/validator*/*
-logs/*
+logs/*/validator*
+logs/*/execution.txt
+logs/*/subscription*
+!logs/*/failure_file.txt
+!logs/*/ga.txt
 config/validator*/*
 rust-ripple-p2p/trace_graphs.txt
 rust-ripple-p2p/delay_locality.txt

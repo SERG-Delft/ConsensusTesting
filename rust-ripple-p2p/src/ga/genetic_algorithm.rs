@@ -330,7 +330,8 @@ mod ga_tests {
     use crate::ga::encoding::delay_encoding::{DelayMapPhenotype, DelayGenotype};
     use crate::ga::encoding::num_genes;
     use crate::ga::fitness::{FitnessCalculation, SchedulerHandlerTrait};
-    use crate::ga::genetic_algorithm::{ConsensusMessageType, ExtendedPhenotype, CurrentFitness};
+    use crate::ga::fitness::time_fitness::TimeFitness;
+    use crate::ga::genetic_algorithm::{ConsensusMessageType, ExtendedPhenotype};
     use crate::ga::mutation::{NoMutation};
     use crate::ga::parameters::default_mu_lambda_delays;
     use crate::ga::population_builder::build_delays_population;
@@ -350,13 +351,13 @@ mod ga_tests {
     #[test]
     #[ignore]
     fn test_mu_lambda() {
-        let mut params = default_mu_lambda_delays(2, 4);
+        let mut params = default_mu_lambda_delays::<TimeFitness>(2, 4);
         params.num_genes = 4;
         params.crossover_operator.set_crossover_probability(1.0);
         let population = build_delays_population(params.num_genes, params.min_value, params.max_value, params.population_size);
 
         let (fitness_sender, fitness_receiver) = std::sync::mpsc::channel();
-        let fitness_values: Arc<RwLock<HashMap<DelayGenotype, CurrentFitness>>> = Arc::new(RwLock::new(HashMap::new()));
+        let fitness_values: Arc<RwLock<HashMap<DelayGenotype, TimeFitness>>> = Arc::new(RwLock::new(HashMap::new()));
         let scheduler_handler = TestSchedulerHandler::new(fitness_receiver, fitness_values.clone());
         let fitness_calculation = FitnessCalculation { fitness_values: fitness_values.clone(), sender: fitness_sender };
 
@@ -425,13 +426,13 @@ mod ga_tests {
 
     struct TestSchedulerHandler {
         fitness_receiver: Receiver<DelayGenotype>,
-        fitness_values: Arc<RwLock<HashMap<DelayGenotype, CurrentFitness>>>
+        fitness_values: Arc<RwLock<HashMap<DelayGenotype, TimeFitness>>>
     }
 
     impl TestSchedulerHandler {
         pub fn new(
             fitness_receiver: Receiver<DelayGenotype>,
-            fitness_values: Arc<RwLock<HashMap<DelayGenotype, CurrentFitness>>>,
+            fitness_values: Arc<RwLock<HashMap<DelayGenotype, TimeFitness>>>,
         ) -> Self {
             TestSchedulerHandler { fitness_receiver, fitness_values }
         }
@@ -444,7 +445,7 @@ mod ga_tests {
                 match self.fitness_receiver.recv() {
                     Ok(delays_genotype) => match &delays_genotype[..] {
                         x => {
-                            self.fitness_values.write().unwrap().insert(delays_genotype.clone(), CurrentFitness::new(Duration::from_secs(x[0] as u64)));
+                            self.fitness_values.write().unwrap().insert(delays_genotype.clone(), TimeFitness::new(Duration::from_secs(x[0] as u64)));
                             // println!("Received {:?} from fitness calculation with fitness: {}", x, x[0]);
                             // self.fitness_values.write().unwrap().insert(delays_genotype.clone(), CurrentFitness::new(x[0]));
                         }

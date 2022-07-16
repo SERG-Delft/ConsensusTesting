@@ -472,7 +472,7 @@ mod harness_tests {
     use crate::test_harness::TestResult::{Failed, InProgress, Success};
 
     fn parse_harness() -> (TestHarness<'static>, TestHarness<'static>, Vec<Receiver<Message<'static>>>) {
-        crate::container_manager::start_key_generator();
+        crate::container_manager::start_key_generator("rippled-boost-cmake");
         let (tx_1, rx_1) = channel();
         let (tx_2, rx_2) = channel();
         let (_client_tx, client_rx) = channel();
