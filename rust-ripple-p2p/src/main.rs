@@ -55,10 +55,9 @@ fn main() {
     let unls: Vec<Vec<usize>> = get_unls(config.num_nodes, config.unl_type);
     println!("Unls: {:?}", unls);
 
-    let image_name = config.rippled_version;
-    let node_keys = start_docker_containers(config.num_nodes, unls, image_name.docker_image_name());
+    let node_keys = start_docker_containers(config.num_nodes, unls, config.rippled_version.docker_image_name());
     // let node_keys = get_static_node_keys();
-    // let node_keys = start_executables(n, unls);
+    // let node_keys = start_executables(config.num_nodes, unls);
 
     let app = app::App::new(config.num_nodes as u16, node_keys);
 
@@ -166,6 +165,8 @@ pub enum UnlType {
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
 pub enum RippledVersion {
     Fixed,
+    ProposalBug,
+    ValidationBug,
     LivenessBug,
 }
 
@@ -173,14 +174,18 @@ impl RippledVersion {
     pub fn docker_image_name(&self) -> &'static str {
         match self {
             RippledVersion::Fixed => "rippled-liveness-fix",
-            RippledVersion::LivenessBug => "rippled-boost-cmake",
+            RippledVersion::ProposalBug => "rippled-bug-benchmark:b1-proposal",
+            RippledVersion::ValidationBug => "rippled-bug-benchmark:b2-validation",
+            RippledVersion::LivenessBug => "rippled-bug-benchmark:b3-liveness",
         }
     }
 
     pub fn termination_condition(&self) -> Option<ConsensusPropertyTypes> {
         match self {
             RippledVersion::Fixed => None,
-            RippledVersion::LivenessBug => Some(ConsensusPropertyTypes::Termination)
+            RippledVersion::LivenessBug => Some(ConsensusPropertyTypes::Termination),
+            RippledVersion::ProposalBug => Some(ConsensusPropertyTypes::Agreement1),
+            RippledVersion::ValidationBug => Some(ConsensusPropertyTypes::Agreement2),
         }
     }
 }

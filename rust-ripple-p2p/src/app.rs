@@ -106,7 +106,7 @@ impl App {
         let mut peer_senders = HashMap::new();
         let mut peer_receivers = HashMap::new();
         let mut scheduler_peer_channels = HashMap::new();
-        let (scheduler_sender, scheduler_receiver) = tokio::sync::mpsc::channel(32);
+        let (scheduler_sender, scheduler_receiver) = tokio::sync::mpsc::channel(1000);
         let (scheduler_ga_sender, scheduler_ga_receiver) = std::sync::mpsc::channel::<CurrentFitness>();
 
         // For every combination (exclusive) of peers, create the necessary senders and receivers
@@ -289,13 +289,14 @@ impl App {
         thread::spawn(move || genetic_algorithm::run_default_mu_lambda_priorities(mu, lambda, ga_scheduler_sender, scheduler_ga_receiver));
     }
 
-    fn start_scheduler<S: Scheduler + Scheduler<IndividualPhenotype = P> + Send + 'static, G: ExtendedGenotype, P: ExtendedPhenotype<G> + 'static>(
+    fn start_scheduler<S: Scheduler<IndividualPhenotype = P> + Send + 'static, G: ExtendedGenotype, P: ExtendedPhenotype<G> + 'static>(
         scheduler_data: SchedulerData,
     ) -> Sender<P> {
         let (ga_scheduler_sender, ga_scheduler_receiver): (Sender<P>, Receiver<P>) = std::sync::mpsc::channel();
-        let scheduler = S::new(scheduler_data.scheduler_peer_channels, scheduler_data.collector_tx, scheduler_data.mutex_node_states, scheduler_data.node_keys, scheduler_data.failure_sender);
+        let scheduler = S::new(scheduler_data.collector_tx, scheduler_data.mutex_node_states, scheduler_data.node_keys, scheduler_data.failure_sender);
         thread::spawn(move || scheduler.start(
             scheduler_data.scheduler_receiver,
+            scheduler_data.scheduler_peer_channels,
             scheduler_data.scheduler_ga_sender,
             ga_scheduler_receiver,
             scheduler_data.client_senders,

@@ -2,7 +2,6 @@ use std::cmp::Ordering;
 use std::sync::{Arc, RwLock};
 use std::sync::mpsc::{Receiver as STDReceiver, Sender as STDSender};
 use std::thread;
-use chrono::{Duration, Utc};
 use hashbrown::hash_map::DefaultHashBuilder;
 use log::{debug, error, trace};
 use parking_lot::{Condvar, Mutex};
@@ -14,10 +13,9 @@ use crate::failure_writer::ConsensusPropertyTypes;
 use crate::ga::encoding::{ExtendedPhenotype, num_genes};
 use crate::ga::genetic_algorithm::ConsensusMessageType;
 use crate::ga::encoding::priority_encoding::{PriorityMapPhenotype};
-use crate::message_handler::RippleMessageObject;
 use crate::node_state::MutexNodeStates;
 use crate::NodeKeys;
-use crate::scheduler::{Event, P2PConnections, RMOEvent, Scheduler, SchedulerState};
+use crate::scheduler::{Event, RMOEvent, Scheduler, SchedulerState};
 
 pub struct PriorityScheduler {
     state: SchedulerState,
@@ -41,7 +39,6 @@ impl PriorityScheduler {
         let target_inbox_size = 0.2 * num_genes() as f64; // Target inbox size of 10% of the events mapped -> higher?
         let sensitivity_ratio = 1.01; // Change rate by 3% at a time
         let rate_change_percentage = 0.5; // 50% less or more than desired size of inbox
-        // let target_duration_in_inbox = Duration::seconds(6);
         loop {
             while let Ok(ordered_event) = inbox_rx.try_recv() {
                 let priority = ordered_event.priority;
@@ -79,25 +76,26 @@ impl Scheduler for PriorityScheduler {
     type IndividualPhenotype = PriorityMapPhenotype;
 
     fn new(
-        p2p_connections: P2PConnections,
         collector_sender: STDSender<Box<RippleMessage>>,
         node_states: Arc<MutexNodeStates>,
         node_keys: Vec<NodeKeys>,
         failure_sender: STDSender<Vec<ConsensusPropertyTypes>>,
     ) -> Self {
         Self {
-            state: SchedulerState::new(p2p_connections, collector_sender, node_states, node_keys, failure_sender)
+            state: SchedulerState::new(collector_sender, node_states, node_keys, failure_sender)
         }
     }
 
     /// Wait for new messages delivered by peers
     /// If the network is not stable, immediately relay messages
     /// Else collect messages in inbox and schedule based on priority
-    fn schedule_controller(mut receiver: TokioReceiver<Event>,
-                           run: Arc<(RwLock<bool>, Condvar)>,
-                           current_individual: Arc<Mutex<Self::IndividualPhenotype>>,
-                           node_states: Arc<MutexNodeStates>,
-                           event_schedule_sender: STDSender<RMOEvent>
+    fn schedule_controller(
+        mut receiver: TokioReceiver<Event>,
+        run: Arc<(RwLock<bool>, Condvar)>,
+        current_individual: Arc<Mutex<Self::IndividualPhenotype>>,
+        round_update_sender: STDSender<RMOEvent>,
+        event_schedule_sender: STDSender<RMOEvent>,
+        send_dependency_sender: STDSender<RippleMessage>,
     )
     {
         let (run_lock, _run_cvar) = &*run;
@@ -109,35 +107,18 @@ impl Scheduler for PriorityScheduler {
             match receiver.blocking_recv() {
                 Some(event) => {
                     let rmo_event = RMOEvent::from(&event);
-                    Self::check_message_for_round_update(&rmo_event, &node_states);
                     // If the network is ready to apply the test case, collect messages in inbox, else immediately relay
-                    if *run_lock.read().unwrap() {
-                        if Self::is_consensus_rmo(&rmo_event.message) {
-                            node_states.add_send_dependency(*RippleMessage::new(format!("Ripple{}", rmo_event.from + 1), format!("Ripple{}", rmo_event.to + 1), Duration::zero(), Utc::now(), rmo_event.message.clone()));
-                            let message_type_map = current_individual.lock().priority_map.get(&rmo_event.from).unwrap().get(&rmo_event.to).unwrap().clone();
-
-                            let priority = match &rmo_event.message {
-                                RippleMessageObject::TMValidation(_) => message_type_map.get(&ConsensusMessageType::TMValidation).unwrap(),
-                                RippleMessageObject::TMProposeSet(proposal) => {
-                                    match proposal.get_proposeSeq() {
-                                        0 => message_type_map.get(&ConsensusMessageType::TMProposeSet0).unwrap(),
-                                        1 => message_type_map.get(&ConsensusMessageType::TMProposeSet1).unwrap(),
-                                        2 => message_type_map.get(&ConsensusMessageType::TMProposeSet2).unwrap(),
-                                        3 => message_type_map.get(&ConsensusMessageType::TMProposeSet3).unwrap(),
-                                        4 => message_type_map.get(&ConsensusMessageType::TMProposeSet4).unwrap(),
-                                        5 => message_type_map.get(&ConsensusMessageType::TMProposeSet5).unwrap(),
-                                        4294967295 => message_type_map.get(&ConsensusMessageType::TMProposeSetBowOut).unwrap(),
-                                        _ => message_type_map.get(&ConsensusMessageType::TMProposeSet0).unwrap(),
-                                    }
-                                },
-                                RippleMessageObject::TMStatusChange(_) => message_type_map.get(&ConsensusMessageType::TMStatusChange).unwrap(),
-                                RippleMessageObject::TMHaveTransactionSet(_) => message_type_map.get(&ConsensusMessageType::TMHaveTransactionSet).unwrap(),
-                                RippleMessageObject::TMTransaction(_) => message_type_map.get(&ConsensusMessageType::TMTransaction).unwrap(),
-                                RippleMessageObject::TMLedgerData(_) => message_type_map.get(&ConsensusMessageType::TMLedgerData).unwrap(),
-                                RippleMessageObject::TMGetLedger(_) => message_type_map.get(&ConsensusMessageType::TMGetLedger).unwrap(),
-                                _ => &0
+                    if Self::is_consensus_rmo(&rmo_event.message) {
+                        round_update_sender.send(rmo_event.clone()).expect("Round update sender failed");
+                        if *run_lock.read().unwrap() {
+                            send_dependency_sender.send(RippleMessage::from_rmo_event(rmo_event.clone())).expect("send dependency sender failed");
+                            let consensus_message_type_option = ConsensusMessageType::create_consensus_message_type(&rmo_event.message);
+                            let priority = if let Some(consensus_message_type) = consensus_message_type_option {
+                                current_individual.lock().get_priority(&rmo_event.from, &rmo_event.to, &consensus_message_type)
+                            } else {
+                                0usize
                             };
-                            inbox_tx.send(OrderedRMOEvent::new(rmo_event, *priority)).expect("Inbox sender failed");
+                            inbox_tx.send(OrderedRMOEvent::new(rmo_event, priority)).expect("Inbox sender failed");
                         } else {
                             event_schedule_sender.send(rmo_event).expect("Event scheduler failed");
                         }

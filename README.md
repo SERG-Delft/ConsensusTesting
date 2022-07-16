@@ -30,7 +30,7 @@ The settings and configurations for the tool can be set in [config.json](rust-ri
 - num_nodes: The number of nodes in the network.
 - unl_type: The type of unl configuration [Full, Limit, Buggy].
 - rippled_version: The version of rippled to run [Fixed, LivenessBug]
-- scheduler_type: The type of scheduler to run [Delay, Priority, RandomDelay, RandomPriority, DelayTraceGraph, PriorityTraceGraph, PredeterminedDelay, DelayLocalityExperiment, PriorityLocalityExperiment, ScalingExperiment, None].
+- scheduler_type: The type of scheduler to run [Delay, Priority, RandomDelay, RandomPriority, DelayTraceGraph, PriorityTraceGraph, PredeterminedDelay, PredeterminedPriority, DelayLocalityExperiment, PriorityLocalityExperiment, ScalingExperiment, None].
 - search_budget: The time in seconds to run the ga for.
 
 ### Logs

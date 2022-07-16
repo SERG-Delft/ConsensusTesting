@@ -32,7 +32,6 @@ pub trait Scheduler: Sized {
     type IndividualPhenotype: Default + Send + 'static;
 
     fn new(
-        p2p_connections: P2PConnections,
         collector_sender: STDSender<Box<RippleMessage>>,
         node_states: Arc<MutexNodeStates>,
         node_keys: Vec<NodeKeys>,
@@ -41,6 +40,7 @@ pub trait Scheduler: Sized {
 
     fn start(self,
              receiver: TokioReceiver<Event>,
+             p2p_connections: P2PConnections,
              ga_sender: STDSender<CurrentFitness>,
              ga_receiver: STDReceiver<Self::IndividualPhenotype>,
              client_senders: Vec<STDSender<Message<'static>>>,
@@ -59,33 +59,34 @@ pub trait Scheduler: Sized {
         let node_states_clone_3 = self.get_state().node_states.clone();
         let failure_sender_clone = self.get_state().failure_sender.clone();
         let failure_sender_clone_2 = self.get_state().failure_sender.clone();
+        let (round_update_sender, round_update_receiver) = std::sync::mpsc::channel();
+        let (ripple_message_sender, ripple_message_receiver) = std::sync::mpsc::channel();
+        let (consensus_property_checker_sender, consensus_property_checker_receiver) = std::sync::mpsc::channel();
 
         thread::spawn(move || Self::update_current_round(node_states_clone, current_round_clone));
         thread::spawn(move || Self::update_latest_validated_ledger(node_states_clone_3, latest_validated_ledger_clone, failure_sender_clone));
         thread::spawn(move || Self::harness_controller(ga_sender, client_senders, failure_sender_clone_2, client_receiver, account_receiver, balance_receiver,latest_validated_ledger_clone_2, current_round_clone_2, run_clone, node_states_clone_2));
+        Self::check_message_for_round_update(round_update_receiver, self.get_state().node_states.clone());
+        Self::update_send_dependency(ripple_message_receiver, self.get_state().node_states.clone());
 
-        // self.start_extension(receiver, ga_receiver);
         let (event_schedule_sender, event_schedule_receiver) = channel();
         let run_clone = self.get_state().run.clone();
         let node_states_clone = self.get_state().node_states.clone();
-        let node_states_clone_2 = self.get_state().node_states.clone();
         let current_individual = Arc::new(Mutex::new(Self::IndividualPhenotype::default()));
         let current_individual_2 = current_individual.clone();
-        thread::spawn(move || Self::schedule_controller(receiver, run_clone, current_individual, node_states_clone, event_schedule_sender));
-        thread::spawn(move || Self::listen_to_ga(current_individual_2, ga_receiver, node_states_clone_2));
-        loop {
-            match event_schedule_receiver.recv() {
-                Ok(event) => self.execute_event(event),
-                Err(_) => panic!("Scheduler sender failed")
-            }
-        }
+        thread::spawn(move || Self::schedule_controller(receiver, run_clone, current_individual, round_update_sender, event_schedule_sender, ripple_message_sender));
+        thread::spawn(move || Self::listen_to_ga(current_individual_2, ga_receiver, node_states_clone));
+        Self::listen_to_scheduler(event_schedule_receiver, consensus_property_checker_sender, p2p_connections);
+        self.consensus_property_checker(consensus_property_checker_receiver);
     }
 
-    fn schedule_controller(receiver: TokioReceiver<Event>,
-                           run: Arc<(RwLock<bool>, Condvar)>,
-                           current_individual: Arc<Mutex<Self::IndividualPhenotype>>,
-                           node_states: Arc<MutexNodeStates>,
-                           event_schedule_sender: STDSender<RMOEvent>
+    fn schedule_controller(
+        receiver: TokioReceiver<Event>,
+        run: Arc<(RwLock<bool>, Condvar)>,
+        current_individual: Arc<Mutex<Self::IndividualPhenotype>>,
+        round_update_sender: STDSender<RMOEvent>,
+        event_schedule_sender: STDSender<RMOEvent>,
+        send_dependency_sender: STDSender<RippleMessage>,
     );
 
     fn listen_to_ga(current_individual: Arc<Mutex<Self::IndividualPhenotype>>, ga_receiver: STDReceiver<Self::IndividualPhenotype>, node_states: Arc<MutexNodeStates>);
@@ -93,49 +94,65 @@ pub trait Scheduler: Sized {
     fn get_state(&self) -> &SchedulerState;
 
     /// Execute event and report to collector
-    fn execute_event(&self, event: RMOEvent) {
-        let collector_message = RippleMessage::new(format!("Ripple{}", event.from+1), format!("Ripple{}", event.to+1),
-                                                   Utc::now().signed_duration_since(event.time_in), Utc::now(), event.message.clone());
-        self.get_state().collector_sender.send(collector_message.clone()).expect("Collector receiver failed");
+    fn listen_to_scheduler(event_schedule_receiver: STDReceiver<RMOEvent>, consensus_property_sender: Sender<Box<RippleMessage>>, p2p_connections: P2PConnections) {
+        thread::spawn(move || {
+            loop {
+                match event_schedule_receiver.recv() {
+                    Ok(event) => {
+                        let collector_message = RippleMessage::new(format!("Ripple{}", event.from + 1), format!("Ripple{}", event.to + 1),
+                                                                   Utc::now().signed_duration_since(event.time_in), Utc::now(), event.message.clone());
+                        consensus_property_sender.send(collector_message).expect("Consensus property sender failed");
+                        p2p_connections.get(&event.to).unwrap().get(&event.from).unwrap().send(event);
+                    },
+                    Err(_) => panic!("Scheduler sender failed")
+                }
+            }
+        });
+    }
+
+    fn consensus_property_checker(self, receiver: STDReceiver<Box<RippleMessage>>) {
         let (ref run_lock, ref _run_cvar) = &*self.get_state().run;
-        if *run_lock.read().unwrap() {
-            if Self::is_consensus_rmo(&event.message) {
-                self.get_state().node_states.add_execution(collector_message.as_ref().clone());
-                if Self::is_own_message(&event.message, &self.get_state().node_keys[event.from].validation_public_key) {
-                    let mut consensus_property_violations = vec![];
-                    match &event.message {
-                        RippleMessageObject::TMStatusChange(status_change) => {
-                            consensus_property_violations.append(
-                                &mut ConsensusProperties::check_proposal_integrity_property(
-                                    &self.get_state().node_states,
-                                    &status_change,
-                                    event.from
-                                ));
+        loop {
+            let collector_message = receiver.recv().expect("consensus property receiver failed");
+            self.get_state().collector_sender.send(collector_message.clone()).expect("collector sender failed");
+            if *run_lock.read().unwrap() {
+                if Self::is_consensus_rmo(&collector_message.message) {
+                    self.get_state().node_states.add_execution(collector_message.as_ref().clone());
+                    if Self::is_own_message(&collector_message.message, &self.get_state().node_keys[collector_message.sender_index()].validation_public_key) {
+                        let mut consensus_property_violations = vec![];
+                        match &collector_message.message {
+                            RippleMessageObject::TMStatusChange(status_change) => {
+                                consensus_property_violations.append(
+                                    &mut ConsensusProperties::check_proposal_integrity_property(
+                                        &self.get_state().node_states,
+                                        &status_change,
+                                        collector_message.sender_index()
+                                    ));
+                            }
+                            RippleMessageObject::TMValidation(validation) => {
+                                let parsed_validation = ParsedValidation::new(validation);
+                                consensus_property_violations.append(
+                                    &mut ConsensusProperties::check_validation_integrity_property(
+                                        &self.get_state().node_states,
+                                        parsed_validation,
+                                        collector_message.sender_index()
+                                    ));
+                            }
+                            RippleMessageObject::TMProposeSet(proposal) => {
+                                self.get_state().node_states.node_states.lock().add_proposed_tx_set(proposal.get_currentTxHash(), collector_message.sender_index());
+                            }
+                            _ => {}
                         }
-                        RippleMessageObject::TMValidation(validation) => {
-                            let parsed_validation = ParsedValidation::new(validation);
-                            consensus_property_violations.append(
-                                &mut ConsensusProperties::check_validation_integrity_property(
-                                    &self.get_state().node_states,
-                                    parsed_validation,
-                                    event.from
-                                ));
+                        if !consensus_property_violations.is_empty() {
+                            match self.get_state().failure_sender.send(consensus_property_violations) {
+                                Ok(_) => {}
+                                Err(_) => error!("Failure channel failed")
+                            };
                         }
-                        RippleMessageObject::TMProposeSet(proposal) => {
-                            self.get_state().node_states.node_states.lock().add_proposed_tx_set(proposal.get_currentTxHash(), event.from);
-                        }
-                        _ => {}
-                    }
-                    if !consensus_property_violations.is_empty() {
-                        match self.get_state().failure_sender.send(consensus_property_violations) {
-                            Ok(_) => {}
-                            Err(_) => error!("Failure channel failed")
-                        };
                     }
                 }
             }
         }
-        self.get_state().p2p_connections.get(&event.to).unwrap().get(&event.from).unwrap().send(event);
     }
 
     fn is_consensus_rmo(rmo: &RippleMessageObject) -> bool {
@@ -154,21 +171,35 @@ pub trait Scheduler: Sized {
     /// Update round number based on ledgerAccept message.
     /// The node has accepted the new ledger and is building/validating that ledger
     /// We consider the node to have moved on to the next round
-    fn check_message_for_round_update(rmo_event: &RMOEvent, node_states: &Arc<MutexNodeStates>) {
-        match rmo_event.message {
-            crate::message_handler::RippleMessageObject::TMStatusChange(ref status_change) => {
-                if status_change.has_newEvent() {
-                    match status_change.get_newEvent() {
-                        crate::protos::ripple::NodeEvent::neACCEPTED_LEDGER => {
-                            trace!("Setting node {}'s round to {}", rmo_event.from, status_change.get_ledgerSeq() + 1);
-                            node_states.set_current_round(rmo_event.from, status_change.get_ledgerSeq() + 1)
+    fn check_message_for_round_update(message_listener: STDReceiver<RMOEvent>, node_states: Arc<MutexNodeStates>) {
+        thread::spawn(move || {
+            loop {
+                let rmo_event = message_listener.recv().expect("round_update_receiver failed");
+                match rmo_event.message {
+                    crate::message_handler::RippleMessageObject::TMStatusChange(ref status_change) => {
+                        if status_change.has_newEvent() {
+                            match status_change.get_newEvent() {
+                                crate::protos::ripple::NodeEvent::neACCEPTED_LEDGER => {
+                                    trace!("Setting node {}'s round to {}", rmo_event.from, status_change.get_ledgerSeq() + 1);
+                                    node_states.set_current_round(rmo_event.from, status_change.get_ledgerSeq() + 1);
+                                }
+                                _ => {}
+                            }
                         }
-                        _ => {}
-                    }
+                    },
+                    _ => {}
                 }
-            },
-            _ => {}
-        }
+            }
+        });
+    }
+
+    fn update_send_dependency(ripple_message_receiver: STDReceiver<RippleMessage>, node_states: Arc<MutexNodeStates>) {
+        thread::spawn(move || {
+            loop {
+                let ripple_message = ripple_message_receiver.recv().expect("ripple_message_receiver failed");
+                node_states.add_send_dependency(ripple_message);
+            }
+        });
     }
 
     /// Update the current round if a message is received with a higher ledger sequence number
@@ -323,26 +354,23 @@ pub trait Scheduler: Sized {
 }
 
 pub struct SchedulerState {
-    pub p2p_connections: P2PConnections,
     pub collector_sender: STDSender<Box<RippleMessage>>,
     pub run: Arc<(RwLock<bool>, Condvar)>,
     pub latest_validated_ledger: Arc<(Mutex<u32>, Condvar)>,
     pub current_round: Arc<(Mutex<u32>, Condvar)>,
     pub node_states: Arc<MutexNodeStates>,
     pub node_keys: Vec<NodeKeys>,
-    pub failure_sender: Sender<Vec<ConsensusPropertyTypes>>
+    pub failure_sender: Sender<Vec<ConsensusPropertyTypes>>,
 }
 
 impl SchedulerState {
     pub fn new(
-        p2p_connections: P2PConnections,
         collector_sender: STDSender<Box<RippleMessage>>,
         node_states: Arc<MutexNodeStates>,
         node_keys: Vec<NodeKeys>,
         failure_sender: Sender<Vec<ConsensusPropertyTypes>>,
     ) -> Self {
         SchedulerState {
-            p2p_connections,
             collector_sender,
             run: Arc::new((RwLock::new(false), Condvar::new())),
             latest_validated_ledger: Arc::new((Mutex::new(0), Condvar::new())),
@@ -462,12 +490,12 @@ mod scheduler_tests {
     fn test_drop_threshold() {
         let rmo_event = RMOEvent { from: 0, to: 1, message: RippleMessageObject::TMTransaction(PBTransaction::new()), time_in: Utc.timestamp(1431648000, 0) };
         let (sender, receiver) = std::sync::mpsc::channel();
-        ScheduledEvent::schedule_execution(rmo_event, Duration::from_millis(DROP_THRESHOLD as u64 + 1), sender.clone());
+        ScheduledEvent::schedule_execution(rmo_event, DROP_THRESHOLD as u64 + 1, sender.clone());
         thread::sleep(Duration::from_millis(DROP_THRESHOLD as u64 + 500));
         let result = receiver.try_recv();
         assert!(result.is_err());
         let rmo_event = RMOEvent { from: 0, to: 1, message: RippleMessageObject::TMTransaction(PBTransaction::default()), time_in: Utc.timestamp(1431648000, 0) };
-        ScheduledEvent::schedule_execution(rmo_event, Duration::from_millis(100), sender);
+        ScheduledEvent::schedule_execution(rmo_event, 100, sender);
         thread::sleep(Duration::from_millis(1000));
         let result = receiver.try_recv();
         assert!(result.is_ok());

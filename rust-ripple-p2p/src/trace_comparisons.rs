@@ -281,7 +281,7 @@ impl PreDeterminedDelaySchedulerHandler {
     }
 
     pub fn run(&mut self) {
-        let delays: Vec<u32> = Self::create_delays();
+        let delays: Vec<u32> = Self::create_proposal_bug_delays();
         for i in 0..self.number_of_tests {
             println!("Starting test {}", i);
             self.scheduler_sender.send(DelayMapPhenotype::from_genes(&delays)).expect("Scheduler receiver failed");
@@ -291,7 +291,8 @@ impl PreDeterminedDelaySchedulerHandler {
         std::process::exit(0);
     }
 
-    fn create_delays() -> DelayGenotype {
+    #[allow(unused)]
+    fn create_liveness_bug_delays() -> DelayGenotype {
         let index_factor_1 = ConsensusMessageType::VALUES.len() * (*NUM_NODES-1);
         let index_factor_2 = ConsensusMessageType::VALUES.len();
         let mut delays = vec![0u32; num_genes()];
@@ -306,6 +307,40 @@ impl PreDeterminedDelaySchedulerHandler {
                 delays[index_factor_1 * i + index_factor_2 * j + ledger_data_index] = ledger_data_delay;
                 delays[index_factor_1 * i + index_factor_2 * j + get_ledger_index] = get_ledger_delay;
                 delays[index_factor_1 * i + index_factor_2 * j + transaction_index] = transaction_delay;
+            }
+        }
+        println!("{}", DelayMapPhenotype::from_genes(&delays).display_genotype_by_message());
+        delays
+    }
+
+    #[allow(unused)]
+    fn create_proposal_bug_delays() -> DelayGenotype {
+        let index_factor_1 = ConsensusMessageType::VALUES.len() * (*NUM_NODES-1);
+        let index_factor_2 = ConsensusMessageType::VALUES.len();
+        let mut delays = vec![0u32; num_genes()];
+        let propose_set_0_index = 0;
+        let propose_set_1_index = 1;
+        let propose_set_2_index = 2;
+        let propose_set_3_index = 3;
+        let propose_set_4_index = 4;
+        let propose_set_5_index = 5;
+        let propose_set_bowout_index = 6;
+        let propose_set_0_delay = 3000;
+        let propose_set_1_delay = 1500;
+        let propose_set_2_delay = 0;
+        let propose_set_3_delay = 0;
+        let propose_set_4_delay = 0;
+        let propose_set_5_delay = 0;
+        let propose_set_bowout_delay = 0;
+        for i in [0, 1, 2, 3]{
+            for (j, _) in chain(0..i, i+1..*NUM_NODES).enumerate() {
+                delays[index_factor_1 * i + index_factor_2 * j + propose_set_0_index] = propose_set_0_delay;
+                delays[index_factor_1 * i + index_factor_2 * j + propose_set_1_index] = propose_set_1_delay;
+                delays[index_factor_1 * i + index_factor_2 * j + propose_set_2_index] = propose_set_2_delay;
+                delays[index_factor_1 * i + index_factor_2 * j + propose_set_3_index] = propose_set_3_delay;
+                delays[index_factor_1 * i + index_factor_2 * j + propose_set_4_index] = propose_set_4_delay;
+                delays[index_factor_1 * i + index_factor_2 * j + propose_set_5_index] = propose_set_5_delay;
+                delays[index_factor_1 * i + index_factor_2 * j + propose_set_bowout_index] = propose_set_bowout_delay;
             }
         }
         println!("{}", DelayMapPhenotype::from_genes(&delays).display_genotype_by_message());

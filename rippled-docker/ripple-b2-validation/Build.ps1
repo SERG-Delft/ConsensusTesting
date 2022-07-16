@@ -1,0 +1,1 @@
+docker build --tag mvanmeerten/rippled-b2-validation ${pwd}/.

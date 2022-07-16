@@ -1,0 +1,1 @@
+docker build --tag mvanmeerten/rippled-b1-proposal ${pwd}/.

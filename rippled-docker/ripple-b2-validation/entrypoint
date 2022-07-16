@@ -1,0 +1,11 @@
+#!/bin/bash
+
+mkdir -p /etc/opt/ripple
+mkdir -p /root/.ripple
+
+/bin/cat /.config/ripple/rippled.cfg > /etc/opt/ripple/rippled.cfg
+/bin/cat /.config/ripple/validators.txt > /etc/opt/ripple/validators.txt
+/bin/cat /.config/ripple/ledger.json > /etc/opt/ripple/ledger.json
+
+# Start rippled, Passthrough other arguments
+exec /rippled/my_build/rippled --ledgerfile /etc/opt/ripple/ledger.json  --conf /etc/opt/ripple/rippled.cfg $@

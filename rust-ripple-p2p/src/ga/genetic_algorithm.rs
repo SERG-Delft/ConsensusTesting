@@ -33,6 +33,7 @@ use crate::ga::encoding::priority_encoding::{PriorityGenotype, PriorityMapPhenot
 use crate::ga::fitness::propose_seq_fitness::ProposeSeqFitness;
 use crate::ga::selection::MuLambdaSelector;
 use crate::ga::reinsertion::MuLambdaReinserter;
+use crate::message_handler::RippleMessageObject;
 use super::mutation::GaussianMutator;
 
 pub type CurrentFitness = TimeFitness;
@@ -58,6 +59,30 @@ pub enum ConsensusMessageType {
 impl ConsensusMessageType {
     pub const VALUES: [Self; 13] = [Self::TMProposeSet0, Self::TMProposeSet1, Self::TMProposeSet2, Self::TMProposeSet3, Self::TMProposeSet4, Self::TMProposeSet5, Self::TMProposeSetBowOut, Self::TMStatusChange, Self::TMValidation, Self::TMTransaction, Self::TMHaveTransactionSet, Self::TMGetLedger, Self::TMLedgerData];
     pub const RMO_MESSAGE_TYPE: [&'static str; 7] = ["ProposeSet", "StatusChange", "Validation", "Transaction", "HaveTransactionSet", "GetLedger", "LedgerData"];
+
+    pub fn create_consensus_message_type(rmo: &RippleMessageObject) -> Option<Self> {
+        match rmo {
+            RippleMessageObject::TMValidation(_) => Some(ConsensusMessageType::TMValidation),
+            RippleMessageObject::TMProposeSet(proposal) => {
+                match proposal.get_proposeSeq() {
+                    0 => Some(ConsensusMessageType::TMProposeSet0),
+                    1 => Some(ConsensusMessageType::TMProposeSet1),
+                    2 => Some(ConsensusMessageType::TMProposeSet2),
+                    3 => Some(ConsensusMessageType::TMProposeSet3),
+                    4 => Some(ConsensusMessageType::TMProposeSet4),
+                    5 => Some(ConsensusMessageType::TMProposeSet5),
+                    4294967295 => Some(ConsensusMessageType::TMProposeSetBowOut),
+                    _ => Some(ConsensusMessageType::TMProposeSet0),
+                }
+            },
+            RippleMessageObject::TMStatusChange(_) => Some(ConsensusMessageType::TMStatusChange),
+            RippleMessageObject::TMHaveTransactionSet(_) => Some(ConsensusMessageType::TMHaveTransactionSet),
+            RippleMessageObject::TMTransaction(_) => Some(ConsensusMessageType::TMTransaction),
+            RippleMessageObject::TMLedgerData(_) => Some(ConsensusMessageType::TMLedgerData),
+            RippleMessageObject::TMGetLedger(_) => Some(ConsensusMessageType::TMGetLedger),
+            _ => None
+        }
+    }
 }
 
 /// Run a standard mu lambda GA with delay encoding

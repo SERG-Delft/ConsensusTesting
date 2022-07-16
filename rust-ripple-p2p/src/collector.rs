@@ -17,6 +17,7 @@ use crate::LOG_FOLDER;
 use crate::message_handler::RippleMessageObject::TMProposeSet;
 use crate::node_state::{ConsensusPhase, MutexNodeStates};
 use crate::protos::ripple::{TMTransaction};
+use crate::scheduler::RMOEvent;
 use crate::test_harness::TransactionResultCode;
 
 /// Collects and writes data to files and the scheduler
@@ -110,7 +111,7 @@ impl Collector {
                         match &message.message {
                             TMProposeSet(tm_propose) => {
                                 node_states.set_highest_propose_seq(tm_propose.get_proposeSeq(), message.sender_index());
-                                if tm_propose.get_proposeSeq() > 1 { error!("{}", message.to_string()) }
+                                if tm_propose.get_proposeSeq() >= 2 { error!("{}", message.to_string()) }
                             },
                             _ => {},
                         }
@@ -164,6 +165,16 @@ pub struct RippleMessage {
 impl RippleMessage {
     pub fn new(from_node: String, to_node: String, delay: Duration, timestamp: DateTime<Utc>, message: RippleMessageObject) -> Box<Self> {
         Box::from(RippleMessage { from_node, to_node, delay, timestamp, message })
+    }
+
+    pub fn from_rmo_event(rmo_event: RMOEvent) -> Self {
+        RippleMessage {
+            from_node: format!("Ripple{}", rmo_event.from + 1),
+            to_node: format!("Ripple{}", rmo_event.to + 1),
+            delay: chrono::Duration::zero(),
+            timestamp: Utc::now(),
+            message: rmo_event.message.clone()
+        }
     }
 
     pub fn message_type(&self) -> String {

@@ -26,6 +26,10 @@ pub struct DelayMapPhenotype {
 }
 
 impl DelayMapPhenotype {
+    pub fn get_delay(&self, from: &usize, to: &usize, message_type: &ConsensusMessageType) -> u32 {
+        *self.delay_map.get(from).unwrap().get(to).unwrap().get(&message_type).unwrap()
+    }
+
     /// Display delays grouped by message and receiver node
     #[allow(unused)]
     pub fn message_type_delays(&self, message_type: &ConsensusMessageType) -> Vec<(usize, Vec<u32>)> {

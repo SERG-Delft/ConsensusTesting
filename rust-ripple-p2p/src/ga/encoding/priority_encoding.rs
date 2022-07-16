@@ -21,6 +21,10 @@ pub struct PriorityMapPhenotype {
 }
 
 impl PriorityMapPhenotype {
+    pub fn get_priority(&self, from: &usize, to: &usize, message_type: &ConsensusMessageType) -> usize {
+        *self.priority_map.get(from).unwrap().get(to).unwrap().get(&message_type).unwrap()
+    }
+
     /// Display delays grouped by message and receiver node
     #[allow(unused)]
     pub fn message_type_priorities(&self, message_type: &ConsensusMessageType) -> Vec<(usize, Vec<String>)> {
