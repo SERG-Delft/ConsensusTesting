@@ -2,15 +2,16 @@
 
 #Running experiments on VM
 #1. Install docker: 
-sudo apt install docker.io
+sudo apt install docker.io -y
 #2. Create docker network ripple-net: 
 docker network create ripple-net
 #3. pull docker image: 
 docker pull mvanmeerten/rippled-bug-benchmark:$1
 #5. Install rustup: 
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+export PATH="$HOME/.cargo/bin:$PATH"
 #6. Build dependencies
-sudo apt-get update 
+sudo apt-get update
 sudo apt install build-essential checkinstall zlib1g-dev pkg-config libssl-dev -y
 #7. Install OpenSSL: 
 sudo wget https://www.openssl.org/source/openssl-1.1.1m.tar.gz

@@ -7,5 +7,5 @@ configs=("delay-proposal" "delay-rand" "delay-time" "priority-rand" "priority-pr
 for config in ${configs[@]};
 do
 	echo "Starting config $config"
-	bash /root/snap/lxd/current/ConsensusTesting/vm-setup/run_experiment.sh $n $config_folder/$config.json $bug/$config
+	bash /root/snap/lxd/current/ConsensusTesting/vm-setup/run_experiment.sh $n $config_folder/$bug/$config.json $bug/$config
 done
