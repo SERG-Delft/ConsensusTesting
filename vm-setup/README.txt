@@ -20,3 +20,5 @@ Running experiments on VM
 7. Build DisCoTest:
 	Go to directory
 	cargo build --release
+8. Run experiment:
+	bash /root/snap/lxd/current/ConsensusTesting/vm-setup/run_experiment.sh 10 /root/snap/lxd/current/ConsensusTesting/vm-setup/configs/b3/delay-time.json delay-time

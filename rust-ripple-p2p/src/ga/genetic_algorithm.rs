@@ -290,7 +290,7 @@ pub fn run_permutation_ga<S, T, H>(scheduler_handler: H, fitness_calculation: Fi
 pub fn create_ga_writer() -> BufWriter<File> {
     BufWriter::new(
         File::create(
-            Path::new(format!("{}\\ga.txt", *LOG_FOLDER).as_str())
+            Path::new(format!("{}/ga.txt", *LOG_FOLDER).as_str())
         ).expect("Creating ga file failed")
     )
 }

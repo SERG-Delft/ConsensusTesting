@@ -38,7 +38,7 @@ impl Collector {
     ) -> Self {
         let mut subscription_files = vec![];
         for peer in 0..number_of_nodes {
-            let mut subscription_file = BufWriter::new(File::create(Path::new(format!("{}\\subscription_{}.json", *LOG_FOLDER, peer).as_str())).expect("Opening subscription file failed"));
+            let mut subscription_file = BufWriter::new(File::create(Path::new(format!("{}/subscription_{}.json", *LOG_FOLDER, peer).as_str())).expect("Opening subscription file failed"));
             subscription_file.write_all(String::from("[\n").as_bytes()).unwrap();
             subscription_files.push(subscription_file);
         }
@@ -100,7 +100,7 @@ impl Collector {
     }
 
     fn execution_writer(ripple_message_receiver: Receiver<Box<RippleMessage>>, node_states: Arc<MutexNodeStates>) {
-        let mut execution_file = File::create(Path::new(format!("{}\\execution.txt", *LOG_FOLDER).as_str())).expect("Opening execution file failed");
+        let mut execution_file = File::create(Path::new(format!("{}/execution.txt", *LOG_FOLDER).as_str())).expect("Opening execution file failed");
         // let mut execution_writer = BufWriter::new(execution_file);
         loop {
             // Write all messages sent by the scheduler to peers to "execution.txt". After delay!

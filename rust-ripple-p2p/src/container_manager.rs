@@ -2,6 +2,7 @@
 use std::{env, fs, thread};
 use std::fs::{create_dir_all, File, read_to_string};
 use std::io::Write;
+use std::path::Path;
 use std::process::Command;
 use std::time::Duration;
 
@@ -83,20 +84,20 @@ fn acquire_keys() -> NodeKeys {
 
 
 pub fn create_configs(peers: usize, keys: &Vec<NodeKeys>) {
-    let base = read_to_string("..\\config\\rippled.cfg").unwrap();
+    let base = read_to_string(Path::new("../config/rippled.cfg")).unwrap();
     (0..peers).into_par_iter().for_each(|i| {
-        let path = format!("..\\config\\validator_{}", i);
+        let path = format!("../config/validator_{}", i);
         fs::create_dir_all(&path).unwrap();
-        fs::copy("..\\config\\ledger.json", format!("{}\\ledger.json", path)).unwrap();
+        fs::copy("../config/ledger.json", format!("{}/ledger.json", path)).unwrap();
         let config = base.replace("{validation_seed}", &keys[i].validation_seed);
-        File::create(&format!("{}\\rippled.cfg", path)).unwrap().write(config.as_bytes()).unwrap();
+        File::create(&format!("{}/rippled.cfg", path)).unwrap().write(config.as_bytes()).unwrap();
         debug!("created config setup for validator {}", i);
     });
 }
 
 pub fn configure_unls(unls: Vec<Vec<usize>>, keys: &Vec<NodeKeys>) {
     (0..unls.len()).into_par_iter().for_each(|i| {
-        let path = format!("..\\config\\validator_{}\\validators.txt", i);
+        let path = format!("../config/validator_{}/validators.txt", i);
         let mut validators = "[validators]\n".to_owned();
         for node in 0..unls.len() {
             if i != node && unls[i].contains(&node) {
@@ -112,7 +113,7 @@ pub fn configure_unls(unls: Vec<Vec<usize>>, keys: &Vec<NodeKeys>) {
 pub fn create_log_folders(peers: usize) -> Vec<String> {
     let mut folders = vec![];
     for i in 0..peers {
-        let folder_name = format!("{}\\validator_{}", *LOG_FOLDER, i);
+        let folder_name = format!("{}/validator_{}", *LOG_FOLDER, i);
         println!("{}", folder_name);
         match create_dir_all(&folder_name) {
             Ok(_) => folders.push(folder_name),
