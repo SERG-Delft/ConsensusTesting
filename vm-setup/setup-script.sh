@@ -6,7 +6,7 @@ sudo apt-get install docker-ce docker-ce-cli containerd.io docker-compose-plugin
 #2. Create docker network ripple-net: 
 docker network create ripple-net
 #3. pull docker image: 
-docker pull mvanmeerten/rippled-bug-benchmark:[tag]
+docker pull mvanmeerten/rippled-bug-benchmark:$1
 #5. Install rustup: 
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 #6. Build dependencies
