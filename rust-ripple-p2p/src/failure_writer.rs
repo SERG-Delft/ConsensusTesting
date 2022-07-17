@@ -29,7 +29,7 @@ impl FailureWriter {
             failure_receiver,
             failure_writer: BufWriter::new(
                 File::create(
-                    Path::new(format!("{}\\failure_file.txt", *LOG_FOLDER).as_str()))
+                    Path::new(format!("{}/failure_file.txt", *LOG_FOLDER).as_str()))
                     .expect("Opening failure file failed")
             ),
             node_states,

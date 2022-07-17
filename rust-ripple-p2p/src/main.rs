@@ -91,7 +91,7 @@ pub fn get_config() -> Configuration {
 pub fn get_log_path() -> String {
     let args: Vec<String> = env::args().collect();
     if args.len() >= 3 {
-        let log_path = format!("{}\\..\\logs\\{}", env::current_dir().unwrap().to_str().unwrap(), &args[2]);
+        let log_path = format!("{}/../logs/{}", env::current_dir().unwrap().to_str().unwrap(), &args[2]);
         if !std::path::Path::new(&log_path).exists() {
             std::fs::create_dir_all(&log_path).expect("Creating log directory failed");
         }
@@ -99,7 +99,7 @@ pub fn get_log_path() -> String {
     }
     let now = Utc::now();
     let date_string = now.format("%FT%H-%M-%S").to_string();
-    let log_path = format!("{}\\..\\logs\\{}", env::current_dir().unwrap().to_str().unwrap(), date_string);
+    let log_path = format!("{}/../logs/{}", env::current_dir().unwrap().to_str().unwrap(), date_string);
     if !std::path::Path::new(&log_path).exists() {
         std::fs::create_dir_all(&log_path).expect("Creating log directory failed");
     }
