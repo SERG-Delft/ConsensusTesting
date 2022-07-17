@@ -25,7 +25,6 @@ sudo mv /usr/bin/c_rehash /usr/bin/c_rehash.backup
 sudo mv /usr/bin/openssl /usr/bin/openssl.backup
 export PATH="/usr/local/ssl/bin:$PATH"
 #8. Build DisCoTest:
-cd /root/snap/lxd/current/ConsensusTesting/rust-ripple-p2p
-cargo build --release
+cargo build --release --manifest-path=/root/snap/lxd/current/ConsensusTesting/rust-ripple-p2p/Cargo.toml
 #9. Run experiment:
 #bash /root/snap/lxd/current/ConsensusTesting/vm-setup/run_experiment.sh 10 /root/snap/lxd/current/ConsensusTesting/vm-setup/configs/b3/delay-time.json delay-time
