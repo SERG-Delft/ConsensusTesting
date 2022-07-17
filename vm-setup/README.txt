@@ -1,5 +1,5 @@
 Running experiments on VM
-1. Install docker: sudo apt-get install docker-ce docker-ce-cli containerd.io docker-compose-plugin
+1. Install docker: apt install docker.io
 2. Create docker network ripple-net: docker network create ripple-net
 3. pull docker image: docker pull mvanmeerten/rippled-bug-benchmark:[tag]
 4. Use PAT to clone repo: git clone --recurse-submodules https://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@github.com/SERG-Delft/ConsensusTesting
@@ -23,3 +23,7 @@ Running experiments on VM
 	cargo build --release
 9. Run experiment:
 	bash /root/snap/lxd/current/ConsensusTesting/vm-setup/run_experiment.sh 10 /root/snap/lxd/current/ConsensusTesting/vm-setup/configs/b3/delay-time.json delay-time
+	
+cd /root/snap/lxd/current	
+git clone --recurse-submodules https://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@github.com/SERG-Delft/ConsensusTesting
+bash /root/snap/lxd/current/ConsensusTesting/vm-setup/setup-script.sh [tag]

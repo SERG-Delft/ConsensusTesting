@@ -2,7 +2,7 @@
 
 #Running experiments on VM
 #1. Install docker: 
-sudo apt-get install docker-ce docker-ce-cli containerd.io docker-compose-plugin
+sudo apt install docker.io
 #2. Create docker network ripple-net: 
 docker network create ripple-net
 #3. pull docker image: 
