@@ -143,10 +143,17 @@ impl TestHarness<'static> {
         // We assume the client responds in order...
         for i in 0..self.starting_balances.len() {
             let account_idx = self.starting_balances[i].0;
-            let current_balance = match self.balance_receiver.recv() {
-                Ok(balance) => balance / 10u32.pow(7),
-                Err(_) => panic!("dddd"),
-            };
+            let mut current_balance = u32::MAX;
+            while current_balance == u32::MAX {
+                match self.balance_receiver.recv() {
+                    Ok(u32::MAX) => {
+                        Client::account_info("setup_balance", &self.client_senders[0], self.accounts[self.starting_balances[i].0].account_keys.account_id.clone());
+                        continue
+                    },
+                    Ok(balance) => current_balance = balance / 10u32.pow(7),
+                    Err(_) => panic!("dddd"),
+                };
+            }
             let difference: i64 = (self.starting_balances[i].1 - current_balance + 20) as i64;
             if difference >= 0 {
                 let transaction = Client::create_payment_transaction(
@@ -459,14 +466,10 @@ mod harness_tests {
     use std::sync::mpsc::{Receiver};
     use std::thread;
     use std::time::Duration;
-    use serde_json::json;
-    use websocket::Message;
+    use serde_json::{json, Value};
+    use websocket::{Message, OwnedMessage};
     use crate::client::{Client, Transaction};
-    use crate::collector::RippleMessage;
     use crate::container_manager::AccountKeys;
-    use crate::ga::encoding::delay_encoding::{DelayMapPhenotype};
-    use crate::ga::encoding::{ExtendedPhenotype, num_genes};
-    use crate::LOG_FOLDER;
     use crate::node_state::{MutexNodeStates, NodeState, NodeStates};
     use crate::test_harness::{Account, TestHarness, TransactionResult, TransactionResultCode, TransactionTimed};
     use crate::test_harness::TestResult::{Failed, InProgress, Success};
@@ -507,8 +510,8 @@ mod harness_tests {
             subsequent_seq: true
         };
         let transactions = vec![transaction1, transaction2, transaction3];
-        let expected_transaction_results = vec![TransactionResult::new(vec![0], true), TransactionResult::new(vec![1,2], true)];
-        let expected_harness = TestHarness { transactions, accounts, starting_balances: vec![], client_senders: vec![tx_1.clone(), tx_2.clone()], client_receiver: expected_client_rx, balance_receiver: expected_balance_rx, failure_sender: failure_tx, succeeded_transactions: HashSet::new(), unfunded_transactions: HashSet::new(), transaction_results: expected_transaction_results  };
+        let expected_transaction_results = vec![TransactionResult::new(vec![0], true), TransactionResult::new(vec![1,2], false)];
+        let expected_harness = TestHarness { transactions, accounts, starting_balances: vec![(1, 80)], client_senders: vec![tx_1.clone(), tx_2.clone()], client_receiver: expected_client_rx, balance_receiver: expected_balance_rx, failure_sender: failure_tx, succeeded_transactions: HashSet::new(), unfunded_transactions: HashSet::new(), transaction_results: expected_transaction_results  };
         (actual_harness, expected_harness, vec![rx_1, rx_2])
     }
 
@@ -600,20 +603,52 @@ mod harness_tests {
 
     #[test]
     #[ignore]
-    fn test_failure_writer() {
-        println!("{}", *LOG_FOLDER);
-        let (_actual_harness, _expected_harness, _receivers) = parse_harness();
-        let node_states = Arc::new(MutexNodeStates::new(NodeStates::new( vec![NodeState::new(0); 5])));
-        let mut ripple_message = RippleMessage::default();
-        ripple_message.from_node = "Ripple1".to_string();
-        ripple_message.to_node = "Ripple2".to_string();
-        node_states.add_execution(ripple_message);
-        node_states.add_validated_transaction(3, Transaction::default(), TransactionResultCode::TesSuccess);
-        let mut validated_ledger = crate::client::ValidatedLedger::default();
-        validated_ledger.ledger_hash = "LedgerHash".to_string();
-        validated_ledger.txn_count = 1;
-        node_states.set_validated_ledger(2, validated_ledger);
-        let current_individual: DelayMapPhenotype = DelayMapPhenotype::from_genes(&vec![100u32; num_genes()]);
-        node_states.set_current_individual(current_individual.display_genotype_by_message());
+    fn test_setup_balance() {
+        let (mut actual_harness, _expected_harness, receivers) = parse_harness();
+        let node_states = Arc::new(MutexNodeStates::new(NodeStates::new(vec![NodeState::new(0), NodeState::new(1)])));
+        let node_states_clone = node_states.clone();
+        let (balance_sender, balance_receiver) = channel();
+        actual_harness.balance_receiver = balance_receiver;
+        thread::spawn(move || {
+            for i in 0..3 {
+                match receivers[0].recv_timeout(Duration::from_secs(4)) {
+                    Ok(message) => balance_sender.send(u32::MAX).unwrap(),
+                    Err(_) => {}
+                }
+            }
+            match receivers[0].recv_timeout(Duration::from_secs(4)) {
+                Ok(_message) => balance_sender.send(10 * 10u32.pow(7)).unwrap(),
+                Err(_) => {}
+            }
+            match receivers[0].recv_timeout(Duration::from_secs(4)) {
+                Ok(message) => match OwnedMessage::from(message) {
+                    websocket::OwnedMessage::Text(text) => {
+                        let v: Value = match serde_json::from_str(text.as_str()) {
+                            Ok(v) => v,
+                            _ => {
+                                node_states_clone.add_validated_transaction(0, Transaction::default(), TransactionResultCode::TesSuccess);
+                                node_states_clone.add_validated_transaction(1, Transaction::default(), TransactionResultCode::TesSuccess);
+                                panic!("oh je");
+                            }
+                        };
+                        match serde_json::from_value::<Transaction>(v["tx_json"].clone()) {
+                            Ok(transaction) => {
+                                node_states_clone.add_validated_transaction(0, transaction.clone(), TransactionResultCode::TesSuccess);
+                                node_states_clone.add_validated_transaction(1, transaction.clone(), TransactionResultCode::TesSuccess);
+                                assert_eq!(transaction.data.as_ref().unwrap().amount, (90 * 10u32.pow(7) + 20).to_string());
+                            },
+                            Err(e) => println!("{:?}, {}", v, e)
+                        };
+                    }
+                    _ => {}
+                }
+                Err(_) => {}
+            }
+            node_states_clone.add_validated_transaction(0, Transaction::default(), TransactionResultCode::TesSuccess);
+            node_states_clone.add_validated_transaction(1, Transaction::default(), TransactionResultCode::TesSuccess);
+        });
+        actual_harness.setup_balances(&node_states.clone());
+
+        assert!(actual_harness.balance_receiver.try_recv().is_err());
     }
 }

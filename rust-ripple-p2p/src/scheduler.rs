@@ -283,8 +283,8 @@ pub trait Scheduler: Sized {
             let first_validated_ledger = *ledger_number;
             println!("Waiting for network stabilization");
             ledger_cvar.wait(&mut ledger_number);
-            // If another ledger has been validated, continue
-            if *ledger_number > first_validated_ledger {
+            // If another ledger has been validated and the ledgers have caught up, continue
+            if *ledger_number > *round_lock.lock() - 2 {
                 drop(ledger_number);
                 let mut round_number = round_lock.lock();
                 let first_round = *round_number;

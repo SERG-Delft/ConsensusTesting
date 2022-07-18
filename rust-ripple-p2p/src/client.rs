@@ -111,7 +111,10 @@ impl Client<'static> {
                                         Ok(account_info) => balance_sender.send(account_info.account_data.balance.parse::<u32>()
                                             .expect("Balance from client not u32"))
                                             .expect("Scheduler account info receiver hung up"),
-                                        Err(err) => error!("Could not parse account info object: {}", err)
+                                        Err(err) => {
+                                            error!("Could not parse account info object: {}. Sending max u32 and retrying. {}", value, err);
+                                            balance_sender.send(u32::MAX).expect("Scheduler account info receiver hung up")
+                                        }
                                     }
                                     None => match serde_json::from_value::<SubscriptionObject>(value) {
                                         Ok(subscription_object) => {
@@ -119,7 +122,7 @@ impl Client<'static> {
                                         },
                                         Err(_) => { warn!("Could not parse peer{} subscription object: {}", peer, text); }
                                     },
-                                    _ => {}
+                                    _ => warn!("Unknown client command")
                                 }
                             },
                             _ => { warn!("Unknown client message from peer: {}", peer) }

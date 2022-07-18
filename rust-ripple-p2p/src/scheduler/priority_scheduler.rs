@@ -48,8 +48,8 @@ impl PriorityScheduler {
                 let inbox_size = inbox.len();
                 // rate changes
                 if inbox_size > (target_inbox_size + rate_change_percentage * target_inbox_size) as usize {
-                        rate = (rate * sensitivity_ratio).min(num_genes() as f64 * 1.0f64);
-                        trace!("size: {}, Increasing rate to {}", inbox_size, rate);
+                    rate = (rate * sensitivity_ratio).min(num_genes() as f64 * 1.0f64);
+                    trace!("size: {}, Increasing rate to {}", inbox_size, rate);
                 } else if inbox_size < (target_inbox_size - rate_change_percentage * target_inbox_size) as usize {
                     trace!("size: {}, Decreasing rate to {}", inbox_size, rate);
                     rate = (rate / sensitivity_ratio).max(num_genes() as f64 / 6f64);

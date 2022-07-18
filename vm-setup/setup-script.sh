@@ -9,7 +9,6 @@ docker network create ripple-net
 docker pull mvanmeerten/rippled-bug-benchmark:$1
 #5. Install rustup: 
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-export PATH="$HOME/.cargo/bin:$PATH"
 #6. Build dependencies
 sudo apt-get update
 sudo apt install build-essential checkinstall zlib1g-dev pkg-config libssl-dev -y
@@ -25,6 +24,7 @@ sudo ldconfig -v
 sudo mv /usr/bin/c_rehash /usr/bin/c_rehash.backup
 sudo mv /usr/bin/openssl /usr/bin/openssl.backup
 export PATH="/usr/local/ssl/bin:$PATH"
+export PATH="$HOME/.cargo/bin:$PATH"
 #8. Build DisCoTest:
 cargo build --release --manifest-path=/root/snap/lxd/current/ConsensusTesting/rust-ripple-p2p/Cargo.toml
 #9. Run experiment:
