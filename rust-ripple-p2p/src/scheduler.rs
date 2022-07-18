@@ -280,7 +280,6 @@ pub trait Scheduler: Sized {
         // Every loop is one execution of the test harness
         loop {
             let mut ledger_number = ledger_lock.lock();
-            let first_validated_ledger = *ledger_number;
             println!("Waiting for network stabilization");
             ledger_cvar.wait(&mut ledger_number);
             // If another ledger has been validated and the ledgers have caught up, continue
