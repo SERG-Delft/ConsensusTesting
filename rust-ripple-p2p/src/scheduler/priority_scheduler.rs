@@ -22,9 +22,9 @@ pub struct PriorityScheduler {
 }
 
 impl PriorityScheduler {
-    /// Execute events every t seconds based on size of the inbox.
+    /// Execute events every 1 / rate seconds based on size of the inbox.
     /// Do we have a target size of the inbox? ~30 (10% of the different types of events maybe?)
-    /// How to determine base t? 1/(num_nodes * num_nodes-1) = 1 / 20? We assume a node broadcasts one message per second
+    /// How to determine base rate -> Compare capability to delay scheduling
     /// If inbox reaches 150% of desired capacity, increase rate (decrease t) by 10%? t / 1.1
     /// If inbox reaches 50% of desired capacity, decrease rate (increase t) by 10%? t * 1.1
     fn inbox_controller(
@@ -36,9 +36,9 @@ impl PriorityScheduler {
         let sleeper = SpinSleeper::default();
         let mut inbox = PriorityQueue::<RMOEvent, usize, DefaultHashBuilder>::with_default_hasher();
         let mut rate = 0.5 * num_genes() as f64; // Rate at which events are executed from the queue. Base rate of num_genes / second -> too low?
-        let target_inbox_size = 0.2 * num_genes() as f64; // Target inbox size of 10% of the events mapped -> higher?
-        let sensitivity_ratio = 1.01; // Change rate by 3% at a time
-        let rate_change_percentage = 0.5; // 50% less or more than desired size of inbox
+        let target_inbox_size = 0.2 * num_genes() as f64; // Target inbox size of x% of the events mapped -> higher?
+        let sensitivity_ratio = 1.01; // Change rate by s at a time
+        let rate_change_percentage = 0.5; // x% less or more than desired size of inbox
         loop {
             while let Ok(ordered_event) = inbox_rx.try_recv() {
                 let priority = ordered_event.priority;

@@ -111,7 +111,7 @@ impl Collector {
                         match &message.message {
                             TMProposeSet(tm_propose) => {
                                 node_states.set_highest_propose_seq(tm_propose.get_proposeSeq(), message.sender_index());
-                                if tm_propose.get_proposeSeq() >= 2 { error!("{}", message.to_string()) }
+                                if tm_propose.get_proposeSeq() >= 3 { error!("{}", message.to_string()) }
                             },
                             _ => {},
                         }

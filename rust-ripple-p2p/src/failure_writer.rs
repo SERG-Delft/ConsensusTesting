@@ -43,6 +43,9 @@ impl FailureWriter {
                         serde_json::to_writer(&mut failure_writer.failure_writer, &failure).expect("Failed writing to failure file");
                         if let Some(target_consensus_property) = &CONFIG.rippled_version.termination_condition() {
                             if failure.consensus_properties_violated.contains(target_consensus_property) {
+                                if target_consensus_property == &ConsensusPropertyTypes::Termination && failure_writer.node_states.get_highest_propose_seq().0 < 4 {
+                                    continue;
+                                }
                                 println!("Successfully found bug!");
                                 failure_writer.failure_writer.write_all(
                                     format!("Success after {} seconds", Utc::now() - start_time).as_bytes())

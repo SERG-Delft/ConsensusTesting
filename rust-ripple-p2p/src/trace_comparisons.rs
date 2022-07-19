@@ -281,7 +281,7 @@ impl<F: ExtendedFitness> PreDeterminedDelaySchedulerHandler<F> {
     }
 
     pub fn run(&mut self) {
-        let delays: Vec<u32> = Self::create_proposal_bug_delays();
+        let delays: Vec<u32> = Self::create_liveness_bug_delays();
         for i in 0..self.number_of_tests {
             println!("Starting test {}", i);
             self.scheduler_sender.send(DelayMapPhenotype::from_genes(&delays)).expect("Scheduler receiver failed");
@@ -299,8 +299,8 @@ impl<F: ExtendedFitness> PreDeterminedDelaySchedulerHandler<F> {
         let ledger_data_index = 12;
         let get_ledger_index = 11;
         let transaction_index = 9;
-        let ledger_data_delay = 6000;
-        let get_ledger_delay = 0;
+        let ledger_data_delay = 3000;
+        let get_ledger_delay = 3000;
         let transaction_delay = 0;
         for i in 0..*NUM_NODES {
             for (j, _) in chain(0..i, i+1..*NUM_NODES).enumerate() {

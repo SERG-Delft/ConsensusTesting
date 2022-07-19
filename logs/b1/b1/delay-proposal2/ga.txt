@@ -1,0 +1,24 @@
+{
+  "population_size": 4,
+  "generation_limit": 5,
+  "num_individuals_per_parents": 2,
+  "num_crossover_points": 13,
+  "mutation_rate": 0.05,
+  "mutation_std": 40.0,
+  "reinsertion_ratio": 0.0,
+  "min_value": 0,
+  "max_value": 4000,
+  "num_genes": 260,
+  "selection_operator": {
+    "mu": 4,
+    "lambda": 4,
+    "num_individuals_per_parents": 2
+  },
+  "crossover_operator": {
+    "crossover_probability": 0.5,
+    "min_value": 0,
+    "max_value": 4000
+  },
+  "stupid_type_system": null,
+  "stupid_type_system_2": null
+}

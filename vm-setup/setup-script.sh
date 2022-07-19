@@ -25,6 +25,7 @@ sudo mv /usr/bin/c_rehash /usr/bin/c_rehash.backup
 sudo mv /usr/bin/openssl /usr/bin/openssl.backup
 export PATH="/usr/local/ssl/bin:$PATH"
 export PATH="$HOME/.cargo/bin:$PATH"
+export RUST_LOG=debug
 #8. Build DisCoTest:
 cargo build --release --manifest-path=/root/snap/lxd/current/ConsensusTesting/rust-ripple-p2p/Cargo.toml
 #9. Run experiment:
