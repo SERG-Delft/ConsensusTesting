@@ -44,7 +44,11 @@ impl FailureWriter {
                         if let Some(target_consensus_property) = &CONFIG.rippled_version.termination_condition() {
                             if failure.consensus_properties_violated.contains(target_consensus_property) {
                                 if target_consensus_property == &ConsensusPropertyTypes::Termination && failure_writer.node_states.get_highest_propose_seq().0 < 4 {
-                                    continue;
+                                    if Utc::now() - start_time > CONFIG.search_budget {
+                                        std::process::exit(0);
+                                    } else {
+                                        continue;
+                                    }
                                 }
                                 println!("Successfully found bug!");
                                 failure_writer.failure_writer.write_all(
