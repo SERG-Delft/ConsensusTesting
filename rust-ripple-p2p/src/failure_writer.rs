@@ -11,6 +11,7 @@ use crate::client::{Transaction, ValidatedLedger};
 use crate::collector::RippleMessage;
 use crate::node_state::{DependencyEvent, MutexNodeStates};
 use crate::{CONFIG, LOG_FOLDER};
+use crate::container_manager::check_logs_for_b1;
 use crate::test_harness::TransactionResultCode;
 
 /// Struct responsible for writing state to failure file in case of consensus property violation
@@ -47,6 +48,15 @@ impl FailureWriter {
                                     if Utc::now() - start_time > CONFIG.search_budget {
                                         std::process::exit(0);
                                     } else {
+                                        continue;
+                                    }
+                                } else if target_consensus_property == &ConsensusPropertyTypes::Agreement1 {
+                                    let test_start_time = {
+                                        failure_writer.node_states.node_states.lock().test_start_time.clone()
+                                    };
+                                    let duration = Utc::now() - test_start_time;
+                                    let hit_bug = check_logs_for_b1(duration);
+                                    if !hit_bug {
                                         continue;
                                     }
                                 }

@@ -4,12 +4,12 @@ import scipy.stats as stats
 # found
 # not found
 
-b1_delay_proposal = [10, 0]
-b1_delay_time = [10, 0]
-b1_delay_rand = [10, 0]
-b1_priority_proposal = [6, 4]
-b1_priority_time = [8, 2]
-b1_priority_rand = [8, 2]
+b1_delay_proposal = [10, 0] # [10, 0]
+b1_delay_time = [10, 0] # [10, 0]
+b1_delay_rand = [10, 0] # [10, 0]
+b1_priority_proposal = [6, 4] # [9, 1]
+b1_priority_time = [8, 2] # [8, 2]
+b1_priority_rand = [8, 2] # [7, 3]
 
 b2_delay_proposal = [5, 5]
 b2_delay_rand = [1, 5]

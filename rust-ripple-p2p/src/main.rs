@@ -373,7 +373,8 @@ mod config_tests {
         }
         let scheduler_types = [SchedulerType::Delay, SchedulerType::Priority];
         let fitness_functions = [FitnessFunctionType::ProposalFitness, FitnessFunctionType::TimeFitness];
-        let bugs = [RippledVersion::ValidationBug, RippledVersion::LivenessBug, RippledVersion::ProposalBug];
+        // let bugs = [RippledVersion::ValidationBug, RippledVersion::LivenessBug, RippledVersion::ProposalBug];
+        let bug = [RippledVersion::ProposalBug];
         let mut configurations = vec![];
         for bug in bugs {
             configurations.push(Configuration {
@@ -383,7 +384,7 @@ mod config_tests {
                 scheduler_type: SchedulerType::RandomDelay,
                 fitness_function: FitnessFunctionType::TimeFitness,
                 search_budget: chrono::Duration::seconds(3600),
-                create_ripple_log_folders: false
+                create_ripple_log_folders: true
             });
             configurations.push(Configuration {
                 num_nodes: 5,
@@ -392,7 +393,7 @@ mod config_tests {
                 scheduler_type: SchedulerType::RandomPriority,
                 fitness_function: FitnessFunctionType::TimeFitness,
                 search_budget: chrono::Duration::seconds(3600),
-                create_ripple_log_folders: false
+                create_ripple_log_folders: true
             });
             for scheduler_type in &scheduler_types {
                 for fitness_function in &fitness_functions {
@@ -403,7 +404,7 @@ mod config_tests {
                         scheduler_type: scheduler_type.clone(),
                         fitness_function: fitness_function.clone(),
                         search_budget: chrono::Duration::seconds(3600),
-                        create_ripple_log_folders: false
+                        create_ripple_log_folders: true
                     };
                     configurations.push(config);
                 }

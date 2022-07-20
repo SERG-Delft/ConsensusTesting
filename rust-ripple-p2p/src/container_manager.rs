@@ -5,11 +5,11 @@ use std::io::Write;
 use std::path::Path;
 use std::process::Command;
 use std::time::Duration;
-
+use itertools::Itertools;
 use log::{debug, error};
 use rayon::prelude::*;
 use serde::{Deserialize};
-use crate::{CONFIG, LOG_FOLDER};
+use crate::{CONFIG, LOG_FOLDER, NUM_NODES};
 
 #[allow(unused)]
 pub fn start_docker_containers(peers: usize, unls: Vec<Vec<usize>>, image_name: &str) -> Vec<NodeKeys> {
@@ -169,6 +169,23 @@ pub fn create_account() -> AccountKeys {
     result.result
 }
 
+/// Check the logs of the validator to detect old proposal overwrite
+pub fn check_logs_for_b1(test_case_duration: chrono::Duration) -> bool {
+    (0..*NUM_NODES).into_par_iter().map(|i| {
+        let output = Command::new("docker").arg("logs")
+            .args(["--since", &format!("{}s",test_case_duration.num_seconds())])
+            .arg(format!("validator_{}", i)).output();
+        match output {
+            Ok(output) => {
+                let logs_string = std::str::from_utf8(&output.stdout).expect("parse utf8 error getting logs for b1 bug check");
+                return logs_string.contains("old proposal");
+            },
+            Err(err) => error!("Error getting logs for b1 bug check: {}", err),
+        }
+        false
+    }).any(|x| x)
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct AccountKeys {
     pub account_id: String,
@@ -178,4 +195,19 @@ pub struct AccountKeys {
 #[derive(Deserialize)]
 pub struct AccountKeysResult {
     result: AccountKeys
+}
+
+#[cfg(test)]
+mod container_tests {
+    use chrono::{Duration, Utc};
+    use crate::container_manager::check_logs_for_b1;
+    use crate::NUM_NODES;
+
+    #[test]
+    fn test_logs_for_b1() {
+        let _num_nodes = *NUM_NODES;
+        let now = Utc::now();
+        dbg!(check_logs_for_b1(Duration::seconds(30)));
+        dbg!(Utc::now() - now);
+    }
 }

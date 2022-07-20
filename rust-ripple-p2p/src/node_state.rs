@@ -80,6 +80,7 @@ pub struct NodeStates {
     pub highest_propose_seq: u32,
     pub bow_outs: u32,
     pub harness_transactions: Vec<TransactionTimed>,
+    pub test_start_time: chrono::DateTime<Utc>,
 }
 
 impl NodeStates {
@@ -96,6 +97,7 @@ impl NodeStates {
             highest_propose_seq: 0,
             bow_outs: 0,
             harness_transactions: vec![],
+            test_start_time: Utc::now(),
         }
     }
 
@@ -277,6 +279,7 @@ impl NodeStates {
             self.node_states[i].consensus_transaction_sets.clear();
             self.node_states[i].validated_ledgers.clear();
         }
+        self.test_start_time = Utc::now();
     }
 }
 

@@ -17,7 +17,7 @@ use crate::consensus_properties::ConsensusProperties;
 use crate::failure_writer::ConsensusPropertyTypes;
 use crate::test_harness::TestResult::{Failed, InProgress, Success};
 
-const MAX_EVENTS_TEST: usize = 10000;
+const MAX_EVENTS_TEST: usize = 6000;
 
 /// Struct containing transactions in the test harness.
 /// Transactions are created based on the contents of "harness.txt".

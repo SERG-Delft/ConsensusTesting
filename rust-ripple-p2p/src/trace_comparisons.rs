@@ -281,7 +281,7 @@ impl<F: ExtendedFitness> PreDeterminedDelaySchedulerHandler<F> {
     }
 
     pub fn run(&mut self) {
-        let delays: Vec<u32> = Self::create_liveness_bug_delays();
+        let delays: Vec<u32> = Self::create_proposal_bug_delays();
         for i in 0..self.number_of_tests {
             println!("Starting test {}", i);
             self.scheduler_sender.send(DelayMapPhenotype::from_genes(&delays)).expect("Scheduler receiver failed");
@@ -325,6 +325,7 @@ impl<F: ExtendedFitness> PreDeterminedDelaySchedulerHandler<F> {
         let propose_set_4_index = 4;
         let propose_set_5_index = 5;
         let propose_set_bowout_index = 6;
+        let ledger_data_index = 12;
         let propose_set_0_delay = 3000;
         let propose_set_1_delay = 1500;
         let propose_set_2_delay = 0;
@@ -332,7 +333,7 @@ impl<F: ExtendedFitness> PreDeterminedDelaySchedulerHandler<F> {
         let propose_set_4_delay = 0;
         let propose_set_5_delay = 0;
         let propose_set_bowout_delay = 0;
-        for i in [0, 1, 2, 3]{
+        for i in [1, 2, 3, 4] {
             for (j, _) in chain(0..i, i+1..*NUM_NODES).enumerate() {
                 delays[index_factor_1 * i + index_factor_2 * j + propose_set_0_index] = propose_set_0_delay;
                 delays[index_factor_1 * i + index_factor_2 * j + propose_set_1_index] = propose_set_1_delay;
@@ -341,6 +342,7 @@ impl<F: ExtendedFitness> PreDeterminedDelaySchedulerHandler<F> {
                 delays[index_factor_1 * i + index_factor_2 * j + propose_set_4_index] = propose_set_4_delay;
                 delays[index_factor_1 * i + index_factor_2 * j + propose_set_5_index] = propose_set_5_delay;
                 delays[index_factor_1 * i + index_factor_2 * j + propose_set_bowout_index] = propose_set_bowout_delay;
+                delays[index_factor_1 * i + index_factor_2 * j + ledger_data_index] = 3000;
             }
         }
         println!("{}", DelayMapPhenotype::from_genes(&delays).display_genotype_by_message());
