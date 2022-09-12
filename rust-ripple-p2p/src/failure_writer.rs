@@ -68,6 +68,7 @@ impl FailureWriter {
                                 std::process::exit(0);
                             }
                         }
+                        failure_writer.failure_writer.flush().unwrap();
                     }
                     Err(err) => {
                         error!("Failure channel failed: {}", err);

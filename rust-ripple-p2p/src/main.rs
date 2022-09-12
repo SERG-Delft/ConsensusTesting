@@ -373,8 +373,8 @@ mod config_tests {
         }
         let scheduler_types = [SchedulerType::Delay, SchedulerType::Priority];
         let fitness_functions = [FitnessFunctionType::ProposalFitness, FitnessFunctionType::TimeFitness];
-        // let bugs = [RippledVersion::ValidationBug, RippledVersion::LivenessBug, RippledVersion::ProposalBug];
-        let bug = [RippledVersion::ProposalBug];
+        let bugs = [RippledVersion::ValidationBug, RippledVersion::LivenessBug, RippledVersion::ProposalBug];
+        // let bug = [RippledVersion::ProposalBug];
         let mut configurations = vec![];
         for bug in bugs {
             configurations.push(Configuration {

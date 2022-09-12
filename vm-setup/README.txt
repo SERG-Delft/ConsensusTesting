@@ -26,10 +26,15 @@ Running experiments on VM
 	
 cd /root/snap/lxd/current	
 git clone --recurse-submodules https://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@github.com/SERG-Delft/ConsensusTesting
-ERROR_LOG=debug /root/snap/lxd/current/ConsensusTesting/rust-ripple-p2p/target/release/rust-ripple-p2p /root/snap/lxd/current/ConsensusTesting/vm-setup/configs/b1/delay-time.json test
+export ERROR_LOG=debug 
+/root/snap/lxd/current/ConsensusTesting/rust-ripple-p2p/target/release/rust-ripple-p2p /root/snap/lxd/current/ConsensusTesting/vm-setup/configs/b1/delay-time.json test
 bash /root/snap/lxd/current/ConsensusTesting/vm-setup/setup-script.sh [tag]
-tmux new -dsb1exp 'bash /root/snap/lxd/current/ConsensusTesting/vm-setup/run_all_experiments.sh 10 /root/snap/lxd/current/ConsensusTesting/vm-setup/configs b1'
+tmux new -dsb3exp 'bash /root/snap/lxd/current/ConsensusTesting/vm-setup/run_all_experiments.sh 10 /root/snap/lxd/current/ConsensusTesting/vm-setup/configs b3'
 
 grep -c -r Agreement2 snap/lxd/current/ConsensusTesting/logs/b2/*/failure_file.txt
+
+find . -name "*.json" -exec rm {} \;
+find . -name "*execution.txt" -exec rm {} \;
+find /root/snap/lxd/current/ConsensusTesting/logs/b3/ -name "*.json" -exec rm {} \;
 
 export RUST_LOG=debug

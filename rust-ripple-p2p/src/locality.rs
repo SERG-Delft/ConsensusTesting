@@ -321,6 +321,7 @@ mod tests {
     use ged::approximate_edit_distance::{approximate_hed_graph_edit_distance, DistanceScoring};
     use crate::locality::{delay_genotype_euclidean_distance, DelayGenotypePhenotypePair, priority_genotype_kendall_tau_distance, PriorityGenotypePhenotypePair, sample_delays_genotype, sample_n_distant_delay_genotypes, sample_n_distant_priority_genotypes, sample_n_neighbors_delay_genotypes, sample_n_neighbors_priority_genotypes, sample_priority_genotype};
     use crate::locality::EvaluationType::{BaseGenotype, NeighborGenotype};
+    use crate::scaling::{mean, std_deviation};
 
     #[test]
     fn test_euclidean_distance() {
@@ -527,6 +528,18 @@ mod tests {
             0.82108,
             0.81171054,
         ];
+        let priority_average_distances_3 = [
+            0.82152635,
+            0.82720023,
+            0.8396052,
+            0.8043841,
+            0.817204,
+            0.7763399,
+            0.78625625,
+            0.7787096,
+            0.7946863,
+            0.79405916,
+        ];
         let delay_average_distances = [
             0.8176409,
             0.82219493,
@@ -539,6 +552,18 @@ mod tests {
             0.8126539,
             0.81739885,
         ];
-        println!("Delay: {}, Priority: {}, Priority_2: {}", delay_average_distances.iter().sum::<f64>() / 10.0, priority_average_distances.iter().sum::<f64>() / 10.0, priority_average_distances_2.iter().sum::<f64>() / 10.0);
+        let delay_average_distances_2 = [
+            0.8068141,
+            0.82332516,
+            0.8018193,
+            0.7874603,
+            0.7145043,
+            0.76919544,
+            0.8036256,
+            0.7874316,
+            0.81357193,
+            0.8001444,
+        ];
+        println!("Delay: {} ({}),  Priority: {} ({})", mean(delay_average_distances_2.as_slice()).unwrap(), std_deviation(delay_average_distances_2.as_slice()).unwrap(), mean(priority_average_distances_3.as_slice()).unwrap(), std_deviation(priority_average_distances_3.as_slice()).unwrap());
     }
 }

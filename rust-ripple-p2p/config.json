@@ -1,1 +1,1 @@
-{"num_nodes":5,"unl_type":"Full","rippled_version":"ProposalBug","scheduler_type":"PredeterminedDelay","fitness_function": "ProposalFitness","search_budget": 3600,"create_ripple_log_folders": true}
+{"num_nodes":5,"unl_type":"Full","rippled_version":"ProposalBug","scheduler_type":"None","fitness_function": "ProposalFitness","search_budget": 3600,"create_ripple_log_folders": false}

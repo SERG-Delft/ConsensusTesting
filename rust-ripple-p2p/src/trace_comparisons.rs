@@ -248,14 +248,14 @@ impl<F: ExtendedFitness> NoDelaySchedulerHandler<F> {
         }
     }
 
-    pub fn run(&mut self) {
+    pub fn run(&mut self, search_budget: Duration) {
         let delays: Vec<u32> = vec![0; num_genes()];
-        for i in 0..self.number_of_tests {
-            println!("Starting test {}", i);
+        let start_time = Utc::now();
+        while Utc::now() - start_time < search_budget {
             self.scheduler_sender.send(DelayMapPhenotype::from_genes(&delays)).expect("Scheduler receiver failed");
             self.scheduler_receiver.recv().expect("Scheduler sender failed");
         }
-        println!("Finished run. exiting...");
+        println!("Search budget exceeded. exiting...");
         std::process::exit(0);
     }
 }
@@ -421,9 +421,9 @@ pub fn run_fitness_comparison<F: ExtendedFitness>(scheduler_sender: Sender<Delay
 }
 
 #[allow(unused)]
-pub fn run_no_delays<F: ExtendedFitness>(scheduler_sender: Sender<DelayMapPhenotype>, scheduler_receiver: Receiver<F>, number_of_tests: usize) {
-    let mut scheduler_handler = NoDelaySchedulerHandler::new(scheduler_sender, scheduler_receiver, number_of_tests);
-    thread::spawn(move || scheduler_handler.run());
+pub fn run_no_delays<F: ExtendedFitness>(scheduler_sender: Sender<DelayMapPhenotype>, scheduler_receiver: Receiver<F>, search_budget: Duration) {
+    let mut scheduler_handler = NoDelaySchedulerHandler::new(scheduler_sender, scheduler_receiver, 0);
+    thread::spawn(move || scheduler_handler.run(search_budget));
 }
 
 #[allow(unused)]

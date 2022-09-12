@@ -204,7 +204,7 @@ impl App {
             }
             SchedulerType::None => {
                 let ga_scheduler_sender = Self::start_scheduler::<DelayScheduler, DelayGenotype, DelayMapPhenotype, F>(scheduler_data);
-                threads.push(thread::spawn(|| run_no_delays(ga_scheduler_sender, scheduler_ga_receiver, 20)));
+                threads.push(thread::spawn(|| run_no_delays(ga_scheduler_sender, scheduler_ga_receiver,CONFIG.search_budget)));
             }
         }
 

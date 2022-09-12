@@ -122,6 +122,31 @@ pub fn run_priority_scaling_experiment<F: ExtendedFitness>(scheduler_sender: Sen
 	exp.create_random_schedules();
 }
 
+pub fn mean(data: &[f64]) -> Option<f64> {
+	let sum = data.iter().sum::<f64>();
+	let count = data.len();
+
+	match count {
+		positive if positive > 0 => Some(sum / count as f64),
+		_ => None,
+	}
+}
+
+pub fn std_deviation(data: &[f64]) -> Option<f64> {
+	match (mean(data), data.len()) {
+		(Some(data_mean), count) if count > 0 => {
+			let variance = data.iter().map(|value| {
+				let diff = data_mean - (*value as f64);
+
+				diff * diff
+			}).sum::<f64>() / count as f64;
+
+			Some(variance.sqrt())
+		},
+		_ => None
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use std::collections::HashMap;
@@ -130,37 +155,13 @@ mod tests {
 	use itertools::Itertools;
 	use petgraph::Graph;
 	use crate::node_state::MessageTypeDependencyEvent;
+	use crate::scaling::{mean, std_deviation};
 
 	fn import_schedules() -> Vec<Graph<MessageTypeDependencyEvent, ()>> {
 		let file = fs::File::open("scaling.txt")
 			.expect("Something went wrong opening the file");
 		let mut reader = BufReader::new(file);
 		serde_json::from_reader(&mut reader).unwrap()
-	}
-
-	fn mean(data: &[f64]) -> Option<f64> {
-		let sum = data.iter().sum::<f64>();
-		let count = data.len();
-
-		match count {
-			positive if positive > 0 => Some(sum / count as f64),
-			_ => None,
-		}
-	}
-
-	fn std_deviation(data: &[f64]) -> Option<f64> {
-		match (mean(data), data.len()) {
-			(Some(data_mean), count) if count > 0 => {
-				let variance = data.iter().map(|value| {
-					let diff = data_mean - (*value as f64);
-
-					diff * diff
-				}).sum::<f64>() / count as f64;
-
-				Some(variance.sqrt())
-			},
-			_ => None
-		}
 	}
 
 	#[test]

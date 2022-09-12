@@ -1,0 +1,1 @@
+{"num_nodes":5,"unl_type":"Full","rippled_version":"Fixed","scheduler_type":"PriorityLocalityExperiment","fitness_function": "TimeFitness","search_budget": 36000,"create_ripple_log_folders": false}
