@@ -54,14 +54,14 @@ impl App {
         shutdown_rx: Receiver<(HashMap<usize, String>, usize, String)>
     ) -> EmptyResult {
         let mut tokio_tasks = vec![];
-        let (collector_tx, collector_rx) = std::sync::mpsc::channel();
+        let (collector_tx, collector_rx) = tokio::sync::mpsc::channel(32);
         let (_control_tx, control_rx) = std::sync::mpsc::channel();
-        let (subscription_tx, subscription_rx) = std::sync::mpsc::channel();
+        let (subscription_tx, subscription_rx) = tokio::sync::mpsc::channel(32);
         let (collector_state_tx, scheduler_state_rx) = std::sync::mpsc::channel();
         let peer = self.peers.clone();
         // Start the collector which writes output to files
         let collector_task = tokio::spawn(async move {
-            Collector::new(peer, collector_rx, subscription_rx, control_rx, collector_state_tx).start();
+            Collector::new(peer, collector_rx, subscription_rx, control_rx, collector_state_tx).start().await;
         });
         tokio_tasks.push(collector_task);
 
@@ -176,7 +176,8 @@ impl App {
 
         scheduler_thread.await.expect("could not await scheduler thread");
 
-        _control_tx.send("stop".to_string()).unwrap();
+        //TODO reimplement sending control signals
+        // _control_tx.send("stop".to_string()).unwrap();
 
         for tokio_task in tokio_tasks {
             tokio_task.abort();

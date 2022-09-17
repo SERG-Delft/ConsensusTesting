@@ -28,11 +28,11 @@ pub struct Client<'a> {
     peer: u16,
     pub sender_channel: Sender<Message<'a>>,
     send_loop: JoinHandle<()>,
-    receive_loop: JoinHandle<()>
+    receive_loop: tokio::task::JoinHandle<()>
 }
 
 impl Client<'static> {
-    pub fn new(peer: u16, connection: &str, subscription_collector_sender: Sender<PeerSubscriptionObject>) -> Self {
+    pub fn new(peer: u16, connection: &str, subscription_collector_sender: tokio::sync::mpsc::Sender<PeerSubscriptionObject>) -> Self {
         let client = ClientBuilder::new(connection)
             .unwrap()
             .connect_insecure()
@@ -72,7 +72,7 @@ impl Client<'static> {
         // println!("{}", connection);
         let sender_clone = tx.clone();
         let is_byzantine = connection.ends_with("8");
-        let receive_loop = thread::spawn(move || {
+        let receive_loop = tokio::spawn(async move {
             // Receive loop
             for message in receiver.incoming_messages() {
                 let message = match message {
@@ -103,7 +103,7 @@ impl Client<'static> {
                                     }
                                     _ => ()
                                 }
-                                subscription_collector_sender.send(PeerSubscriptionObject::new(peer, subscription_object)).unwrap()
+                                subscription_collector_sender.send(PeerSubscriptionObject::new(peer, subscription_object)).await.unwrap()
                             },
                             Err(_) => { warn!("Could not parse") }
                         }
@@ -125,9 +125,9 @@ impl Client<'static> {
     }
 
     #[allow(unused)]
-    pub fn start(self) {
+    pub async fn start(self) {
         self.send_loop.join().unwrap();
-        self.receive_loop.join().unwrap();
+        self.receive_loop.await.unwrap();
     }
 
     #[allow(unused)]
@@ -354,6 +354,7 @@ pub enum SubscriptionObject {
     ConsensusChange(ConsensusChange)
 }
 
+#[derive(Debug)]
 pub struct PeerSubscriptionObject {
     pub peer: u16,
     pub subscription_object: SubscriptionObject

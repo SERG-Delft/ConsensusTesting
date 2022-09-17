@@ -35,7 +35,7 @@ type P2PConnections = HashMap<usize, HashMap<usize, PeerChannel>>;
 
 pub struct Scheduler {
     p2p_connections: P2PConnections,
-    collector_sender: STDSender<Box<RippleMessage>>,
+    collector_sender: TokioSender<Box<RippleMessage>>,
     stable: Arc<Mutex<bool>>,
     latest_validated_ledger: Arc<Mutex<u32>>,
     byzz_fuzz: ByzzFuzz,
@@ -47,7 +47,7 @@ pub struct Scheduler {
 impl Scheduler {
     pub fn new(
         p2p_connections: P2PConnections,
-        collector_sender: STDSender<Box<RippleMessage>>,
+        collector_sender: TokioSender<Box<RippleMessage>>,
         byzz_fuzz: ByzzFuzz,
         mut shutdown_tx: Sender<(HashMap<usize, String>, usize, String)>,
         shutdown_rx: Receiver<(HashMap<usize, String>, usize, String)>,
@@ -135,6 +135,7 @@ impl Scheduler {
         );
         self.collector_sender
             .send(collector_message)
+            .await
             .expect("Collector receiver failed");
         (true, "everything good")
     }

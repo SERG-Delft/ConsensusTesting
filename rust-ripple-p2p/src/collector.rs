@@ -18,8 +18,8 @@ use crate::message_handler::RippleMessageObject;
 /// Execution file stores all messages sent from the proxy
 /// Subscription file stores all subscription messages received from the client
 pub struct Collector {
-    ripple_message_receiver: Receiver<Box<RippleMessage>>,
-    subscription_receiver: Receiver<PeerSubscriptionObject>,
+    ripple_message_receiver: tokio::sync::mpsc::Receiver<Box<RippleMessage>>,
+    subscription_receiver: tokio::sync::mpsc::Receiver<PeerSubscriptionObject>,
     control_receiver: Receiver<String>,
     scheduler_sender: Sender<PeerSubscriptionObject>,
     execution_file: BufWriter<File>,
@@ -29,8 +29,8 @@ pub struct Collector {
 impl Collector {
     pub fn new(
         number_of_nodes: u16,
-        ripple_message_receiver: Receiver<Box<RippleMessage>>,
-        subscription_receiver: Receiver<PeerSubscriptionObject>,
+        ripple_message_receiver: tokio::sync::mpsc::Receiver<Box<RippleMessage>>,
+        subscription_receiver: tokio::sync::mpsc::Receiver<PeerSubscriptionObject>,
         control_receiver: Receiver<String>,
         scheduler_sender: Sender<PeerSubscriptionObject>
     ) -> Self {
@@ -51,31 +51,50 @@ impl Collector {
         }
     }
 
-    pub fn start(&mut self) {
-        loop {
+    pub async fn start(mut self) {
+        {
+            //TODO reimplement
             // Stop writing to file if any control message is received
             // Can be extended to start writing to file later
-            if self.control_receiver.try_recv().is_ok() {
-                break;
-            }
-            if let Ok(mut message) = self.ripple_message_receiver.try_recv() {
-                self.write_to_file(&mut message);
-            }
-            if let Ok(subscription_object) = self.subscription_receiver.try_recv() {
-                match &subscription_object.subscription_object {
-                    SubscriptionObject::ValidatedLedger(ledger) => {
-                        println!("Ledger {} is validated with {} txns and {} hash", ledger.ledger_index, ledger.txn_count, ledger.ledger_hash);
-                        self.write_to_subscription_file(subscription_object.peer, json!({"LedgerValidated": ledger}).to_string());
-                        self.scheduler_sender.send(subscription_object).expect("Scheduler send failed");
+            // if self.control_receiver.try_recv().is_ok() {
+            //     break;
+            // }
+            
+            let mut ripple_message_receiver = self.ripple_message_receiver;
+            let mut execution_file = self.execution_file;
+            tokio::spawn(async move {
+                loop {
+                    if let Some(message) = ripple_message_receiver.recv().await {
+                        execution_file.write_all(message.to_string().as_bytes()).unwrap();
                     }
-                    SubscriptionObject::ReceivedValidation(validation) =>
-                        self.write_to_subscription_file(subscription_object.peer, json!({"ValidationReceived": validation}).to_string()),
-                    SubscriptionObject::PeerStatusChange(peer_status) =>
-                        self.write_to_subscription_file(subscription_object.peer, json!({"PeerStatus": peer_status}).to_string()),
-                    SubscriptionObject::ConsensusChange(consensus_change) =>
-                        self.write_to_subscription_file(subscription_object.peer, json!({"ConsensusChange": consensus_change}).to_string())
                 }
-            }
+            });
+
+            let mut subscription_receiver = self.subscription_receiver;
+            let scheduler_sender = self.scheduler_sender;
+            let mut subscription_files = self.subscription_files;
+            tokio::spawn(async move {
+                let mut write_to_subscription_file = |peer: u16, text: String| {
+                    subscription_files[peer as usize].write_all((text + ",\n").as_bytes()).unwrap();
+                };
+                loop {
+                    if let Some(subscription_object) = subscription_receiver.recv().await {
+                        match &subscription_object.subscription_object {
+                            SubscriptionObject::ValidatedLedger(ledger) => {
+                                println!("Ledger {} is validated with {} txns and {} hash", ledger.ledger_index, ledger.txn_count, ledger.ledger_hash);
+                                write_to_subscription_file(subscription_object.peer, json!({"LedgerValidated": ledger}).to_string());
+                                scheduler_sender.send(subscription_object).expect("Scheduler send failed");
+                            }
+                            SubscriptionObject::ReceivedValidation(validation) =>
+                                write_to_subscription_file(subscription_object.peer, json!({"ValidationReceived": validation}).to_string()),
+                            SubscriptionObject::PeerStatusChange(peer_status) =>
+                                write_to_subscription_file(subscription_object.peer, json!({"PeerStatus": peer_status}).to_string()),
+                            SubscriptionObject::ConsensusChange(consensus_change) =>
+                                write_to_subscription_file(subscription_object.peer, json!({"ConsensusChange": consensus_change}).to_string())
+                        }
+                    }
+                }
+            });
         }
     }
 
@@ -88,6 +107,7 @@ impl Collector {
     }
 }
 
+#[derive(Debug)]
 pub struct RippleMessage {
     from_node: String,
     to_node: String,
