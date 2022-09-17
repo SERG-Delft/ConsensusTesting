@@ -19,7 +19,6 @@ mod byzzfuzz;
 mod client;
 mod collector;
 mod container_manager;
-mod crypto;
 mod deserialization;
 mod message_handler;
 mod peer_connection;
@@ -61,7 +60,6 @@ fn main() {
     // let args: Vec<String> = env::args().collect();
     let n: usize = args.n;
     let toxiproxypath = &args.toxiproxy_path;
-    let only_subscribe = false;
 
     env_logger::Builder::new().parse_default_env().init();
 
@@ -81,6 +79,14 @@ fn main() {
                              // vec![1, 2, 3, 4, 5, 6], // 4
                              // vec![1, 2, 3, 4, 5, 6], // 5
                              // vec![1, 2, 3, 4, 5, 6], // 6
+
+                             // vec![0, 1, 2, 3, 4, 5, 6], // 0
+                             // vec![0, 1, 2, 3, 4, 5, 6], // 1
+                             // vec![0, 1, 2, 3, 4, 5, 6], // 2
+                             // vec![0, 1, 2, 3, 4, 5, 6], // 3
+                             // vec![0, 1, 2, 3, 4, 5, 6], // 4
+                             // vec![0, 1, 2, 3, 4, 5, 6], // 5
+                             // vec![0, 1, 2, 3, 4, 5, 6], // 6
 
                              // // config 1.5
                              // vec![0, 1, 2, 3, 7], // 0
@@ -114,7 +120,11 @@ fn main() {
         if args.baseline {
             "baseline"
         } else {
-            if args.any_scope { "any-scope" } else { "small-scope" }
+            if args.any_scope {
+                "any-scope"
+            } else {
+                "small-scope"
+            }
         },
         crate_version!()
     );
@@ -122,14 +132,14 @@ fn main() {
     let mut file = fs::OpenOptions::new()
         .write(true)
         .append(true)
-        .create(true)// This is needed to append to file
+        .create(true) // This is needed to append to file
         .open(format!("results-{}", &execution_string))
         .unwrap();
 
     loop {
         let runtime = tokio::runtime::Runtime::new().unwrap();
 
-        let (shutdown_tx, mut shutdown_rx) = broadcast::channel(16);
+        let (shutdown_tx, shutdown_rx) = broadcast::channel(16);
         let mut results = shutdown_rx.resubscribe();
 
         let mut toxiproxy = Command::new(toxiproxypath)
@@ -161,9 +171,9 @@ fn main() {
             &byzz_fuzz.network_faults
         ))
         .expect("could not log byzzfuzz");
-        let app = app::App::new(n as u16, only_subscribe, node_keys);
+        let app = app::App::new(n as u16, node_keys);
 
-        if let Err(error) = runtime.block_on(app.start(byzz_fuzz, shutdown_tx, shutdown_rx)) {
+        if let Err(error) = runtime.block_on(app.start(byzz_fuzz, shutdown_tx)) {
             error!("Error: {}", error);
         }
 
@@ -185,11 +195,6 @@ fn main() {
                 ),
             )
             .unwrap();
-
-            // toxiproxy.kill().unwrap();
-            // runtime.shutdown_timeout(Duration::from_millis(100));
-
-            // std::process::exit(0);
         }
 
         toxiproxy.kill().unwrap();

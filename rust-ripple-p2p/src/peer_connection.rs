@@ -1,21 +1,19 @@
-use log::*;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use crate::scheduler::Event;
+use byteorder::{BigEndian, ByteOrder};
 use bytes::{Buf, BytesMut};
+use log::*;
 use openssl::ssl::{Ssl, SslContext, SslMethod};
 use secp256k1::{Message as CryptoMessage, Secp256k1, SecretKey};
 use sha2::{Digest, Sha512};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::macros::support::Pin;
 use tokio::net::TcpStream;
 use tokio::task::JoinHandle;
 use tokio_openssl::SslStream;
-use byteorder::{BigEndian, ByteOrder};
-use crate::scheduler::Event;
 
 pub struct PeerConnection {
     name: String,
-    address1: SocketAddr,
-    address2: SocketAddr,
     private_key1: String,
     private_key2: String,
     public_key1: String,
@@ -25,20 +23,22 @@ pub struct PeerConnection {
 impl PeerConnection {
     pub fn new(
         name: &str,
-        address1: SocketAddr,
-        address2: SocketAddr,
         private_key1: String,
         private_key2: String,
         public_key1: String,
         public_key2: String,
     ) -> Self {
-        PeerConnection { name: String::from(name), address1, address2, private_key1,
-            private_key2, public_key1, public_key2 }
+        PeerConnection {
+            name: String::from(name),
+            private_key1,
+            private_key2,
+            public_key1,
+            public_key2,
+        }
     }
 
     /// Create SSLStream to the validator at address using the identity of the key pair
     async fn connect_to_peer(
-        address: SocketAddr,
         private_key: &str,
         public_key: &str,
         peer1: usize,
@@ -50,13 +50,15 @@ impl PeerConnection {
         );
         let stream = match TcpStream::connect(proxy_address).await {
             Ok(tcp_stream) => tcp_stream,
-            Err(e) => panic!("{}", e)
+            Err(e) => panic!("{}", e),
         };
         stream.set_nodelay(true).expect("Set nodelay failed");
         let ctx = SslContext::builder(SslMethod::tls()).unwrap().build();
         let ssl = Ssl::new(&ctx).unwrap();
         let mut ssl_stream = SslStream::<TcpStream>::new(ssl, stream).unwrap();
-        SslStream::connect(Pin::new(&mut ssl_stream)).await.expect("Ssl connection failed");
+        SslStream::connect(Pin::new(&mut ssl_stream))
+            .await
+            .expect("Ssl connection failed");
         let ss = ssl_stream.ssl();
 
         let mut buf = Vec::<u8>::with_capacity(4096);
@@ -84,11 +86,10 @@ impl PeerConnection {
             .collect::<Vec<u8>>();
         let msg = CryptoMessage::from_slice(&Sha512::digest(&mix[..])[0..32]).unwrap();
 
-
         let key = &Sha512::digest(private_key.as_bytes())[0..32];
         let secp = Secp256k1::new();
         let sk = SecretKey::from_slice(key).unwrap();
-        let sig = secp.sign(&msg, &sk).serialize_der();
+        let sig = secp.sign_ecdsa(&msg, &sk).serialize_der();
         let b64sig = base64::encode(&sig);
 
         let content = format!(
@@ -102,12 +103,18 @@ impl PeerConnection {
             \r\n",
             public_key, b64sig
         );
-        ssl_stream.write_all(content.as_bytes()).await.expect("Unable to write during handshake");
+        ssl_stream
+            .write_all(content.as_bytes())
+            .await
+            .expect("Unable to write during handshake");
 
         let mut buf = BytesMut::new();
         loop {
             let mut vec = vec![0; 4096];
-            let size = ssl_stream.read(&mut vec).await.expect("Unable to read during handshake");
+            let size = ssl_stream
+                .read(&mut vec)
+                .await
+                .expect("Unable to read during handshake");
             vec.resize(size, 0);
             buf.extend_from_slice(&vec);
 
@@ -163,30 +170,31 @@ impl PeerConnection {
     }
 
     /// Start p2p connection between validator nodes
-    pub async fn connect(&self,
-                         peer1: usize,
-                         peer2: usize,
-                         sender1: tokio::sync::mpsc::Sender<Event>,
-                         sender2: tokio::sync::mpsc::Sender<Event>,
-                         receiver1: tokio::sync::mpsc::Receiver<Vec<u8>>,
-                         receiver2: tokio::sync::mpsc::Receiver<Vec<u8>>
+    pub async fn connect(
+        &self,
+        peer1: usize,
+        peer2: usize,
+        sender1: tokio::sync::mpsc::Sender<Event>,
+        sender2: tokio::sync::mpsc::Sender<Event>,
+        receiver1: tokio::sync::mpsc::Receiver<Vec<u8>>,
+        receiver2: tokio::sync::mpsc::Receiver<Vec<u8>>,
     ) -> (JoinHandle<()>, JoinHandle<()>) {
         info!("Thread {:?} has started", self.name);
         // Connect to the two validators using each other's identity
         let ssl_stream1 = Self::connect_to_peer(
-            self.address1,
             self.private_key2.as_str(),
             self.public_key2.as_str(),
             peer1,
-            peer2
-        ).await;
+            peer2,
+        )
+        .await;
         let ssl_stream2 = Self::connect_to_peer(
-            self.address2,
             self.private_key1.as_str(),
             self.public_key1.as_str(),
             peer2,
-            peer1
-        ).await;
+            peer1,
+        )
+        .await;
 
         let peer1_clone = peer1.clone();
         let peer2_clone = peer2.clone();
@@ -197,7 +205,8 @@ impl PeerConnection {
                 peer2_clone,
                 sender1,
                 receiver1,
-            ).await
+            )
+            .await
         });
         let peer1_clone = peer1.clone();
         let peer2_clone = peer2.clone();
@@ -208,7 +217,8 @@ impl PeerConnection {
                 peer1_clone,
                 sender2,
                 receiver2,
-            ).await
+            )
+            .await
         });
         (thread1, thread2)
     }
@@ -225,9 +235,11 @@ impl PeerConnection {
         let task = tokio::spawn(async move {
             loop {
                 match receiver.recv().await {
-                    Some(message) => ssl_writer.write_all(message.as_slice()).await.expect("Unable to write to ssl stream"),
-                    None => break
-                    // None => panic!("Scheduler sender failed") // Break when there are no more messages
+                    Some(message) => ssl_writer
+                        .write_all(message.as_slice())
+                        .await
+                        .expect("Unable to write to ssl stream"),
+                    None => break, // None => panic!("Scheduler sender failed") // Break when there are no more messages
                 }
             }
         });
@@ -235,7 +247,10 @@ impl PeerConnection {
             // Maximum ripple peer message is 64 MB
             let mut buf = BytesMut::with_capacity(64 * 1024);
             buf.resize(64 * 1024, 0);
-            let size = ssl_reader.read(buf.as_mut()).await.expect("Unable to read from ssl stream");
+            let size = ssl_reader
+                .read(buf.as_mut())
+                .await
+                .expect("Unable to read from ssl stream");
             buf.resize(size, 0);
             if size == 0 {
                 error!(
@@ -265,11 +280,14 @@ impl PeerConnection {
             }
 
             // Send received message to scheduler
-            let message = bytes[0..(6+payload_size)].to_vec();
-            let event = Event { from, to, message};
+            let message = bytes[0..(6 + payload_size)].to_vec();
+            let event = Event { from, to, message };
             match sender.send(event).await {
                 Ok(_) => {}
-                Err(_) => error!("Sending message to scheduler from connection {}, {}, failed", from, to)
+                Err(_) => error!(
+                    "Sending message to scheduler from connection {}, {}, failed",
+                    from, to
+                ),
             }
 
             buf.advance(payload_size + 6);

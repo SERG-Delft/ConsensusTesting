@@ -12,4 +12,3 @@ fn main() {
         .run()
         .expect("protoc");
 }
-

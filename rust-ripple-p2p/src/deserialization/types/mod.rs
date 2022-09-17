@@ -17,21 +17,3 @@ mod uint32;
 mod uint64;
 mod uint8;
 mod vector256;
-
-pub struct SerializationTypeValue {
-    pub(crate) field: SerializationField,
-    pub(crate) type_name: String,
-}
-
-#[allow(unused)]
-pub enum SerializationField {
-    U8(UInt8),
-    U16(UInt16),
-    U32(UInt32),
-    U64(UInt64),
-    H256(Hash256),
-    Amount(Amount),
-    Blob(String),
-    AccountId(AccountID),
-    Vec256(String),
-}

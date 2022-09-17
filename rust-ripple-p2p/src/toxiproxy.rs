@@ -46,8 +46,10 @@ impl ToxiproxyClient {
             let (i, j) = (connection[0] as usize, connection[1] as usize);
             // self.new_toxic(i, j, Toxic::bandwidth(i, j, Stream::Downstream, 1048576)).await;
             // self.new_toxic(j, i, Toxic::bandwidth(j, i, Stream::Downstream, 1048576)).await;
-            self.new_toxic(i, j, Toxic::latency(i, j, Stream::Downstream, 0, 0)).await;
-            self.new_toxic(j, i, Toxic::latency(j, i, Stream::Downstream, 0, 0)).await;
+            self.new_toxic(i, j, Toxic::latency(i, j, Stream::Downstream, 0, 0))
+                .await;
+            self.new_toxic(j, i, Toxic::latency(j, i, Stream::Downstream, 0, 0))
+                .await;
         }
     }
 
@@ -74,37 +76,12 @@ impl ToxiproxyClient {
         // let bandwidth = if allow { 1048576 } else { 0 };
         // self.update_toxic(from, to, Toxic::bandwidth(from, to, Stream::Downstream, bandwidth)).await;
         let (latency, jitter) = if allow { (50, 0) } else { (30_000, 0) };
-        self.update_toxic(from, to, Toxic::latency(from, to, Stream::Downstream, latency, jitter)).await;
-        // let blocked: Vec<Toxic> = self
-        //     .client
-        //     .get(
-        //         self.url
-        //             .join(format!("proxies/{}->{}/toxics", from, to).as_str())
-        //             .unwrap(),
-        //     )
-        //     .send()
-        //     .await
-        //     .unwrap()
-        //     .json()
-        //     .await
-        //     .unwrap();
-        // if !allow && blocked.is_empty() {
-        //     self.new_toxic(from, to, Toxic::timeout(from, to, Stream::Downstream))
-        //         .await;
-        // } else if allow && !blocked.is_empty() {
-        //     self.client
-        //         .delete(
-        //             self.url
-        //                 .join(
-        //                     format!("proxies/{}->{}/toxics/{}", from, to, "timeout_downstream")
-        //                         .as_str(),
-        //                 )
-        //                 .unwrap(),
-        //         )
-        //         .send()
-        //         .await
-        //         .unwrap();
-        // }
+        self.update_toxic(
+            from,
+            to,
+            Toxic::latency(from, to, Stream::Downstream, latency, jitter),
+        )
+        .await;
     }
 
     pub async fn remove_all_toxics(&self) {
@@ -191,6 +168,7 @@ pub struct Toxic {
 }
 
 #[derive(Serialize)]
+#[allow(dead_code)]
 enum Stream {
     Upstream,
     Downstream,
@@ -219,28 +197,6 @@ impl Proxy {
 }
 
 impl Toxic {
-    fn timeout(from: usize, to: usize, stream: Stream) -> Self {
-        assert!(from < 10 && to < 10);
-        Self {
-            name: format!("timeout_{}", stream.to_str()),
-            toxic_type: "timeout".to_string(),
-            stream: stream.to_str(),
-            toxicity: 1.0,
-            attributes: HashMap::from([("timeout".to_string(), 0)]),
-        }
-    }
-
-    fn bandwidth(from: usize, to: usize, stream: Stream, bandwidth: usize) -> Self {
-        assert!(from < 10 && to < 10);
-        Self {
-            name: format!("bandwidth_{}", stream.to_str()),
-            toxic_type: "bandwidth".to_string(),
-            stream: stream.to_str(),
-            toxicity: 1.0,
-            attributes: HashMap::from([("rate".to_string(), bandwidth)]),
-        }
-    }
-
     fn latency(from: usize, to: usize, stream: Stream, latency: usize, jitter: usize) -> Self {
         assert!(from < 10 && to < 10);
         Self {
@@ -248,7 +204,10 @@ impl Toxic {
             toxic_type: "latency".to_string(),
             stream: stream.to_str(),
             toxicity: 1.0,
-            attributes: HashMap::from([("latency".to_string(), latency), ("jitter".to_string(), jitter)]),
+            attributes: HashMap::from([
+                ("latency".to_string(), latency),
+                ("jitter".to_string(), jitter),
+            ]),
         }
     }
 }

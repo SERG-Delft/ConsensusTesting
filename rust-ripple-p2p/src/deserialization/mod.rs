@@ -1,35 +1,22 @@
-use std::collections::HashMap;
-use std::convert::TryFrom;
-use std::fs::File;
-use std::io::Read;
-use std::str::FromStr;
-use std::time::Instant;
-use hex::encode;
-use json::{JsonValue, object};
+use json::JsonValue;
 use lazy_static::lazy_static;
 use nom::IResult;
-use ripple_keypairs::{PrivateKey, Seed};
-use rippled_binary_codec::serialize::serialize_tx;
-use serde_json::Value;
+use std::collections::HashMap;
+use std::fs::File;
+use std::io::Read;
 
-use types::*;
-
-use crate::deserialization::blob_iterator::BlobIterator;
 use crate::deserialization::parser::parse;
-use crate::message_handler::{ParsedValidation, RippleMessageObject};
-use crate::protos::ripple::{TMLedgerInfoType, TMLedgerNode};
 
-mod blob_iterator;
-mod types;
 mod parser;
+mod types;
 
 pub fn parse2(input: &[u8]) -> IResult<&[u8], JsonValue> {
     parse(input)
 }
 
-lazy_static!(
+lazy_static! {
     static ref TRANSACTION_TYPES: HashMap<i64, String> = read_transaction_types();
-);
+}
 
 // #[allow(unused)]
 // pub fn deserialize(message: &RippleMessageObject) -> Vec<u8> {
@@ -178,130 +165,156 @@ lazy_static!(
 //     }
 // }
 
-pub fn parse_canonical_binary_format(blob: &[u8]) -> String {
-    // let iterator = BlobIterator::new(blob);
-    // let res = parse_canonical_binary_format_with_iterator(iterator);
-    let time = Instant::now();
-    let json = parse(blob).unwrap().1;
-    println!("parsing took {}ms", time.elapsed().as_millis());
-    let timemut = Instant::now();
-    let res = mutate_and_serialize_json(json);
-    println!("mutatio took {}ms", timemut.elapsed().as_millis());
-    res
-}
+// pub fn parse_canonical_binary_format(blob: &[u8]) -> String {
+//     // let iterator = BlobIterator::new(blob);
+//     // let res = parse_canonical_binary_format_with_iterator(iterator);
+//     let time = Instant::now();
+//     let json = parse(blob).unwrap().1;
+//     println!("parsing took {}ms", time.elapsed().as_millis());
+//     let timemut = Instant::now();
+//     let res = mutate_and_serialize_json(json);
+//     println!("mutatio took {}ms", timemut.elapsed().as_millis());
+//     res
+// }
 
-fn parse_canonical_binary_format_with_iterator(mut blob_iterator: BlobIterator) -> String {
-    let mut json = object!{};
-    let mut contents = vec![];
-    // println!("New validation");
-    while blob_iterator.has_next() {
-        let res = get_type_field_code(&mut blob_iterator);
-        let field_type = decode_type_code(res.0);
-        let type_name = decode_field_code(field_type, res.1);
-        match field_type {
-            "UInt16" => {
-                let field = UInt16::parse(&mut blob_iterator);
-                // println!("- {}: {}", type_name, field);
-                json[&type_name] = field.value.into();
-                contents.push(SerializationTypeValue { field: SerializationField::U16(field), type_name });
-            }
-            "UInt32" => {
-                let field = UInt32::parse(&mut blob_iterator);
-                // println!("- {}: {}", type_name, field);
-                json[&type_name] = field.value.into();
-                contents.push(SerializationTypeValue { field: SerializationField::U32(field), type_name });
-            }
-            "UInt64" => {
-                let field = UInt64::parse(&mut blob_iterator);
-                // println!("- {}: {}", type_name, field);
-                json[&type_name] = field.value.into();
-                contents.push(SerializationTypeValue { field: SerializationField::U64(field), type_name });
-            }
-            "Hash256" => {
-                let field = Hash256::parse(&mut blob_iterator);
-                // println!("- {}: {}", type_name, field);
-                json[&type_name] = format!("{:x?}", field.hash).into();
-                contents.push(SerializationTypeValue { field: SerializationField::H256(field), type_name });
-            }
-            "Amount" => {
-                let field = Amount::parse(&mut blob_iterator);
-                // println!("- {}: {}", &type_name, &field);
-                json[&type_name] = field.amount.to_string().into();
-                contents.push(SerializationTypeValue { field: SerializationField::Amount(field), type_name });
-            }
-            "Blob" => {
-                let field = Blob::parse(&mut blob_iterator);
-                // println!("- {}: {}", type_name, field);
-                json[&type_name] = format!("{:x?}", field.blob).into();
-                contents.push(SerializationTypeValue { field: SerializationField::Blob(format!("{:x?}", field.blob)), type_name });
-            }
-            "AccountID" => {
-                let field = AccountID::parse(&mut blob_iterator);
-                // println!("- {}: {}", type_name, field);
-                json[&type_name] = field.base_58_check().into();
-                contents.push(SerializationTypeValue { field: SerializationField::AccountId(field), type_name });
-            }
-            "Vector256" => {
-                let field = Vector256::parse(&mut blob_iterator);
-                // println!("- {}: {}", type_name, field);
-                contents.push(SerializationTypeValue { field: SerializationField::Vec256(format!("{:X?}", field.blob)), type_name });
-            }
-            _ => { panic!("unknown field type {}...", field_type) }
-        }
-    }
-    // println!("{}", json);
-    // println!("{:?}", mutate_and_serialize_json(json));
-    mutate_and_serialize_json(json)
-}
+// fn parse_canonical_binary_format_with_iterator(mut blob_iterator: BlobIterator) -> String {
+//     let mut json = object! {};
+//     let mut contents = vec![];
+//     // println!("New validation");
+//     while blob_iterator.has_next() {
+//         let res = get_type_field_code(&mut blob_iterator);
+//         let field_type = decode_type_code(res.0);
+//         let type_name = decode_field_code(field_type, res.1);
+//         match field_type {
+//             "UInt16" => {
+//                 let field = UInt16::parse(&mut blob_iterator);
+//                 // println!("- {}: {}", type_name, field);
+//                 json[&type_name] = field.value.into();
+//                 contents.push(SerializationTypeValue {
+//                     field: SerializationField::U16(field),
+//                     type_name,
+//                 });
+//             }
+//             "UInt32" => {
+//                 let field = UInt32::parse(&mut blob_iterator);
+//                 // println!("- {}: {}", type_name, field);
+//                 json[&type_name] = field.value.into();
+//                 contents.push(SerializationTypeValue {
+//                     field: SerializationField::U32(field),
+//                     type_name,
+//                 });
+//             }
+//             "UInt64" => {
+//                 let field = UInt64::parse(&mut blob_iterator);
+//                 // println!("- {}: {}", type_name, field);
+//                 json[&type_name] = field.value.into();
+//                 contents.push(SerializationTypeValue {
+//                     field: SerializationField::U64(field),
+//                     type_name,
+//                 });
+//             }
+//             "Hash256" => {
+//                 let field = Hash256::parse(&mut blob_iterator);
+//                 // println!("- {}: {}", type_name, field);
+//                 json[&type_name] = format!("{:x?}", field.hash).into();
+//                 contents.push(SerializationTypeValue {
+//                     field: SerializationField::H256(field),
+//                     type_name,
+//                 });
+//             }
+//             "Amount" => {
+//                 let field = Amount::parse(&mut blob_iterator);
+//                 // println!("- {}: {}", &type_name, &field);
+//                 json[&type_name] = field.amount.to_string().into();
+//                 contents.push(SerializationTypeValue {
+//                     field: SerializationField::Amount(field),
+//                     type_name,
+//                 });
+//             }
+//             "Blob" => {
+//                 let field = Blob::parse(&mut blob_iterator);
+//                 // println!("- {}: {}", type_name, field);
+//                 json[&type_name] = format!("{:x?}", field.blob).into();
+//                 contents.push(SerializationTypeValue {
+//                     field: SerializationField::Blob(format!("{:x?}", field.blob)),
+//                     type_name,
+//                 });
+//             }
+//             "AccountID" => {
+//                 let field = AccountID::parse(&mut blob_iterator);
+//                 // println!("- {}: {}", type_name, field);
+//                 json[&type_name] = field.base_58_check().into();
+//                 contents.push(SerializationTypeValue {
+//                     field: SerializationField::AccountId(field),
+//                     type_name,
+//                 });
+//             }
+//             "Vector256" => {
+//                 let field = Vector256::parse(&mut blob_iterator);
+//                 // println!("- {}: {}", type_name, field);
+//                 contents.push(SerializationTypeValue {
+//                     field: SerializationField::Vec256(format!("{:X?}", field.blob)),
+//                     type_name,
+//                 });
+//             }
+//             _ => {
+//                 panic!("unknown field type {}...", field_type)
+//             }
+//         }
+//     }
+//     // println!("{}", json);
+//     // println!("{:?}", mutate_and_serialize_json(json));
+//     mutate_and_serialize_json(json)
+// }
 
-fn mutate_and_serialize_json(mut deserialized_transaction: JsonValue) -> String {
-    println!("before {}", deserialized_transaction["Amount"]);
+// fn mutate_and_serialize_json(mut deserialized_transaction: JsonValue) -> String {
+//     println!("before {}", deserialized_transaction["Amount"]);
 
-    // mutate the amount
-    let amount = deserialized_transaction["Amount"].as_str().unwrap();
-    let mutated_amount = u64::from_str(amount).unwrap() + 100000;
-    // let mutated_amount = u64::from_str(amount).unwrap();
-    deserialized_transaction["Amount"] = JsonValue::from(mutated_amount.to_string());
+//     // mutate the amount
+//     let amount = deserialized_transaction["Amount"].as_str().unwrap();
+//     let mutated_amount = u64::from_str(amount).unwrap() + 100000;
+//     // let mutated_amount = u64::from_str(amount).unwrap();
+//     deserialized_transaction["Amount"] = JsonValue::from(mutated_amount.to_string());
 
-    // map the transaction type to its name (based on definitions.json)
-    // let transaction_types = read_transaction_types();
-    // let current_key = deserialized_transaction["TransactionType"].as_i64().unwrap();
-    // let transaction_type = match TRANSACTION_TYPES.get(&current_key) {
-    //     Some(transaction) => { transaction.to_string() }
-    //     None => { "Invalid".to_string() }
-    // };
-    deserialized_transaction["TransactionType"] = JsonValue::from("Payment");
+//     // map the transaction type to its name (based on definitions.json)
+//     // let transaction_types = read_transaction_types();
+//     // let current_key = deserialized_transaction["TransactionType"].as_i64().unwrap();
+//     // let transaction_type = match TRANSACTION_TYPES.get(&current_key) {
+//     //     Some(transaction) => { transaction.to_string() }
+//     //     None => { "Invalid".to_string() }
+//     // };
+//     deserialized_transaction["TransactionType"] = JsonValue::from("Payment");
 
-    // map the signing public key
-    // let encoded_signing_key = hex::encode_upper(deserialized_transaction["SigningPubKey"].as_str().unwrap());
-    deserialized_transaction["SigningPubKey"] = JsonValue::from("0330E7FC9D56BB25D6893BA3F317AE5BCF33B3291BD63DB32654A313222F7FD020");
+//     // map the signing public key
+//     // let encoded_signing_key = hex::encode_upper(deserialized_transaction["SigningPubKey"].as_str().unwrap());
+//     deserialized_transaction["SigningPubKey"] =
+//         JsonValue::from("0330E7FC9D56BB25D6893BA3F317AE5BCF33B3291BD63DB32654A313222F7FD020");
 
-    // println!("pre {}", deserialized_transaction);
+//     // println!("pre {}", deserialized_transaction);
 
-    // let serial_tx = serialize_tx(deserialized_transaction.to_string(), true).expect("could not serialize tx for signing");
-    // let (pk, publick) = "snoPBrXtMeMyMHUVTgbuqAfg1SUTb".parse::<Seed>().unwrap().derive_keypair().unwrap();
-    // let signature = pk.sign(&serial_tx).to_string();
+//     // let serial_tx = serialize_tx(deserialized_transaction.to_string(), true).expect("could not serialize tx for signing");
+//     // let (pk, publick) = "snoPBrXtMeMyMHUVTgbuqAfg1SUTb".parse::<Seed>().unwrap().derive_keypair().unwrap();
+//     // let signature = pk.sign(&serial_tx).to_string();
 
+//     // let encoded_signing_key = hex::encode_upper(deserialized_transaction["SigningPubKey"].as_str().unwrap());
+//     // deserialized_transaction["SigningPubKey"] = JsonValue::from(publick.to_string());
 
-    // let encoded_signing_key = hex::encode_upper(deserialized_transaction["SigningPubKey"].as_str().unwrap());
-    // deserialized_transaction["SigningPubKey"] = JsonValue::from(publick.to_string());
+//     // map the txn signature
+//     // let encoded_txt_signature = hex::encode_upper(deserialized_transaction["TxnSignature"].as_str().unwrap());
+//     deserialized_transaction["TxnSignature"] = JsonValue::from("3045022100f1d8aa686f6241a5f39106ffda94aa218118d385b58a00e633425d882b17205902200b38092d3f990359928f393485dc352cd0f3c22e4559280354fb423bc7f08bec");
 
-    // map the txn signature
-    // let encoded_txt_signature = hex::encode_upper(deserialized_transaction["TxnSignature"].as_str().unwrap());
-    deserialized_transaction["TxnSignature"] = JsonValue::from("3045022100f1d8aa686f6241a5f39106ffda94aa218118d385b58a00e633425d882b17205902200b38092d3f990359928f393485dc352cd0f3c22e4559280354fb423bc7f08bec");
+//     // println!("{}", deserialized_transaction["SigningPubKey"]);
+//     // println!("{}", deserialized_transaction["TxnSignature"]);
+//     // println!("{}", deserialized_transaction.to_string());
 
-    // println!("{}", deserialized_transaction["SigningPubKey"]);
-    // println!("{}", deserialized_transaction["TxnSignature"]);
-    // println!("{}", deserialized_transaction.to_string());
+//     // println!("after  {}", deserialized_transaction);
 
-    // println!("after  {}", deserialized_transaction);
-
-    // return match serialize_tx(deserialized_transaction.to_string(), false) {
-    //     Some(string) => { serialize_tx(deserialized_transaction.to_string(), false).unwrap().as_bytes().to_vec() }
-    //     None => { panic!("could not serialize") }
-    // }
-    serialize_tx(deserialized_transaction.to_string(), false).unwrap()
-}
+//     // return match serialize_tx(deserialized_transaction.to_string(), false) {
+//     //     Some(string) => { serialize_tx(deserialized_transaction.to_string(), false).unwrap().as_bytes().to_vec() }
+//     //     None => { panic!("could not serialize") }
+//     // }
+//     serialize_tx(deserialized_transaction.to_string(), false).unwrap()
+// }
 
 // fn mutate_transaction(mut contents: Vec<SerializationTypeValue>) -> Vec<SerializationTypeValue> {
 //
@@ -328,39 +341,44 @@ fn mutate_and_serialize_json(mut deserialized_transaction: JsonValue) -> String 
 //     mutated_contents
 // }
 
-fn decode_type_code(type_code: u8) -> &'static str {
-    return match type_code {
-        0 => { "NotPresent" }
-        1 => { "UInt16" }
-        2 => { "UInt32" }
-        3 => { "UInt64" }
-        5 => { "Hash256" }
-        6 => { "Amount" }
-        7 => { "Blob" }
-        8 => { "AccountID" }
-        14 => { "STObject" }
-        19 => { "Vector256" }
-        _ => { panic!("unknown type code: {}", type_code) }
-    };
-}
+// fn decode_type_code(type_code: u8) -> &'static str {
+//     return match type_code {
+//         0 => "NotPresent",
+//         1 => "UInt16",
+//         2 => "UInt32",
+//         3 => "UInt64",
+//         5 => "Hash256",
+//         6 => "Amount",
+//         7 => "Blob",
+//         8 => "AccountID",
+//         14 => "STObject",
+//         19 => "Vector256",
+//         _ => {
+//             panic!("unknown type code: {}", type_code)
+//         }
+//     };
+// }
 
-fn decode_field_code(field_type: &str, field_code: u8) -> String {
-    let fields = read_from_file();
-    let current_key = FieldType { nth: field_code, type_field: field_type.to_string() };
-    let result = match fields.get(&current_key) {
-        Some(field) => { field.field_name.to_string() }
-        None => { "Unknown".to_string() }
-    };
-    // if the key is not in the fields in definitions.json
-    if result.eq("Unknown") {
-        return match (field_type, field_code) {
-            ("UInt64", 10) => { "Cookie".to_string() }
-            ("Hash256", 25) => { "ValidatedHash".to_string() }
-            _ => { "Unknown".to_string() }
-        };
-    }
-    return result;
-}
+// fn decode_field_code(field_type: &str, field_code: u8) -> String {
+//     let fields = read_from_file();
+//     let current_key = FieldType {
+//         nth: field_code,
+//         type_field: field_type.to_string(),
+//     };
+//     let result = match fields.get(&current_key) {
+//         Some(field) => field.field_name.to_string(),
+//         None => "Unknown".to_string(),
+//     };
+//     // if the key is not in the fields in definitions.json
+//     if result.eq("Unknown") {
+//         return match (field_type, field_code) {
+//             ("UInt64", 10) => "Cookie".to_string(),
+//             ("Hash256", 25) => "ValidatedHash".to_string(),
+//             _ => "Unknown".to_string(),
+//         };
+//     }
+//     return result;
+// }
 
 ///
 ///
@@ -375,21 +393,19 @@ fn decode_field_code(field_type: &str, field_code: u8) -> String {
 /// ```
 ///
 /// ```
-fn get_type_field_code(blob: &mut BlobIterator) -> (u8, u8) {
-    let first_byte = blob.next_byte();
+// fn get_type_field_code(blob: &mut BlobIterator) -> (u8, u8) {
+//     let first_byte = blob.next_byte();
 
-    let low_bits = first_byte & 0b0000_1111;
-    let high_bits = (first_byte & 0b1111_0000) >> 4;
+//     let low_bits = first_byte & 0b0000_1111;
+//     let high_bits = (first_byte & 0b1111_0000) >> 4;
 
-    return match (high_bits == 0, low_bits == 0) {
-        (true, true) => { (blob.next_byte(), blob.next_byte()) }
-        (false, true) => { (high_bits, blob.next_byte()) }
-        (true, false) => { (blob.next_byte(), low_bits) }
-        (false, false) => { (high_bits, low_bits) }
-    };
-}
-
-
+//     return match (high_bits == 0, low_bits == 0) {
+//         (true, true) => (blob.next_byte(), blob.next_byte()),
+//         (false, true) => (high_bits, blob.next_byte()),
+//         (true, false) => (blob.next_byte(), low_bits),
+//         (false, false) => (high_bits, low_bits),
+//     };
+// }
 
 ///
 ///
@@ -400,10 +416,13 @@ fn get_type_field_code(blob: &mut BlobIterator) -> (u8, u8) {
 ///
 pub fn read_transaction_types() -> HashMap<i64, String> {
     let mut data = String::new();
-    let mut file = File::open("src/deserialization/definitions.json").expect("Getting the file did not work.");
-    file.read_to_string(&mut data).expect("Reading from file did not work.");
+    let mut file =
+        File::open("src/deserialization/definitions.json").expect("Getting the file did not work.");
+    file.read_to_string(&mut data)
+        .expect("Reading from file did not work.");
 
-    let all_values: serde_json::Value = serde_json::from_str(&*data).expect("Parsing the data did not work.");
+    let all_values: serde_json::Value =
+        serde_json::from_str(&*data).expect("Parsing the data did not work.");
     // get only the transactions
     let transactions = serde_json::json!(all_values["TRANSACTION_TYPES"]);
 
@@ -419,7 +438,6 @@ pub fn read_transaction_types() -> HashMap<i64, String> {
     all_transactions
 }
 
-
 ///
 ///
 ///
@@ -427,39 +445,44 @@ pub fn read_transaction_types() -> HashMap<i64, String> {
 ///
 ///
 ///
-pub fn read_from_file() -> HashMap<FieldType, FieldInformation> {
-    let mut data = String::new();
-    let mut file = File::open("src/deserialization/definitions.json").expect("Getting the file did not work.");
-    file.read_to_string(&mut data).expect("Reading from file did not work.");
+// pub fn read_from_file() -> HashMap<FieldType, FieldInformation> {
+//     let mut data = String::new();
+//     let mut file =
+//         File::open("src/deserialization/definitions.json").expect("Getting the file did not work.");
+//     file.read_to_string(&mut data)
+//         .expect("Reading from file did not work.");
 
-    let all_values: serde_json::Value = serde_json::from_str(&*data).expect("Parsing the data did not work.");
-    // get only the fields
-    let fields = serde_json::json!(all_values["FIELDS"]);
+//     let all_values: serde_json::Value =
+//         serde_json::from_str(&*data).expect("Parsing the data did not work.");
+//     // get only the fields
+//     let fields = serde_json::json!(all_values["FIELDS"]);
 
-    // hashmap with all the fields (key: nth + type)
-    let mut all_fields = HashMap::new();
+//     // hashmap with all the fields (key: nth + type)
+//     let mut all_fields = HashMap::new();
 
-    for field in fields.as_array().unwrap() {
-        // the array of each field in the JSON
-        let current_field = field[1].as_object().unwrap();
-        // key: nth + type
-        let current_key = FieldType { nth: current_field["nth"].as_u64().unwrap() as u8, type_field: current_field["type"]
-            .to_string().replace("\"", "") };
-        let current_value = FieldInformation {
-            // field name
-            field_name: field[0].to_string().replace("\"", ""),
-            // isVLEncoded
-            is_vl_encoded: current_field["isVLEncoded"].as_bool().unwrap(),
-            // isSerialized
-            is_serialized: current_field["isSerialized"].as_bool().unwrap(),
-            // isSigningField
-            is_signing_field: current_field["isSigningField"].as_bool().unwrap(),
-        };
-        all_fields.insert(current_key, current_value);
-    }
+//     for field in fields.as_array().unwrap() {
+//         // the array of each field in the JSON
+//         let current_field = field[1].as_object().unwrap();
+//         // key: nth + type
+//         let current_key = FieldType {
+//             nth: current_field["nth"].as_u64().unwrap() as u8,
+//             type_field: current_field["type"].to_string().replace("\"", ""),
+//         };
+//         let current_value = FieldInformation {
+//             // field name
+//             field_name: field[0].to_string().replace("\"", ""),
+//             // isVLEncoded
+//             is_vl_encoded: current_field["isVLEncoded"].as_bool().unwrap(),
+//             // isSerialized
+//             is_serialized: current_field["isSerialized"].as_bool().unwrap(),
+//             // isSigningField
+//             is_signing_field: current_field["isSigningField"].as_bool().unwrap(),
+//         };
+//         all_fields.insert(current_key, current_value);
+//     }
 
-    all_fields
-}
+//     all_fields
+// }
 
 #[derive(PartialEq, Eq, Hash)]
 pub struct FieldType {
@@ -483,7 +506,17 @@ pub struct FieldInformation {
 
 impl FieldInformation {
     #[allow(unused)]
-    pub fn new(field_name: String, is_vl_encoded: bool, is_serialized: bool, is_signing_field: bool) -> Self {
-        FieldInformation { field_name, is_vl_encoded, is_serialized, is_signing_field }
+    pub fn new(
+        field_name: String,
+        is_vl_encoded: bool,
+        is_serialized: bool,
+        is_signing_field: bool,
+    ) -> Self {
+        FieldInformation {
+            field_name,
+            is_vl_encoded,
+            is_serialized,
+            is_signing_field,
+        }
     }
 }

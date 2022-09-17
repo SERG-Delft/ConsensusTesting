@@ -1,35 +1,17 @@
-use bs58::Alphabet;
 use std::collections::{HashMap, HashSet};
-use std::convert::TryFrom;
-use std::sync::mpsc::{Receiver as STDReceiver, Sender as STDSender};
+use std::sync::mpsc::Receiver as STDReceiver;
 use std::sync::{Arc, Mutex};
-use std::thread;
 
 use crate::ByzzFuzz;
 use byteorder::{BigEndian, ByteOrder};
-use chrono::{DateTime, Utc};
-use itertools::Itertools;
-use json::parse;
+use chrono::Utc;
 use log::error;
-use openssl::sha::sha512;
-use protobuf::Message;
-use rippled_binary_codec::serialize::serialize_tx;
-use secp256k1::{PublicKey, Secp256k1, SecretKey};
 use tokio::sync::broadcast::{Receiver, Sender};
 use tokio::sync::mpsc::{Receiver as TokioReceiver, Sender as TokioSender};
-use tokio::time;
-use xrpl::core::keypairs::utils::sha512_first_half;
-use xrpl::indexmap::serde_seq::deserialize;
 
 use crate::client::{PeerSubscriptionObject, SubscriptionObject};
 use crate::collector::RippleMessage;
-use crate::container_manager::NodeKeys;
-use crate::deserialization::{parse2, parse_canonical_binary_format};
-use crate::message_handler::RippleMessageObject::{
-    TMHaveTransactionSet, TMProposeSet, TMStatusChange, TMTransaction, TMValidation,
-};
-use crate::message_handler::{invoke_protocol_message, RippleMessageObject};
-use crate::protos::ripple::NodeEvent;
+use crate::message_handler::invoke_protocol_message;
 
 type P2PConnections = HashMap<usize, HashMap<usize, PeerChannel>>;
 
@@ -49,7 +31,7 @@ impl Scheduler {
         p2p_connections: P2PConnections,
         collector_sender: TokioSender<Box<RippleMessage>>,
         byzz_fuzz: ByzzFuzz,
-        mut shutdown_tx: Sender<(HashMap<usize, String>, usize, String)>,
+        shutdown_tx: Sender<(HashMap<usize, String>, usize, String)>,
         shutdown_rx: Receiver<(HashMap<usize, String>, usize, String)>,
     ) -> Self {
         Scheduler {
@@ -111,7 +93,7 @@ impl Scheduler {
     async fn execute_event(&mut self, mut event: Event) -> (bool, &'static str) {
         event = self.byzz_fuzz.on_message(event).await;
         self.message_count += 1;
-        if self.message_count >= 10_000 {
+        if self.message_count >= 10_000_000 {
             return (false, "timeout_messages");
         }
         self.p2p_connections
@@ -149,9 +131,9 @@ impl Scheduler {
         collector_receiver: STDReceiver<PeerSubscriptionObject>,
         stable: Arc<Mutex<bool>>,
         latest_validated_ledger: Arc<Mutex<u32>>,
-        mut transactions: Arc<Mutex<HashSet<u16>>>,
-        mut mutex_sequences_hashes: Arc<Mutex<HashMap<usize, String>>>,
-        mut mutex_disagree_messages: Arc<Mutex<String>>,
+        transactions: Arc<Mutex<HashSet<u16>>>,
+        mutex_sequences_hashes: Arc<Mutex<HashMap<usize, String>>>,
+        mutex_disagree_messages: Arc<Mutex<String>>,
     ) {
         let mut set_stable = false;
         let mut local_latest_validated_ledger = 0;
@@ -174,7 +156,13 @@ impl Scheduler {
                         if sequences_hashes.contains_key(&sequence) {
                             let sequence_hash = sequences_hashes.get(&sequence).unwrap();
                             if !sequence_hash.eq(&ledger.ledger_hash) {
-                                mutex_disagree_messages.lock().unwrap().push_str(format!("node {} validated {} whereas we stored {}", subscription_object.peer, ledger.ledger_hash, sequence_hash).as_str())
+                                mutex_disagree_messages.lock().unwrap().push_str(
+                                    format!(
+                                        "node {} validated {} whereas we stored {}",
+                                        subscription_object.peer, ledger.ledger_hash, sequence_hash
+                                    )
+                                    .as_str(),
+                                )
                             }
                         } else {
                             sequences_hashes.insert(sequence, ledger.ledger_hash);

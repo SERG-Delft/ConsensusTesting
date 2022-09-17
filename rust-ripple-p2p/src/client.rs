@@ -1,11 +1,10 @@
-use websocket::{ClientBuilder, OwnedMessage, Message};
+use log::*;
+use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::sync::mpsc::{channel, Sender};
 use std::thread;
-use serde_json::json;
-use serde::{Serialize, Deserialize};
 use std::thread::JoinHandle;
-use std::time::Duration;
-use log::*;
+use websocket::{ClientBuilder, Message, OwnedMessage};
 
 const _NODE_PRIVATE_KEY: &str = "e55dc8f3741ac9668dbe858409e5d64f5ce88380f7228eccfe82b92b2c7848ba";
 const _NODE_PUBLIC_KEY_BASE58: &str = "n9KAa2zVWjPHgfzsE3iZ8HAbzJtPrnoh4H2M2HgE7dfqtvyEb1KJ";
@@ -28,11 +27,15 @@ pub struct Client<'a> {
     peer: u16,
     pub sender_channel: Sender<Message<'a>>,
     send_loop: JoinHandle<()>,
-    receive_loop: tokio::task::JoinHandle<()>
+    receive_loop: tokio::task::JoinHandle<()>,
 }
 
 impl Client<'static> {
-    pub fn new(peer: u16, connection: &str, subscription_collector_sender: tokio::sync::mpsc::Sender<PeerSubscriptionObject>) -> Self {
+    pub fn new(
+        peer: u16,
+        connection: &str,
+        subscription_collector_sender: tokio::sync::mpsc::Sender<PeerSubscriptionObject>,
+    ) -> Self {
         let client = ClientBuilder::new(connection)
             .unwrap()
             .connect_insecure()
@@ -59,7 +62,7 @@ impl Client<'static> {
                     Ok(()) => {
                         debug!("Send Loop sent message: {:?}", message);
                         ()
-                    },
+                    }
                     Err(e) => {
                         debug!("Send Loop: {:?}", e);
                         let _ = sender.send_message(&Message::close());
@@ -69,8 +72,6 @@ impl Client<'static> {
             }
         });
 
-        // println!("{}", connection);
-        let sender_clone = tx.clone();
         let is_byzantine = connection.ends_with("8");
         let receive_loop = tokio::spawn(async move {
             // Receive loop
@@ -101,26 +102,35 @@ impl Client<'static> {
                                             // println!("submitted");
                                         }
                                     }
-                                    _ => ()
+                                    _ => (),
                                 }
-                                subscription_collector_sender.send(PeerSubscriptionObject::new(peer, subscription_object)).await.unwrap()
-                            },
-                            Err(_) => { warn!("Could not parse") }
+                                subscription_collector_sender
+                                    .send(PeerSubscriptionObject::new(peer, subscription_object))
+                                    .await
+                                    .unwrap()
+                            }
+                            Err(_) => {
+                                warn!("Could not parse")
+                            }
                         }
-                    },
-                    _ => debug!("Receive Loop: {:?}", message)
+                    }
+                    _ => debug!("Receive Loop: {:?}", message),
                 }
             }
         });
 
         // Start subscription
-        Client::subscribe(&tx, format!("Ripple{} subscription", peer).as_str(), vec!["consensus", "ledger", "validations", "peer_status"]);
+        Client::subscribe(
+            &tx,
+            format!("Ripple{} subscription", peer).as_str(),
+            vec!["consensus", "ledger", "validations", "peer_status"],
+        );
 
         Client {
             peer,
             sender_channel: tx,
             send_loop,
-            receive_loop
+            receive_loop,
         }
     }
 
@@ -131,9 +141,11 @@ impl Client<'static> {
     }
 
     #[allow(unused)]
-    pub fn create_payment_transaction(amount: u32,
-                                      destination_id: &str,
-                                      sender_address: &str) -> Transaction {
+    pub fn create_payment_transaction(
+        amount: u32,
+        destination_id: &str,
+        sender_address: &str,
+    ) -> Transaction {
         // Create payment object for payment to account
         let payment = Payment {
             amount,
@@ -141,7 +153,7 @@ impl Client<'static> {
             destination_tag: None,
             invoice_id: None,
             send_max: None,
-            deliver_min: None
+            deliver_min: None,
         };
 
         // Create transaction object containing the payment
@@ -156,7 +168,7 @@ impl Client<'static> {
             source_tag: None,
             signing_pub_key: None,
             txn_signature: None,
-            data: Some(payment)
+            data: Some(payment),
         }
     }
 
@@ -166,7 +178,9 @@ impl Client<'static> {
             "id": id,
             "command": "ping"
         });
-        self.sender_channel.send(Message::text(json.to_string())).unwrap();
+        self.sender_channel
+            .send(Message::text(json.to_string()))
+            .unwrap();
     }
 
     #[allow(unused)]
@@ -185,7 +199,12 @@ impl Client<'static> {
     }
 
     #[allow(unused)]
-    pub fn sign_and_submit(tx: &Sender<Message>, id: &str, transaction: &Transaction, secret: &str) {
+    pub fn sign_and_submit(
+        tx: &Sender<Message>,
+        id: &str,
+        transaction: &Transaction,
+        secret: &str,
+    ) {
         let json = json!({
             "id": id,
             "command": "submit",
@@ -229,7 +248,7 @@ pub struct Transaction {
     #[serde(rename = "TxnSignature", skip_serializing_if = "Option::is_none")]
     pub txn_signature: Option<String>,
     #[serde(rename = "Data", skip_serializing_if = "Option::is_none", flatten)]
-    pub data: Option<Payment>
+    pub data: Option<Payment>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -248,11 +267,11 @@ pub enum TransactionType {
     PaymentChannelCreate,
     PaymentChannelFund,
     PaymentChannelClaim,
-    DepositPreauth
+    DepositPreauth,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct Payment  {
+pub struct Payment {
     #[serde(rename = "Amount")]
     pub amount: u32,
     #[serde(rename = "Destination")]
@@ -264,7 +283,7 @@ pub struct Payment  {
     #[serde(rename = "SendMax", skip_serializing_if = "Option::is_none")]
     pub send_max: Option<u32>,
     #[serde(rename = "DeliverMin", skip_serializing_if = "Option::is_none")]
-    pub deliver_min: Option<u32>
+    pub deliver_min: Option<u32>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -282,7 +301,7 @@ pub struct ValidatedLedger {
     pub reserve_inc: u32,
     pub txn_count: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub validated_ledgers: Option<String>
+    pub validated_ledgers: Option<String>,
 }
 
 #[allow(unused)]
@@ -307,7 +326,7 @@ pub struct ReceivedValidation {
     #[serde(skip_serializing)]
     signature: String,
     signing_time: u32,
-    validation_public_key: String
+    validation_public_key: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -319,7 +338,7 @@ pub enum PeerStatusEvent {
     #[serde(rename = "SWITCHED_LEDGER")]
     SwitchedLedger,
     #[serde(rename = "LOST_SYNC")]
-    LostSync
+    LostSync,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -338,7 +357,7 @@ pub struct PeerStatusChange {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ConsensusChange {
-    consensus: String
+    consensus: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -351,17 +370,20 @@ pub enum SubscriptionObject {
     #[serde(rename = "peerStatusChange")]
     PeerStatusChange(PeerStatusChange),
     #[serde(rename = "consensusPhase")]
-    ConsensusChange(ConsensusChange)
+    ConsensusChange(ConsensusChange),
 }
 
 #[derive(Debug)]
 pub struct PeerSubscriptionObject {
     pub peer: u16,
-    pub subscription_object: SubscriptionObject
+    pub subscription_object: SubscriptionObject,
 }
 
 impl PeerSubscriptionObject {
     fn new(peer: u16, subscription_object: SubscriptionObject) -> Self {
-        PeerSubscriptionObject { peer, subscription_object }
+        PeerSubscriptionObject {
+            peer,
+            subscription_object,
+        }
     }
 }

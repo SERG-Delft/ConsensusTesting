@@ -1,17 +1,14 @@
 use std::collections::HashMap;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 use itertools::Itertools;
-use log::*;
-use tokio::sync::broadcast::{Receiver, Sender};
+use tokio::sync::broadcast::Sender;
 
-use crate::ByzzFuzz;
 use crate::client::Client;
 use crate::collector::Collector;
 use crate::container_manager::NodeKeys;
 use crate::peer_connection::PeerConnection;
 use crate::scheduler::{PeerChannel, Scheduler};
-use crate::toxiproxy::ToxiproxyClient;
+use crate::ByzzFuzz;
 
 use super::EmptyResult;
 
@@ -33,13 +30,12 @@ const _AMOUNT: u32 = 2u32.pow(31);
 
 pub struct App {
     peers: u16,
-    only_subscribe: bool,
     node_keys: Vec<NodeKeys>,
 }
 
 impl App {
-    pub fn new(peers: u16, only_subscribe: bool, node_keys: Vec<NodeKeys>) -> Self {
-        App { peers, only_subscribe, node_keys }
+    pub fn new(peers: u16, node_keys: Vec<NodeKeys>) -> Self {
+        App { peers, node_keys }
     }
 
     /// Start proxy
@@ -48,27 +44,27 @@ impl App {
     /// Every p2p connection has two senders and receivers for relaying messages to and from the scheduler
     /// Every message gets relayed by the scheduler
     /// A separate thread is created for each node which handles websocket client requests
-    pub async fn start(&self,
-                       byzz_fuzz: ByzzFuzz,
+    pub async fn start(
+        &self,
+        byzz_fuzz: ByzzFuzz,
         shutdown_tx: Sender<(HashMap<usize, String>, usize, String)>,
-        shutdown_rx: Receiver<(HashMap<usize, String>, usize, String)>
     ) -> EmptyResult {
         let mut tokio_tasks = vec![];
         let (collector_tx, collector_rx) = tokio::sync::mpsc::channel(32);
-        let (_control_tx, control_rx) = std::sync::mpsc::channel();
         let (subscription_tx, subscription_rx) = tokio::sync::mpsc::channel(32);
         let (collector_state_tx, scheduler_state_rx) = std::sync::mpsc::channel();
         let peer = self.peers.clone();
         // Start the collector which writes output to files
         let collector_task = tokio::spawn(async move {
-            Collector::new(peer, collector_rx, subscription_rx, control_rx, collector_state_tx).start().await;
+            Collector::new(peer, collector_rx, subscription_rx, collector_state_tx)
+                .start()
+                .await;
         });
         tokio_tasks.push(collector_task);
 
         let scheduler_thread;
 
         // Start p2p connections
-        let addrs = self.get_addrs(self.peers);
         let mut peer_senders = HashMap::new();
         let mut peer_receivers = HashMap::new();
         let mut scheduler_peer_channels = HashMap::new();
@@ -83,18 +79,37 @@ impl App {
             let tx_peer_j = scheduler_sender.clone();
             let (tx_scheduler_i, rx_peer_i) = tokio::sync::mpsc::channel(32);
             let (tx_scheduler_j, rx_peer_j) = tokio::sync::mpsc::channel(32);
-            peer_senders.entry(i).or_insert(HashMap::new()).insert(j, tx_peer_i);
-            peer_senders.entry(j).or_insert(HashMap::new()).insert(i, tx_peer_j);
-            peer_receivers.entry(i).or_insert(HashMap::new()).insert(j, rx_peer_i);
-            peer_receivers.entry(j).or_insert(HashMap::new()).insert(i, rx_peer_j);
-            scheduler_peer_channels.entry(i).or_insert(HashMap::new()).insert(j, PeerChannel::new(tx_scheduler_i));
-            scheduler_peer_channels.entry(j).or_insert(HashMap::new()).insert(i, PeerChannel::new(tx_scheduler_j));
+            peer_senders
+                .entry(i)
+                .or_insert(HashMap::new())
+                .insert(j, tx_peer_i);
+            peer_senders
+                .entry(j)
+                .or_insert(HashMap::new())
+                .insert(i, tx_peer_j);
+            peer_receivers
+                .entry(i)
+                .or_insert(HashMap::new())
+                .insert(j, rx_peer_i);
+            peer_receivers
+                .entry(j)
+                .or_insert(HashMap::new())
+                .insert(i, rx_peer_j);
+            scheduler_peer_channels
+                .entry(i)
+                .or_insert(HashMap::new())
+                .insert(j, PeerChannel::new(tx_scheduler_i));
+            scheduler_peer_channels
+                .entry(j)
+                .or_insert(HashMap::new())
+                .insert(i, PeerChannel::new(tx_scheduler_j));
         }
 
         byzz_fuzz.toxiproxy.populate(&peer_pairs).await;
         let mut shutdown_rx = shutdown_tx.subscribe();
         let scheduler = Scheduler::new(
-            scheduler_peer_channels, collector_tx,
+            scheduler_peer_channels,
+            collector_tx,
             byzz_fuzz,
             shutdown_tx,
             shutdown_rx.resubscribe(),
@@ -106,9 +121,7 @@ impl App {
             }
         });
 
-
         for pair in &peer_pairs {
-
             let i = pair[0] as usize;
             let j = pair[1] as usize;
 
@@ -118,76 +131,53 @@ impl App {
             let peer_sender_j = peer_senders.get_mut(&j).unwrap().remove(&i).unwrap();
 
             let name = format!("ripple{}, ripple{}", i + 1, j + 1);
-            let address_i = addrs[i].clone();
-            let address_j = addrs[j].clone();
             // let thread = thread::Builder::new().name(String::from(name.clone())).spawn(move || {
             let peer = PeerConnection::new(
                 &name,
-                address_i,
-                address_j,
                 self.node_keys[i].validation_seed.clone(),
                 self.node_keys[j].validation_seed.clone(),
                 self.node_keys[i].validation_public_key.clone(),
-                self.node_keys[j].validation_public_key.clone()
+                self.node_keys[j].validation_public_key.clone(),
             );
-            let (thread1, thread2) = peer.connect(
-                i,
-                j,
-                peer_sender_i,
-                peer_sender_j,
-                peer_receiver_i,
-                peer_receiver_j
-            ).await;
+            let (thread1, thread2) = peer
+                .connect(
+                    i,
+                    j,
+                    peer_sender_i,
+                    peer_sender_j,
+                    peer_receiver_i,
+                    peer_receiver_j,
+                )
+                .await;
             tokio_tasks.push(thread1);
             tokio_tasks.push(thread2);
-
         }
 
         // // Connect websocket client to ripples
         for i in 0..self.peers {
             if i < 5 {
-                let _client = Client::new(i, format!("ws://127.0.0.1:600{}", 5+i).as_str(), subscription_tx.clone());
-                // if i == 0 {
-                //     let tx = Client::create_payment_transaction(_AMOUNT, _ACCOUNT_ID, _GENESIS_ADDRESS);
-                //     Client::sign_and_submit(&_client.sender_channel, "waddup", &tx, _GENESIS_SEED)
-                // }
-                // if i == 0 {
-                //     let sender_clone = _client.sender_channel.clone();
-                //     threads.push(thread::spawn(move || {
-                //         let mut counter = 0;
-                //         // Send payment transaction every 10 seconds
-                //         loop {
-                //             sleep(Duration::from_secs(10));
-                //             Client::sign_and_submit(
-                //                 &sender_clone,
-                //                 format!("Ripple{}: {}", i, &*counter.to_string()).as_str(),
-                //                 &Client::create_payment_transaction(_AMOUNT, _ACCOUNT_ID, _GENESIS_ADDRESS),
-                //                 _GENESIS_SEED
-                //             );
-                //             counter += 1;
-                //         }
-                //     }));
-                // }
-            }
-            else {
-                let _client = Client::new(i, format!("ws://127.0.0.1:60{}", 5+i).as_str(), subscription_tx.clone());
+                let _client = Client::new(
+                    i,
+                    format!("ws://127.0.0.1:600{}", 5 + i).as_str(),
+                    subscription_tx.clone(),
+                );
+            } else {
+                let _client = Client::new(
+                    i,
+                    format!("ws://127.0.0.1:60{}", 5 + i).as_str(),
+                    subscription_tx.clone(),
+                );
             }
         }
 
-        scheduler_thread.await.expect("could not await scheduler thread");
+        scheduler_thread
+            .await
+            .expect("could not await scheduler thread");
 
         //TODO reimplement sending control signals
-        // _control_tx.send("stop".to_string()).unwrap();
-
         for tokio_task in tokio_tasks {
             tokio_task.abort();
         }
         Ok(())
-    }
-
-    fn get_addrs(&self, peers: u16) -> Vec<SocketAddr> {
-        let nodes = (0..peers).map(|x| SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127,0,0,1)), 51235 + x)).collect();
-        debug!("{:?}", nodes);
-        nodes
     }
 }

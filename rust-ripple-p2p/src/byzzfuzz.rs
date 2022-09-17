@@ -1,28 +1,22 @@
 use bs58::Alphabet;
 use itertools::Itertools;
-use nom::AsBytes;
 use protobuf::Message;
-use std::cmp::max;
 use std::collections::{HashMap, HashSet};
-use std::iter::FromIterator;
 use std::net::TcpStream;
 use std::sync::Arc;
-use std::time::Duration;
 use websocket::Message as WsMessage;
 
 use crate::client::Client;
 use crate::container_manager::NodeKeys;
 use crate::deserialization::parse2;
-use crate::message_handler::{from_bytes, invoke_protocol_message, RippleMessageObject};
-use crate::protos::ripple::{NodeEvent, TMTransaction};
+use crate::message_handler::{from_bytes, RippleMessageObject};
+use crate::protos::ripple::NodeEvent;
 use crate::scheduler::Event;
 use crate::toxiproxy::ToxiproxyClient;
 use rand::prelude::*;
 use secp256k1::{Secp256k1, SecretKey};
 use serde_json::json;
 use set_partitions::{set_partitions, ArrayVecSetPartition, HashSubsets};
-use tokio::time::sleep;
-use websocket::receiver::Reader;
 use websocket::sender::Writer;
 use websocket::ClientBuilder;
 use xrpl::core::keypairs::utils::sha512_first_half;
@@ -30,9 +24,6 @@ use RippleMessageObject::{TMProposeSet, TMStatusChange, TMValidation};
 
 pub struct ByzzFuzz {
     n: usize, // number of processes
-    c: usize, // bound on the #rounds with process faults
-    d: usize, // bound on the #rounds with network faults
-    r: usize, // bound on the #rounds with faults
     any_scope: bool,
     pub baseline: bool,
     current_index: usize,
@@ -63,9 +54,9 @@ impl ByzzFuzz {
         (0..c).for_each(|_| {
             let round = thread_rng().gen_range(2..r + 2);
             let sublist = if thread_rng().gen_bool(0.5) {
-                [0 as usize, 1, 2, 4].into_iter()
+                [0 as usize, 1, 2, 4].iter()
             } else {
-                [2 as usize, 4, 5, 6].into_iter()
+                [2 as usize, 4, 5, 6].iter()
             }
             .powerset()
             .collect_vec();
@@ -77,16 +68,8 @@ impl ByzzFuzz {
             {
                 subset.insert(*peer);
             }
-            // (4..7).for_each(|i| {
-            //     subset.insert(i);
-            // });
             process_faults.insert(round, (subset, thread_rng().gen()));
         });
-
-        // // {4: {2}, 2: {1, 2}, 5: {6}}
-        // process_faults.insert(2, HashSet::from([1, 2]));
-        // process_faults.insert(4, HashSet::from([2]));
-        // process_faults.insert(5, HashSet::from([6]));
 
         let mut network_faults = HashMap::with_capacity(d);
         (0..d)
@@ -94,7 +77,7 @@ impl ByzzFuzz {
             .for_each(|fault| {
                 network_faults.insert(fault.round, fault.partition);
             });
-        let mut sequences_hashes: HashMap<usize, String> = HashMap::new();
+        let sequences_hashes: HashMap<usize, String> = HashMap::new();
         let client = ClientBuilder::new("ws://127.0.0.1:6008")
             .unwrap()
             .connect_insecure()
@@ -102,9 +85,6 @@ impl ByzzFuzz {
         let (_, sender) = client.split().unwrap();
         Self {
             n,
-            c,
-            d,
-            r,
             any_scope,
             baseline,
             current_index: 0,
@@ -130,14 +110,15 @@ impl ByzzFuzz {
     pub async fn on_message(&mut self, mut event: Event) -> Event {
         if self.baseline {
             if event.from != 3 {
-                let mut message = from_bytes(&event.message);
+                let message = from_bytes(&event.message);
                 self.update_round(&message).await;
             }
             if event.from == 3 && self.current_round > 1 && thread_rng().gen_bool(0.2) {
                 let index = thread_rng().gen_range(0..event.message.len());
-                event.message[index] = event.message[index] ^ 0b0000_0001 << thread_rng().gen_range(0..8);
+                event.message[index] =
+                    event.message[index] ^ 0b0000_0001 << thread_rng().gen_range(0..8);
             }
-            return event
+            return event;
         }
         let mut message = from_bytes(&event.message);
         self.update_round(&message).await;
@@ -333,20 +314,14 @@ impl ByzzFuzz {
                 event.message[3] = bytes[3];
             }
             TMValidation(ref mut validation) => {
-                let (_, mut parsed) = parse2(validation.get_validation()).unwrap();
+                let (_, parsed) = parse2(validation.get_validation()).unwrap();
                 if event.from == 3
-                    // && parsed["ConsensusHash"]
-                    //     .as_str()
-                    //     .unwrap()
-                    //     .eq_ignore_ascii_case(
-                    //         "fe0e71183243245e3619efcbe073f2d7eede9b0f0bf1a1b2b7d9f1e22b4a5c2a",
-                    //     )
                     && parsed["SigningPubKey"]
-                    .as_str()
-                    .unwrap()
-                    .eq_ignore_ascii_case(
-                        "02954103E420DA5361F00815929207B36559492B6C37C62CB2FE152CCC6F3C11C5",
-                    )
+                        .as_str()
+                        .unwrap()
+                        .eq_ignore_ascii_case(
+                            "02954103E420DA5361F00815929207B36559492B6C37C62CB2FE152CCC6F3C11C5",
+                        )
                 {
                     let secp256k1 = Secp256k1::new();
                     let private_key = SecretKey::from_slice(
