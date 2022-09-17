@@ -158,13 +158,13 @@ impl App {
             if i < 5 {
                 let _client = Client::new(
                     i,
-                    format!("ws://127.0.0.1:600{}", 5 + i).as_str(),
+                    format!("ws://127.0.0.1:600{}", 5 + i),
                     subscription_tx.clone(),
                 );
             } else {
                 let _client = Client::new(
                     i,
-                    format!("ws://127.0.0.1:60{}", 5 + i).as_str(),
+                    format!("ws://127.0.0.1:60{}", 5 + i),
                     subscription_tx.clone(),
                 );
             }

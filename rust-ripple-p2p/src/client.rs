@@ -33,10 +33,10 @@ pub struct Client<'a> {
 impl Client<'static> {
     pub fn new(
         peer: u16,
-        connection: &str,
+        connection: String,
         subscription_collector_sender: tokio::sync::mpsc::Sender<PeerSubscriptionObject>,
     ) -> Self {
-        let client = ClientBuilder::new(connection)
+        let client = ClientBuilder::new(&connection)
             .unwrap()
             .connect_insecure()
             .unwrap();
@@ -72,7 +72,6 @@ impl Client<'static> {
             }
         });
 
-        let is_byzantine = connection.ends_with("8");
         let receive_loop = tokio::spawn(async move {
             // Receive loop
             for message in receiver.incoming_messages() {
@@ -88,27 +87,10 @@ impl Client<'static> {
                     // Say what we received
                     OwnedMessage::Text(text) => {
                         match serde_json::from_str::<SubscriptionObject>(text.as_str()) {
-                            Ok(subscription_object) => {
-                                match &subscription_object {
-                                    SubscriptionObject::ValidatedLedger(vl) => {
-                                        if vl.ledger_index == 5 && is_byzantine {
-                                            // thread::sleep(Duration::from_millis(450));
-                                            // Client::sign_and_submit(
-                                            //     &sender_clone,
-                                            //     format!("Ripple TXN").as_str(),
-                                            //     &Client::create_payment_transaction(200000000, _ACCOUNT_ID, _GENESIS_ADDRESS),
-                                            //     _GENESIS_SEED
-                                            // );
-                                            // println!("submitted");
-                                        }
-                                    }
-                                    _ => (),
-                                }
-                                subscription_collector_sender
-                                    .send(PeerSubscriptionObject::new(peer, subscription_object))
-                                    .await
-                                    .unwrap()
-                            }
+                            Ok(subscription_object) => subscription_collector_sender
+                                .send(PeerSubscriptionObject::new(peer, subscription_object))
+                                .await
+                                .unwrap(),
                             Err(_) => {
                                 warn!("Could not parse")
                             }
