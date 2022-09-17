@@ -341,72 +341,6 @@ lazy_static! {
 //     mutated_contents
 // }
 
-// fn decode_type_code(type_code: u8) -> &'static str {
-//     return match type_code {
-//         0 => "NotPresent",
-//         1 => "UInt16",
-//         2 => "UInt32",
-//         3 => "UInt64",
-//         5 => "Hash256",
-//         6 => "Amount",
-//         7 => "Blob",
-//         8 => "AccountID",
-//         14 => "STObject",
-//         19 => "Vector256",
-//         _ => {
-//             panic!("unknown type code: {}", type_code)
-//         }
-//     };
-// }
-
-// fn decode_field_code(field_type: &str, field_code: u8) -> String {
-//     let fields = read_from_file();
-//     let current_key = FieldType {
-//         nth: field_code,
-//         type_field: field_type.to_string(),
-//     };
-//     let result = match fields.get(&current_key) {
-//         Some(field) => field.field_name.to_string(),
-//         None => "Unknown".to_string(),
-//     };
-//     // if the key is not in the fields in definitions.json
-//     if result.eq("Unknown") {
-//         return match (field_type, field_code) {
-//             ("UInt64", 10) => "Cookie".to_string(),
-//             ("Hash256", 25) => "ValidatedHash".to_string(),
-//             _ => "Unknown".to_string(),
-//         };
-//     }
-//     return result;
-// }
-
-///
-///
-/// # Arguments
-///
-/// * `blob`:
-///
-/// returns: (type code as u8, field code as u8)
-///
-/// # Examples
-///
-/// ```
-///
-/// ```
-// fn get_type_field_code(blob: &mut BlobIterator) -> (u8, u8) {
-//     let first_byte = blob.next_byte();
-
-//     let low_bits = first_byte & 0b0000_1111;
-//     let high_bits = (first_byte & 0b1111_0000) >> 4;
-
-//     return match (high_bits == 0, low_bits == 0) {
-//         (true, true) => (blob.next_byte(), blob.next_byte()),
-//         (false, true) => (high_bits, blob.next_byte()),
-//         (true, false) => (blob.next_byte(), low_bits),
-//         (false, false) => (high_bits, low_bits),
-//     };
-// }
-
 ///
 ///
 ///
@@ -437,52 +371,6 @@ pub fn read_transaction_types() -> HashMap<i64, String> {
 
     all_transactions
 }
-
-///
-///
-///
-/// # Fields
-///
-///
-///
-// pub fn read_from_file() -> HashMap<FieldType, FieldInformation> {
-//     let mut data = String::new();
-//     let mut file =
-//         File::open("src/deserialization/definitions.json").expect("Getting the file did not work.");
-//     file.read_to_string(&mut data)
-//         .expect("Reading from file did not work.");
-
-//     let all_values: serde_json::Value =
-//         serde_json::from_str(&*data).expect("Parsing the data did not work.");
-//     // get only the fields
-//     let fields = serde_json::json!(all_values["FIELDS"]);
-
-//     // hashmap with all the fields (key: nth + type)
-//     let mut all_fields = HashMap::new();
-
-//     for field in fields.as_array().unwrap() {
-//         // the array of each field in the JSON
-//         let current_field = field[1].as_object().unwrap();
-//         // key: nth + type
-//         let current_key = FieldType {
-//             nth: current_field["nth"].as_u64().unwrap() as u8,
-//             type_field: current_field["type"].to_string().replace("\"", ""),
-//         };
-//         let current_value = FieldInformation {
-//             // field name
-//             field_name: field[0].to_string().replace("\"", ""),
-//             // isVLEncoded
-//             is_vl_encoded: current_field["isVLEncoded"].as_bool().unwrap(),
-//             // isSerialized
-//             is_serialized: current_field["isSerialized"].as_bool().unwrap(),
-//             // isSigningField
-//             is_signing_field: current_field["isSigningField"].as_bool().unwrap(),
-//         };
-//         all_fields.insert(current_key, current_value);
-//     }
-
-//     all_fields
-// }
 
 #[derive(PartialEq, Eq, Hash)]
 pub struct FieldType {

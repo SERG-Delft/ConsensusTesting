@@ -13,20 +13,6 @@ use std::convert::TryFrom;
 use std::fs::File;
 use std::io::Read;
 
-// fn get_type_field_code(input: &[u8]) -> IResult<&[u8], (u8, u8)> {
-//     let (input, first_byte) = take(1usize)(input)?;
-//
-//     let low_bits = first_byte & 0b0000_1111;
-//     let high_bits = (first_byte & 0b1111_0000) >> 4;
-//
-//     return match (high_bits == 0, low_bits == 0) {
-//         (true, true) => { (blob.next_byte(), blob.next_byte()) }
-//         (false, true) => { (high_bits, blob.next_byte()) }
-//         (true, false) => { (blob.next_byte(), low_bits) }
-//         (false, false) => { (high_bits, low_bits) }
-//     };
-// }
-
 lazy_static! {
     static ref MAPPING: HashMap<FieldType, FieldInformation> = read_from_file();
 }
