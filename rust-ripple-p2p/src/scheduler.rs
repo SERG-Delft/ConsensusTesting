@@ -2,6 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::mpsc::Receiver as STDReceiver;
 use std::sync::{Arc, Mutex};
 
+use crate::spec_checker::{SpecChecker, Status};
 use crate::ByzzFuzz;
 use byteorder::{BigEndian, ByteOrder};
 use chrono::Utc;
@@ -11,7 +12,7 @@ use tokio::sync::mpsc::{Receiver as TokioReceiver, Sender as TokioSender};
 
 use crate::client::{PeerSubscriptionObject, SubscriptionObject};
 use crate::collector::RippleMessage;
-use crate::message_handler::invoke_protocol_message;
+use crate::message_handler::{from_bytes, invoke_protocol_message};
 
 type P2PConnections = HashMap<usize, HashMap<usize, PeerChannel>>;
 
@@ -21,7 +22,7 @@ pub struct Scheduler {
     stable: Arc<Mutex<bool>>,
     latest_validated_ledger: Arc<Mutex<u32>>,
     byzz_fuzz: ByzzFuzz,
-    message_count: usize,
+    spec_checker: SpecChecker,
     shutdown_tx: Sender<(HashMap<usize, String>, usize, String)>,
     shutdown_rx: Receiver<(HashMap<usize, String>, usize, String)>,
 }
@@ -33,6 +34,7 @@ impl Scheduler {
         byzz_fuzz: ByzzFuzz,
         shutdown_tx: Sender<(HashMap<usize, String>, usize, String)>,
         shutdown_rx: Receiver<(HashMap<usize, String>, usize, String)>,
+        public_key_to_index: HashMap<String, usize>,
     ) -> Self {
         Scheduler {
             p2p_connections,
@@ -40,7 +42,7 @@ impl Scheduler {
             stable: Arc::new(Mutex::new(false)),
             latest_validated_ledger: Arc::new(Mutex::new(0)),
             byzz_fuzz,
-            message_count: 0,
+            spec_checker: SpecChecker::new(public_key_to_index),
             shutdown_tx,
             shutdown_rx,
         }
@@ -92,10 +94,14 @@ impl Scheduler {
 
     async fn execute_event(&mut self, mut event: Event) -> (bool, &'static str) {
         event = self.byzz_fuzz.on_message(event).await;
-        self.message_count += 1;
-        if self.message_count >= 10_000_000 {
-            return (false, "timeout_messages");
-        }
+        match self.spec_checker.check(from_bytes(&event.message)) {
+            Err(Status::Timeout) => return (false, "timeout_messages"),
+            Err(Status::Liveness) => {
+                println!("detected liveness violation");
+                return (true, "liveness_violation")
+            },
+            Ok(()) => {}
+        };
         self.p2p_connections
             .get(&event.to)
             .unwrap()

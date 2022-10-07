@@ -24,7 +24,9 @@ mod message_handler;
 mod peer_connection;
 mod protos;
 mod scheduler;
+mod spec_checker;
 mod toxiproxy;
+mod utils;
 
 type AnyError = Box<dyn std::error::Error + Send + Sync>;
 type AnyResult<T> = Result<T, AnyError>;
@@ -64,6 +66,7 @@ fn main() {
     env_logger::Builder::new().parse_default_env().init();
 
     let bug_unls: Vec<Vec<usize>> = vec![
+        // symmetric
         vec![0, 1, 2, 3, 4], // 0
         vec![0, 1, 2, 3, 4], // 1
         vec![0, 1, 2, 3, 4], // 2

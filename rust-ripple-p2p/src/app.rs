@@ -113,6 +113,11 @@ impl App {
             byzz_fuzz,
             shutdown_tx,
             shutdown_rx.resubscribe(),
+            self.node_keys
+                .iter()
+                .enumerate()
+                .map(|(i, keys)| (keys.validation_public_key.clone(), i))
+                .collect(),
         );
         scheduler_thread = tokio::spawn(async move {
             tokio::select! {
