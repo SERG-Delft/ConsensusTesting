@@ -56,17 +56,13 @@ impl SpecChecker {
 
                 // println!("history[{}] = {:?}", sequence, hashes);
 
-                //TODO check whether processes disagreed/forked
-                // flag if processes in p1, p2, p3 validate the same
-                //      and p4, p5, p6 validate something else
-
-                // hashes[0] == hashes[1] == hashes[2]
-                // and
-                // hashes[4] == hashes[5] == hashes[6]
-                // and
-                // hashes[0] != hashes[6]
-
-                // return Err(Status::Liveness)
+                if hashes[0].eq(&hashes[1]) && hashes[0].eq(&hashes[2]) &&
+                    hashes[4].eq(&hashes[5]) && hashes[4].eq(&hashes[6]) &&
+                    !hashes[0].eq(&hashes[6]) {
+                    return Err(Status::Liveness)
+                } else {
+                    return Ok(())
+                }
             }
             _ => {}
         };
