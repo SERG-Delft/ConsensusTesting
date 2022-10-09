@@ -1,14 +1,24 @@
 use crate::utils::public_key_to_b58;
 use crate::{deserialization::parse2, message_handler::RippleMessageObject};
 use std::collections::HashMap;
+use std::fmt::Display;
 
-const MESSAGE_TIMEOUT: usize = 10_000;
+const MESSAGE_TIMEOUT: usize = 100_000;
 
 type Result = core::result::Result<(), Status>;
 
 pub enum Status {
     Timeout,
-    Liveness
+    Liveness,
+}
+
+impl Display for Status {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Status::Timeout => write!(f, "Timeout after {} messages", MESSAGE_TIMEOUT),
+            Status::Liveness => write!(f, "Liveness"),
+        }
+    }
 }
 
 pub struct SpecChecker {
@@ -26,13 +36,17 @@ impl SpecChecker {
         }
     }
 
-    pub fn check(&mut self, message: RippleMessageObject) -> Result {
-        self.check_insufficient_support_after_fork(message)?;
+    pub fn check(&mut self, sender: usize, message: RippleMessageObject) -> Result {
+        self.check_insufficient_support_after_fork(sender, message)?;
         self.check_timeout()?;
         Ok(())
     }
 
-    fn check_insufficient_support_after_fork(&mut self, message: RippleMessageObject) -> Result {
+    fn check_insufficient_support_after_fork(
+        &mut self,
+        sender: usize,
+        message: RippleMessageObject,
+    ) -> Result {
         match message {
             RippleMessageObject::TMValidation(ref validation) => {
                 let validation = match parse2(validation.get_validation()) {
@@ -52,16 +66,25 @@ impl SpecChecker {
                 let process_index = *self.public_key_to_index.get(&public_key_b58).unwrap();
                 let hashes = self.validation_history.get_mut(&sequence).unwrap();
 
+                if process_index != sender || sender == 3 || hashes[process_index].is_some() {
+                    return Ok(());
+                }
+
                 hashes[process_index] = Some(validation["hash"].as_str().unwrap().to_owned());
 
-                // println!("history[{}] = {:?}", sequence, hashes);
-
-                if hashes[0].eq(&hashes[1]) && hashes[0].eq(&hashes[2]) &&
-                    hashes[4].eq(&hashes[5]) && hashes[4].eq(&hashes[6]) &&
-                    !hashes[0].eq(&hashes[6]) {
-                    return Err(Status::Liveness)
+                if hashes[0].eq(&hashes[1])
+                    && hashes[0].eq(&hashes[2])
+                    && hashes[4].eq(&hashes[5])
+                    && hashes[4].eq(&hashes[6])
+                    && !hashes[0].eq(&hashes[6])
+                    && hashes[0].is_some()
+                    && hashes[6].is_some()
+                {
+                    println!("validation {}", validation);
+                    println!("history[{}] = {:?}", sequence, hashes);
+                    return Err(Status::Liveness);
                 } else {
-                    return Ok(())
+                    return Ok(());
                 }
             }
             _ => {}

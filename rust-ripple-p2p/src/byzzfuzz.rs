@@ -139,6 +139,7 @@ impl ByzzFuzz {
                             .eq(&self.mutated_ledger_hash)
                         {
                             self.mutated_ledger_hash = status.get_ledgerHash().to_vec().clone();
+                            self.all_mutated_ledger_hashes.insert(status.get_ledgerHash().to_vec().clone());
                             println!("cached ledger {}", hex::encode(&self.mutated_ledger_hash))
                         }
                     }

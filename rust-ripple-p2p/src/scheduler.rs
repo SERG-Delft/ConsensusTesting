@@ -94,12 +94,15 @@ impl Scheduler {
 
     async fn execute_event(&mut self, mut event: Event) -> (bool, &'static str) {
         event = self.byzz_fuzz.on_message(event).await;
-        match self.spec_checker.check(from_bytes(&event.message)) {
+        match self
+            .spec_checker
+            .check(event.from, from_bytes(&event.message))
+        {
             Err(Status::Timeout) => return (false, "timeout_messages"),
             Err(Status::Liveness) => {
                 println!("detected liveness violation");
-                return (true, "liveness_violation")
-            },
+                return (true, "liveness_violation");
+            }
             Ok(()) => {}
         };
         self.p2p_connections
