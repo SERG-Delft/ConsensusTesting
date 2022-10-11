@@ -177,7 +177,7 @@ impl Display for RippleMessage {
                         "n9MsRMobdfpGvpXeGb3F6bm7WZbCiPrxzc1qBPP7wQox3NJzs5j2" => "4",
                         "n9JFX46v3d3WgQW8DJQeBwqTk8vaCR7LufApEy65J1eK4X7dZbR3" => "5",
                         "n9LFueHyYVJSyDArog2qtR42NixmeGxpaqFEFFp1xjxGU9aYRDZc" => "6",
-                        _ => key.as_str().clone(),
+                        _ => key.as_str(),
                     },
                     None => panic!("needs node key"),
                 };
@@ -206,7 +206,7 @@ impl Display for RippleMessage {
                         "n9MsRMobdfpGvpXeGb3F6bm7WZbCiPrxzc1qBPP7wQox3NJzs5j2" => "4",
                         "n9JFX46v3d3WgQW8DJQeBwqTk8vaCR7LufApEy65J1eK4X7dZbR3" => "5",
                         "n9LFueHyYVJSyDArog2qtR42NixmeGxpaqFEFFp1xjxGU9aYRDZc" => "6",
-                        _ => key.as_str().clone(),
+                        _ => key.as_str(),
                     },
                     None => panic!("needs node key"),
                 };

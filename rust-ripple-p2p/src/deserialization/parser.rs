@@ -20,7 +20,7 @@ lazy_static! {
 //TODO add support to parse UInt8 and Vector256
 
 fn decode_type_code(type_code: u8) -> &'static str {
-    return match type_code {
+    match type_code {
         0 => "NotPresent",
         1 => "UInt16",
         2 => "UInt32",
@@ -34,7 +34,7 @@ fn decode_type_code(type_code: u8) -> &'static str {
         _ => {
             panic!("unknown type code: {}", type_code)
         }
-    };
+    }
 }
 
 fn decode_field_code(field_type: &str, field_code: u8) -> String {
@@ -55,7 +55,7 @@ fn decode_field_code(field_type: &str, field_code: u8) -> String {
             _ => "Unknown".to_string(),
         };
     }
-    return result;
+    result
 }
 
 fn field_id(input: &[u8]) -> IResult<&[u8], (u8, u8)> {
@@ -127,7 +127,7 @@ fn parse_blob(input: &[u8]) -> IResult<&[u8], JsonValue> {
 fn parse_amount(input: &[u8]) -> IResult<&[u8], JsonValue> {
     //TODO add check for issued currency
     map(be_u64, |n: u64| {
-        JsonValue::String((n ^ 0x4000000000000000).to_string().into())
+        JsonValue::String((n ^ 0x4000000000000000).to_string())
     })(input)
 }
 
@@ -144,7 +144,7 @@ fn parse_field(input: &[u8]) -> IResult<&[u8], (String, JsonValue)> {
     let type_str = decode_type_code(type_code);
     let field_name = decode_field_code(type_str, field_code);
     pair(
-        value(field_name.clone(), success(0)),
+        value(field_name, success(0)),
         match type_str {
             "UInt16" => parse_uint16,
             "UInt32" => parse_uint32,
@@ -188,11 +188,11 @@ fn read_from_file() -> HashMap<FieldType, FieldInformation> {
         // key: nth + type
         let current_key = FieldType {
             nth: current_field["nth"].as_u64().unwrap() as u8,
-            type_field: current_field["type"].to_string().replace("\"", ""),
+            type_field: current_field["type"].to_string().replace('\"', ""),
         };
         let current_value = FieldInformation {
             // field name
-            field_name: field[0].to_string().replace("\"", ""),
+            field_name: field[0].to_string().replace('\"', ""),
             // isVLEncoded
             is_vl_encoded: current_field["isVLEncoded"].as_bool().unwrap(),
             // isSerialized

@@ -61,7 +61,6 @@ impl Client<'static> {
                 match sender.send_message(&message) {
                     Ok(()) => {
                         debug!("Send Loop sent message: {:?}", message);
-                        ()
                     }
                     Err(e) => {
                         debug!("Send Loop: {:?}", e);

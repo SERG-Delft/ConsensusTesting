@@ -53,7 +53,7 @@ impl App {
         let (collector_tx, collector_rx) = tokio::sync::mpsc::channel(32);
         let (subscription_tx, subscription_rx) = tokio::sync::mpsc::channel(32);
         let (collector_state_tx, scheduler_state_rx) = std::sync::mpsc::channel();
-        let peer = self.peers.clone();
+        let peer = self.peers;
         // Start the collector which writes output to files
         let collector_task = tokio::spawn(async move {
             Collector::new(peer, collector_rx, subscription_rx, collector_state_tx)
@@ -81,27 +81,27 @@ impl App {
             let (tx_scheduler_j, rx_peer_j) = tokio::sync::mpsc::channel(32);
             peer_senders
                 .entry(i)
-                .or_insert(HashMap::new())
+                .or_insert_with(HashMap::new)
                 .insert(j, tx_peer_i);
             peer_senders
                 .entry(j)
-                .or_insert(HashMap::new())
+                .or_insert_with(HashMap::new)
                 .insert(i, tx_peer_j);
             peer_receivers
                 .entry(i)
-                .or_insert(HashMap::new())
+                .or_insert_with(HashMap::new)
                 .insert(j, rx_peer_i);
             peer_receivers
                 .entry(j)
-                .or_insert(HashMap::new())
+                .or_insert_with(HashMap::new)
                 .insert(i, rx_peer_j);
             scheduler_peer_channels
                 .entry(i)
-                .or_insert(HashMap::new())
+                .or_insert_with(HashMap::new)
                 .insert(j, PeerChannel::new(tx_scheduler_i));
             scheduler_peer_channels
                 .entry(j)
-                .or_insert(HashMap::new())
+                .or_insert_with(HashMap::new)
                 .insert(i, PeerChannel::new(tx_scheduler_j));
         }
 

@@ -57,7 +57,7 @@ fn get_node_keys(n: usize) -> Vec<NodeKeys> {
         .output()
         .unwrap()
         .stdout;
-    if already_running.len() == 0 {
+    if already_running.is_empty() {
         debug!("trying to start key generator");
         remove_containers("key_generator");
         start_node_with_options("key_generator", 0, false);
@@ -75,7 +75,7 @@ fn get_node_keys(n: usize) -> Vec<NodeKeys> {
                 let keys = acquire_keys();
                 File::create(&format!("{}/keys.json", path))
                     .unwrap()
-                    .write(serde_json::to_string(&keys).unwrap().as_bytes())
+                    .write_all(serde_json::to_string(&keys).unwrap().as_bytes())
                     .unwrap();
                 keys
             }
@@ -94,12 +94,12 @@ fn acquire_keys() -> NodeKeys {
         .unwrap()
         .stdout;
     let keys = std::str::from_utf8(&output).unwrap();
-    let result: NodeKeysResult = serde_json::from_str(&keys).unwrap();
+    let result: NodeKeysResult = serde_json::from_str(keys).unwrap();
     debug!("acquired keys {:?}", result.result);
     result.result
 }
 
-fn create_configs(peers: usize, keys: &Vec<NodeKeys>) {
+fn create_configs(peers: usize, keys: &[NodeKeys]) {
     let base = read_to_string("../config/rippled.cfg").unwrap();
     (0..peers).into_par_iter().for_each(|i| {
         let path = format!("../config/validator_{}", i);
@@ -108,32 +108,32 @@ fn create_configs(peers: usize, keys: &Vec<NodeKeys>) {
         let config = base.replace("{validation_seed}", &keys[i].validation_seed);
         File::create(&format!("{}/rippled.cfg", path))
             .unwrap()
-            .write(config.as_bytes())
+            .write_all(config.as_bytes())
             .unwrap();
         debug!("created config setup for validator {}", i);
     });
 }
 
-fn configure_unls(unls: &Vec<Vec<usize>>, keys: &Vec<NodeKeys>) {
+fn configure_unls(unls: &Vec<Vec<usize>>, keys: &[NodeKeys]) {
     (0..unls.len()).into_par_iter().for_each(|i| {
         let path = format!("../config/validator_{}/validators.txt", i);
         let mut validators = "[validators]\n".to_owned();
-        for node in 0..unls.len() {
+        for (node, key) in keys.iter().enumerate() {
             if i != node && unls[i].contains(&node) {
-                validators.push_str(&*keys[node].validation_public_key);
-                validators.push_str("\n");
+                validators.push_str(&*key.validation_public_key);
+                validators.push('\n');
             }
         }
         File::create(path)
             .unwrap()
-            .write(validators.as_bytes())
+            .write_all(validators.as_bytes())
             .unwrap();
         debug!("wrote UNL for validator {}", i)
     });
 }
 
 fn run_nodes(peers: usize) {
-    (0..peers).into_par_iter().for_each(|i| start_node(i));
+    (0..peers).into_par_iter().for_each(start_node);
 }
 
 fn start_node(id: usize) {

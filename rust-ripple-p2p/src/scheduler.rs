@@ -1,3 +1,4 @@
+use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
 use std::sync::mpsc::Receiver as STDReceiver;
 use std::sync::{Arc, Mutex};
@@ -79,7 +80,7 @@ impl Scheduler {
                         let committed = transactions.lock().unwrap().len();
                         let message = disagree_message.lock().unwrap();
                         if !keep_going || committed == 7 || !message.is_empty() {
-                            self.shutdown_tx.send((mutex_sequences_hashes.lock().unwrap().clone(), committed, if !message.is_empty() { message.clone() } else {if committed == 7 { "all committed".to_string() } else { reason.to_string() }})).unwrap();
+                            self.shutdown_tx.send((mutex_sequences_hashes.lock().unwrap().clone(), committed, if !message.is_empty() { message.clone() } else if committed == 7 { "all committed".to_string() } else { reason.to_string() })).unwrap();
                         }
                     },
                     None => error!("Peer senders failed")
@@ -146,50 +147,44 @@ impl Scheduler {
     ) {
         let mut set_stable = false;
         let mut local_latest_validated_ledger = 0;
-        loop {
-            match collector_receiver.recv() {
-                Ok(subscription_object) => match subscription_object.subscription_object {
-                    SubscriptionObject::ValidatedLedger(ledger) => {
-                        if ledger.txn_count == 1 {
-                            transactions
-                                .lock()
-                                .unwrap()
-                                .insert(subscription_object.peer);
-                            println!("transactions {:?}", transactions);
-                        }
+        while let Ok(subscription_object) = collector_receiver.recv() {
+            if let SubscriptionObject::ValidatedLedger(ledger) =
+                subscription_object.subscription_object
+            {
+                if ledger.txn_count == 1 {
+                    transactions
+                        .lock()
+                        .unwrap()
+                        .insert(subscription_object.peer);
+                    println!("transactions {:?}", transactions);
+                }
 
-                        let sequence = ledger.ledger_index as usize;
+                let sequence = ledger.ledger_index as usize;
 
-                        let mut sequences_hashes = mutex_sequences_hashes.lock().unwrap();
+                let mut sequences_hashes = mutex_sequences_hashes.lock().unwrap();
 
-                        if sequences_hashes.contains_key(&sequence) {
-                            let sequence_hash = sequences_hashes.get(&sequence).unwrap();
-                            if !sequence_hash.eq(&ledger.ledger_hash) {
-                                mutex_disagree_messages.lock().unwrap().push_str(
-                                    format!(
-                                        "node {} validated {} whereas we stored {}",
-                                        subscription_object.peer, ledger.ledger_hash, sequence_hash
-                                    )
-                                    .as_str(),
-                                )
-                            }
-                        } else {
-                            sequences_hashes.insert(sequence, ledger.ledger_hash);
-                        }
-
-                        if !set_stable {
-                            *stable.lock().unwrap() = true;
-                            set_stable = true;
-                        }
-                        if local_latest_validated_ledger < ledger.ledger_index {
-                            *latest_validated_ledger.lock().unwrap() = ledger.ledger_index;
-                            local_latest_validated_ledger = ledger.ledger_index;
-                        }
+                if let Entry::Vacant(e) = sequences_hashes.entry(sequence) {
+                    e.insert(ledger.ledger_hash);
+                } else {
+                    let sequence_hash = sequences_hashes.get(&sequence).unwrap();
+                    if !sequence_hash.eq(&ledger.ledger_hash) {
+                        mutex_disagree_messages.lock().unwrap().push_str(
+                            format!(
+                                "node {} validated {} whereas we stored {}",
+                                subscription_object.peer, ledger.ledger_hash, sequence_hash
+                            )
+                            .as_str(),
+                        )
                     }
-                    _ => {}
-                },
-                Err(_) => {
-                    break;
+                }
+
+                if !set_stable {
+                    *stable.lock().unwrap() = true;
+                    set_stable = true;
+                }
+                if local_latest_validated_ledger < ledger.ledger_index {
+                    *latest_validated_ledger.lock().unwrap() = ledger.ledger_index;
+                    local_latest_validated_ledger = ledger.ledger_index;
                 }
             }
         }

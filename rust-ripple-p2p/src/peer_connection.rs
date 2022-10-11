@@ -196,8 +196,8 @@ impl PeerConnection {
         )
         .await;
 
-        let peer1_clone = peer1.clone();
-        let peer2_clone = peer2.clone();
+        let peer1_clone = peer1;
+        let peer2_clone = peer2;
         let thread1 = tokio::spawn(async move {
             Self::handle_peer_communication(
                 ssl_stream1,
@@ -208,8 +208,8 @@ impl PeerConnection {
             )
             .await
         });
-        let peer1_clone = peer1.clone();
-        let peer2_clone = peer2.clone();
+        let peer1_clone = peer1;
+        let peer2_clone = peer2;
         let thread2 = tokio::spawn(async move {
             Self::handle_peer_communication(
                 ssl_stream2,
@@ -233,14 +233,11 @@ impl PeerConnection {
     ) {
         let (mut ssl_reader, mut ssl_writer) = tokio::io::split(ssl_stream);
         let task = tokio::spawn(async move {
-            loop {
-                match receiver.recv().await {
-                    Some(message) => ssl_writer
-                        .write_all(message.as_slice())
-                        .await
-                        .expect("Unable to write to ssl stream"),
-                    None => break, // None => panic!("Scheduler sender failed") // Break when there are no more messages
-                }
+            while let Some(message) = receiver.recv().await {
+                ssl_writer
+                    .write_all(message.as_slice())
+                    .await
+                    .expect("Unable to write to ssl stream")
             }
         });
         loop {

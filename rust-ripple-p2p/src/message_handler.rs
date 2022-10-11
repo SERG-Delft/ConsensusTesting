@@ -5,7 +5,6 @@ use crate::protos::ripple::{
 };
 use byteorder::{BigEndian, ByteOrder};
 use openssl::sha::sha256;
-use serde_json;
 use std::fmt::{Debug, Display, Formatter};
 // use crate::deserialization::{deserialize_validation};
 
@@ -16,34 +15,32 @@ pub fn from_bytes(bytes: &[u8]) -> RippleMessageObject {
 /// Deserialize message
 pub fn invoke_protocol_message(message_type: u16, payload: &[u8]) -> RippleMessageObject {
     let proto_message: RippleMessageObject = match message_type {
-        2 => RippleMessageObject::TMManifest(parse_message::<TMManifest>(&payload)),
-        3 => RippleMessageObject::TMPing(parse_message::<TMPing>(&payload)),
-        5 => RippleMessageObject::TMCluster(parse_message::<TMCluster>(&payload)),
-        15 => RippleMessageObject::TMEndpoints(parse_message::<TMEndpoints>(&payload)),
-        30 => RippleMessageObject::TMTransaction(parse_message::<TMTransaction>(&payload)),
-        31 => RippleMessageObject::TMGetLedger(parse_message::<TMGetLedger>(&payload)),
-        32 => RippleMessageObject::TMLedgerData(parse_message::<TMLedgerData>(&payload)),
-        33 => RippleMessageObject::TMProposeSet(parse_message::<TMProposeSet>(&payload)),
-        34 => RippleMessageObject::TMStatusChange(parse_message::<TMStatusChange>(&payload)),
+        2 => RippleMessageObject::TMManifest(parse_message::<TMManifest>(payload)),
+        3 => RippleMessageObject::TMPing(parse_message::<TMPing>(payload)),
+        5 => RippleMessageObject::TMCluster(parse_message::<TMCluster>(payload)),
+        15 => RippleMessageObject::TMEndpoints(parse_message::<TMEndpoints>(payload)),
+        30 => RippleMessageObject::TMTransaction(parse_message::<TMTransaction>(payload)),
+        31 => RippleMessageObject::TMGetLedger(parse_message::<TMGetLedger>(payload)),
+        32 => RippleMessageObject::TMLedgerData(parse_message::<TMLedgerData>(payload)),
+        33 => RippleMessageObject::TMProposeSet(parse_message::<TMProposeSet>(payload)),
+        34 => RippleMessageObject::TMStatusChange(parse_message::<TMStatusChange>(payload)),
         35 => RippleMessageObject::TMHaveTransactionSet(parse_message::<TMHaveTransactionSet>(
-            &payload,
+            payload,
         )),
-        41 => RippleMessageObject::TMValidation(parse_message::<TMValidation>(&payload)),
-        42 => RippleMessageObject::TMGetObjectByHash(parse_message::<TMGetObjectByHash>(&payload)),
-        50 => RippleMessageObject::TMGetShardInfo(parse_message::<TMGetShardInfo>(&payload)),
-        51 => RippleMessageObject::TMShardInfo(parse_message::<TMShardInfo>(&payload)),
-        52 => {
-            RippleMessageObject::TMGetPeerShardInfo(parse_message::<TMGetPeerShardInfo>(&payload))
-        }
-        53 => RippleMessageObject::TMPeerShardInfo(parse_message::<TMPeerShardInfo>(&payload)),
-        54 => RippleMessageObject::TMValidatorList(parse_message::<TMValidatorList>(&payload)),
+        41 => RippleMessageObject::TMValidation(parse_message::<TMValidation>(payload)),
+        42 => RippleMessageObject::TMGetObjectByHash(parse_message::<TMGetObjectByHash>(payload)),
+        50 => RippleMessageObject::TMGetShardInfo(parse_message::<TMGetShardInfo>(payload)),
+        51 => RippleMessageObject::TMShardInfo(parse_message::<TMShardInfo>(payload)),
+        52 => RippleMessageObject::TMGetPeerShardInfo(parse_message::<TMGetPeerShardInfo>(payload)),
+        53 => RippleMessageObject::TMPeerShardInfo(parse_message::<TMPeerShardInfo>(payload)),
+        54 => RippleMessageObject::TMValidatorList(parse_message::<TMValidatorList>(payload)),
         _ => panic!("Unknown message {}", message_type),
     };
-    return proto_message;
+    proto_message
 }
 
 pub fn parse_message<T: protobuf::Message>(payload: &[u8]) -> T {
-    return protobuf::Message::parse_from_bytes(&payload).unwrap();
+    protobuf::Message::parse_from_bytes(payload).unwrap()
 }
 
 #[derive(Debug)]
@@ -74,7 +71,7 @@ impl RippleMessageObject {
                 let type_prefixed_key = [&[28u8], propose_set.get_nodePubKey()].concat();
                 let checksum = sha256(&sha256(&type_prefixed_key));
                 let propose_key = [&type_prefixed_key, &checksum[..4]].concat();
-                let node_key = bs58::encode(propose_key.clone())
+                let node_key = bs58::encode(propose_key)
                     .with_alphabet(bs58::Alphabet::RIPPLE)
                     .into_string();
                 Some(node_key)
@@ -148,7 +145,7 @@ impl Display for RippleMessageObject {
     }
 }
 
-#[derive(Default, serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq)]
+#[derive(Default, serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct ParsedValidation {
     pub ledger_sequence: u32,
     pub validated_hash: String,

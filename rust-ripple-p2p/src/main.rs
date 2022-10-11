@@ -7,7 +7,6 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use std::{env, fs};
 
 use clap::{crate_version, Parser};
-use env_logger;
 use log::*;
 use tokio::sync::broadcast;
 
@@ -122,12 +121,10 @@ fn main() {
         args.r,
         if args.baseline {
             "baseline"
+        } else if args.any_scope {
+            "any-scope"
         } else {
-            if args.any_scope {
-                "any-scope"
-            } else {
-                "small-scope"
-            }
+            "small-scope"
         },
         crate_version!()
     );

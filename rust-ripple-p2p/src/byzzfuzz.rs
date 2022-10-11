@@ -54,9 +54,9 @@ impl ByzzFuzz {
         (0..c).for_each(|_| {
             let round = thread_rng().gen_range(2..r + 2);
             let sublist = if thread_rng().gen_bool(0.5) {
-                [0 as usize, 1, 2, 4].iter()
+                [0_usize, 1, 2, 4].iter()
             } else {
-                [2 as usize, 4, 5, 6].iter()
+                [2_usize, 4, 5, 6].iter()
             }
             .powerset()
             .collect_vec();
@@ -115,8 +115,7 @@ impl ByzzFuzz {
             }
             if event.from == 3 && self.current_round > 1 && thread_rng().gen_bool(0.2) {
                 let index = thread_rng().gen_range(0..event.message.len());
-                event.message[index] =
-                    event.message[index] ^ 0b0000_0001 << thread_rng().gen_range(0..8);
+                event.message[index] ^= 0b0000_0001 << thread_rng().gen_range(0..8);
             }
             return event;
         }
@@ -130,21 +129,18 @@ impl ByzzFuzz {
                 .0
                 .contains(&event.from)
         {
-            match message {
-                TMStatusChange(ref mut status) => {
-                    if status.get_newEvent() == NodeEvent::neACCEPTED_LEDGER {
-                        if !status
-                            .get_ledgerHash()
-                            .to_vec()
-                            .eq(&self.mutated_ledger_hash)
-                        {
-                            self.mutated_ledger_hash = status.get_ledgerHash().to_vec().clone();
-                            self.all_mutated_ledger_hashes.insert(status.get_ledgerHash().to_vec().clone());
-                            println!("cached ledger {}", hex::encode(&self.mutated_ledger_hash))
-                        }
-                    }
+            if let TMStatusChange(ref mut status) = message {
+                if status.get_newEvent() == NodeEvent::neACCEPTED_LEDGER
+                    && !status
+                        .get_ledgerHash()
+                        .to_vec()
+                        .eq(&self.mutated_ledger_hash)
+                {
+                    self.mutated_ledger_hash = status.get_ledgerHash().to_vec();
+                    self.all_mutated_ledger_hashes
+                        .insert(status.get_ledgerHash().to_vec());
+                    println!("cached ledger {}", hex::encode(&self.mutated_ledger_hash))
                 }
-                _ => (),
             }
         }
         if event.from == 3
@@ -251,29 +247,20 @@ impl ByzzFuzz {
             TMProposeSet(ref mut proposal) => {
                 if proposal.get_nodePubKey()[1] == 149 {
                     if !mutate_sequence_ids {
-                        if !self.any_scope {
+                        if !self.any_scope || (seed / 2) % 2 == 0 {
                             proposal.set_currentTxHash(
-                                hex::decode(
-                                    "e803e1999369975aed1bfd2444a3552a73383c03a2004cb784ce07e13ebd7d7c",
-                                )
-                                    .unwrap(),
-                            );
-                        } else {
-                            if (seed / 2) % 2 == 0 {
-                                proposal.set_currentTxHash(
                                     hex::decode(
                                         "e803e1999369975aed1bfd2444a3552a73383c03a2004cb784ce07e13ebd7d7c",
                                     )
                                         .unwrap(),
                                 );
-                            } else {
-                                proposal.set_currentTxHash(
+                        } else {
+                            proposal.set_currentTxHash(
                                     hex::decode(
                                         "0000000000000000000000000000000000000000000000000000000000000000",
                                     )
                                         .unwrap(),
                                 );
-                            }
                         }
                     } else {
                         let initial_propose_seq = proposal.get_proposeSeq();
@@ -335,11 +322,7 @@ impl ByzzFuzz {
                     if !mutate_sequence_ids {
                         let corruped_hash = if self.any_scope {
                             let n = (seed as usize / 2) % self.all_mutated_ledger_hashes.len();
-                            self.all_mutated_ledger_hashes
-                                .iter()
-                                .skip(n)
-                                .next()
-                                .unwrap()
+                            self.all_mutated_ledger_hashes.iter().nth(n).unwrap()
                         } else {
                             &self.mutated_ledger_hash
                         };

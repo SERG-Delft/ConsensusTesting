@@ -47,47 +47,42 @@ impl SpecChecker {
         sender: usize,
         message: RippleMessageObject,
     ) -> Result {
-        match message {
-            RippleMessageObject::TMValidation(ref validation) => {
-                let validation = match parse2(validation.get_validation()) {
-                    Ok((_, validation)) => validation,
-                    Err(_) => return Ok(()),
-                };
+        if let RippleMessageObject::TMValidation(ref validation) = message {
+            let validation = match parse2(validation.get_validation()) {
+                Ok((_, validation)) => validation,
+                Err(_) => return Ok(()),
+            };
 
-                let sequence = validation["LedgerSequence"].as_usize().unwrap();
-                if !self.validation_history.contains_key(&sequence) {
-                    self.validation_history
-                        .insert(sequence, [None, None, None, None, None, None, None]);
-                }
+            let sequence = validation["LedgerSequence"].as_usize().unwrap();
+            self.validation_history
+                .entry(sequence)
+                .or_insert([None, None, None, None, None, None, None]);
 
-                let public_key =
-                    hex::decode(validation["SigningPubKey"].as_str().unwrap()).unwrap();
-                let public_key_b58 = public_key_to_b58(public_key.as_slice());
-                let process_index = *self.public_key_to_index.get(&public_key_b58).unwrap();
-                let hashes = self.validation_history.get_mut(&sequence).unwrap();
+            let public_key = hex::decode(validation["SigningPubKey"].as_str().unwrap()).unwrap();
+            let public_key_b58 = public_key_to_b58(public_key.as_slice());
+            let process_index = *self.public_key_to_index.get(&public_key_b58).unwrap();
+            let hashes = self.validation_history.get_mut(&sequence).unwrap();
 
-                if process_index != sender || sender == 3 || hashes[process_index].is_some() {
-                    return Ok(());
-                }
-
-                hashes[process_index] = Some(validation["hash"].as_str().unwrap().to_owned());
-
-                if hashes[0].eq(&hashes[1])
-                    && hashes[0].eq(&hashes[2])
-                    && hashes[4].eq(&hashes[5])
-                    && hashes[4].eq(&hashes[6])
-                    && !hashes[0].eq(&hashes[6])
-                    && hashes[0].is_some()
-                    && hashes[6].is_some()
-                {
-                    println!("validation {}", validation);
-                    println!("history[{}] = {:?}", sequence, hashes);
-                    return Err(Status::Liveness);
-                } else {
-                    return Ok(());
-                }
+            if process_index != sender || sender == 3 || hashes[process_index].is_some() {
+                return Ok(());
             }
-            _ => {}
+
+            hashes[process_index] = Some(validation["hash"].as_str().unwrap().to_owned());
+
+            if hashes[0].eq(&hashes[1])
+                && hashes[0].eq(&hashes[2])
+                && hashes[4].eq(&hashes[5])
+                && hashes[4].eq(&hashes[6])
+                && !hashes[0].eq(&hashes[6])
+                && hashes[0].is_some()
+                && hashes[6].is_some()
+            {
+                println!("validation {}", validation);
+                println!("history[{}] = {:?}", sequence, hashes);
+                return Err(Status::Liveness);
+            } else {
+                return Ok(());
+            }
         };
         Ok(())
     }
