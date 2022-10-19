@@ -1,56 +1,33 @@
-use crate::utils::public_key_to_b58;
-use crate::{deserialization::parse2, message_handler::RippleMessageObject};
 use std::collections::HashMap;
-use std::fmt::Display;
 
-const MESSAGE_TIMEOUT: usize = 100_000;
+use tokio::sync::broadcast::Sender;
 
-type Result = core::result::Result<(), Status>;
+use crate::deserialization::parse2;
+use crate::message_handler::RippleMessageObject;
+use crate::utils::public_key_to_b58;
 
-pub enum Status {
-    Timeout,
-    Liveness,
-}
+use super::Flags;
 
-impl Display for Status {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Status::Timeout => write!(f, "Timeout after {} messages", MESSAGE_TIMEOUT),
-            Status::Liveness => write!(f, "Liveness"),
-        }
-    }
-}
-
-pub struct SpecChecker {
-    message_count: usize,
+pub(super) struct InsufficientSupportChecker {
     validation_history: HashMap<usize, [Option<String>; 7]>,
     public_key_to_index: HashMap<String, usize>,
+    sender: Sender<Flags>,
 }
 
-impl SpecChecker {
-    pub fn new(public_key_to_index: HashMap<String, usize>) -> Self {
+impl InsufficientSupportChecker {
+    pub fn new(public_key_to_index: HashMap<String, usize>, sender: Sender<Flags>) -> Self {
         Self {
-            message_count: 0,
             validation_history: HashMap::new(),
             public_key_to_index,
+            sender,
         }
     }
 
-    pub fn check(&mut self, sender: usize, message: RippleMessageObject) -> Result {
-        self.check_insufficient_support_after_fork(sender, message)?;
-        self.check_timeout()?;
-        Ok(())
-    }
-
-    fn check_insufficient_support_after_fork(
-        &mut self,
-        sender: usize,
-        message: RippleMessageObject,
-    ) -> Result {
+    pub fn check(&mut self, sender: usize, message: RippleMessageObject) -> () {
         if let RippleMessageObject::TMValidation(ref validation) = message {
             let validation = match parse2(validation.get_validation()) {
                 Ok((_, validation)) => validation,
-                Err(_) => return Ok(()),
+                Err(_) => return (),
             };
 
             let sequence = validation["LedgerSequence"].as_usize().unwrap();
@@ -64,7 +41,7 @@ impl SpecChecker {
             let hashes = self.validation_history.get_mut(&sequence).unwrap();
 
             if process_index != sender || sender == 3 || hashes[process_index].is_some() {
-                return Ok(());
+                return ();
             }
 
             hashes[process_index] = Some(validation["hash"].as_str().unwrap().to_owned());
@@ -79,20 +56,10 @@ impl SpecChecker {
             {
                 println!("validation {}", validation);
                 println!("history[{}] = {:?}", sequence, hashes);
-                return Err(Status::Liveness);
-            } else {
-                return Ok(());
+                self.sender
+                    .send(Flags::InsufficientSupport(sequence))
+                    .unwrap();
             }
         };
-        Ok(())
-    }
-
-    fn check_timeout(&mut self) -> Result {
-        self.message_count += 1;
-        if self.message_count > MESSAGE_TIMEOUT {
-            Err(Status::Timeout)
-        } else {
-            Ok(())
-        }
     }
 }

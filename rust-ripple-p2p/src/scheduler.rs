@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::mpsc::Receiver as STDReceiver;
 use std::sync::{Arc, Mutex};
 
-use crate::spec_checker::{SpecChecker, Status};
+use crate::specs::{Flags, SpecChecker};
 use crate::ByzzFuzz;
 use byteorder::{BigEndian, ByteOrder};
 use chrono::Utc;
@@ -26,16 +26,18 @@ pub struct Scheduler {
     spec_checker: SpecChecker,
     shutdown_tx: Sender<(HashMap<usize, String>, usize, String)>,
     shutdown_rx: Receiver<(HashMap<usize, String>, usize, String)>,
+    flags_tx: tokio::sync::broadcast::Sender<Flags>,
 }
 
 impl Scheduler {
-    pub fn new(
+    pub async fn new(
         p2p_connections: P2PConnections,
         collector_sender: TokioSender<Box<RippleMessage>>,
         byzz_fuzz: ByzzFuzz,
         shutdown_tx: Sender<(HashMap<usize, String>, usize, String)>,
         shutdown_rx: Receiver<(HashMap<usize, String>, usize, String)>,
         public_key_to_index: HashMap<String, usize>,
+        flags_tx: tokio::sync::broadcast::Sender<Flags>,
     ) -> Self {
         Scheduler {
             p2p_connections,
@@ -43,14 +45,15 @@ impl Scheduler {
             stable: Arc::new(Mutex::new(false)),
             latest_validated_ledger: Arc::new(Mutex::new(0)),
             byzz_fuzz,
-            spec_checker: SpecChecker::new(public_key_to_index),
+            spec_checker: SpecChecker::new(public_key_to_index, flags_tx.clone()).await,
             shutdown_tx,
             shutdown_rx,
+            flags_tx,
         }
     }
 
     pub async fn start(
-        mut self,
+        &mut self,
         mut receiver: TokioReceiver<Event>,
         collector_receiver: STDReceiver<PeerSubscriptionObject>,
     ) {
@@ -71,6 +74,21 @@ impl Scheduler {
                 mutex_clone,
                 message_clone,
             )
+        });
+        let mut flags_rx = self.flags_tx.subscribe();
+        let shutdown_tx = self.shutdown_tx.clone();
+        tokio::spawn(async move {
+            while let Ok(flag) = flags_rx.recv().await {
+                match flag {
+                    Flags::Timeout => {
+                        shutdown_tx
+                            .send((HashMap::new(), 0, "flags".to_owned()))
+                            .unwrap();
+                        break;
+                    }
+                    _ => {}
+                }
+            }
         });
         loop {
             tokio::select! {
@@ -95,17 +113,8 @@ impl Scheduler {
 
     async fn execute_event(&mut self, mut event: Event) -> (bool, &'static str) {
         event = self.byzz_fuzz.on_message(event).await;
-        match self
-            .spec_checker
-            .check(event.from, from_bytes(&event.message))
-        {
-            Err(Status::Timeout) => return (false, "timeout_messages"),
-            Err(Status::Liveness) => {
-                println!("detected liveness violation");
-                return (true, "liveness_violation");
-            }
-            Ok(()) => {}
-        };
+        self.spec_checker
+            .check(event.from, from_bytes(&event.message));
         self.p2p_connections
             .get(&event.to)
             .unwrap()
@@ -130,11 +139,6 @@ impl Scheduler {
             .await
             .expect("Collector receiver failed");
         (true, "everything good")
-    }
-
-    #[allow(unused)]
-    fn create_event(from: usize, to: usize, message: Vec<u8>) -> Event {
-        Event { from, to, message }
     }
 
     fn listen_to_collector(

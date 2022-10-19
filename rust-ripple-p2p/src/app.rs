@@ -8,6 +8,7 @@ use crate::collector::Collector;
 use crate::container_manager::NodeKeys;
 use crate::peer_connection::PeerConnection;
 use crate::scheduler::{PeerChannel, Scheduler};
+use crate::specs::Flags;
 use crate::ByzzFuzz;
 
 use super::EmptyResult;
@@ -48,6 +49,7 @@ impl App {
         &self,
         byzz_fuzz: ByzzFuzz,
         shutdown_tx: Sender<(HashMap<usize, String>, usize, String)>,
+        flags_tx: Sender<Flags>,
     ) -> EmptyResult {
         let mut tokio_tasks = vec![];
         let (collector_tx, collector_rx) = tokio::sync::mpsc::channel(32);
@@ -107,7 +109,7 @@ impl App {
 
         byzz_fuzz.toxiproxy.populate(&peer_pairs).await;
         let mut shutdown_rx = shutdown_tx.subscribe();
-        let scheduler = Scheduler::new(
+        let mut scheduler = Scheduler::new(
             scheduler_peer_channels,
             collector_tx,
             byzz_fuzz,
@@ -118,11 +120,17 @@ impl App {
                 .enumerate()
                 .map(|(i, keys)| (keys.validation_public_key.clone(), i))
                 .collect(),
-        );
+            flags_tx,
+        )
+        .await;
         scheduler_thread = tokio::spawn(async move {
             tokio::select! {
                 _ = scheduler.start(scheduler_receiver, scheduler_state_rx) => (),
-                _ = shutdown_rx.recv() => (),
+                _ = shutdown_rx.recv() => {
+                    println!("attempt to drop scheduler");
+                    drop(scheduler);
+                    println!("dopped scheduler");
+                },
             }
         });
 

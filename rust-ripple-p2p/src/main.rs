@@ -23,7 +23,7 @@ mod message_handler;
 mod peer_connection;
 mod protos;
 mod scheduler;
-mod spec_checker;
+mod specs;
 mod toxiproxy;
 mod utils;
 
@@ -139,6 +139,15 @@ fn main() {
     loop {
         let runtime = tokio::runtime::Runtime::new().unwrap();
 
+        let (flags_tx, mut flags_rx) = broadcast::channel(32);
+        let flag_collector = runtime.spawn(async move {
+            let mut flags = Vec::new();
+            while let Ok(message) = flags_rx.recv().await {
+                flags.push(message);
+            }
+            flags
+        });
+
         let (shutdown_tx, shutdown_rx) = broadcast::channel(16);
         let mut results = shutdown_rx.resubscribe();
 
@@ -173,7 +182,7 @@ fn main() {
         .expect("could not log byzzfuzz");
         let app = app::App::new(n as u16, node_keys);
 
-        if let Err(error) = runtime.block_on(app.start(byzz_fuzz, shutdown_tx)) {
+        if let Err(error) = runtime.block_on(app.start(byzz_fuzz, shutdown_tx, flags_tx)) {
             error!("Error: {}", error);
         }
 
@@ -181,6 +190,11 @@ fn main() {
         let (map, agreed, reason) = runtime.block_on(async { results.recv().await.unwrap() });
         file.write_all(format!("{:?}\n{:?}\nreason: {}\n", map, agreed, reason).as_bytes())
             .expect("could not write");
+        let flags = runtime.block_on(flag_collector).unwrap();
+        for flag in flags {
+            file.write_all(format!("[flag] {}\n", flag).as_bytes())
+                .unwrap();
+        }
 
         if reason.contains("node") || (args.baseline && reason.contains("timeout")) {
             fs::copy(
