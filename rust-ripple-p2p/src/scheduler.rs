@@ -79,14 +79,11 @@ impl Scheduler {
         let shutdown_tx = self.shutdown_tx.clone();
         tokio::spawn(async move {
             while let Ok(flag) = flags_rx.recv().await {
-                match flag {
-                    Flags::Timeout => {
-                        shutdown_tx
-                            .send((HashMap::new(), 0, "flags".to_owned()))
-                            .unwrap();
-                        break;
-                    }
-                    _ => {}
+                if let Flags::Timeout = flag {
+                    shutdown_tx
+                        .send((HashMap::new(), 0, "flags".to_owned()))
+                        .unwrap();
+                    break;
                 }
             }
         });

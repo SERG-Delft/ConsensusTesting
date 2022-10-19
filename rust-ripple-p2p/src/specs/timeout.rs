@@ -17,7 +17,7 @@ impl TimeoutChecker {
         }
     }
 
-    pub fn check(&mut self) -> () {
+    pub fn check(&mut self) {
         self.message_count += 1;
         if self.message_count > MESSAGE_TIMEOUT {
             self.sender.send(Flags::Timeout).unwrap();

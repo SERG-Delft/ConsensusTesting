@@ -59,7 +59,7 @@ impl SpecChecker {
         }
     }
 
-    pub fn check(&mut self, sender: usize, message: RippleMessageObject) -> () {
+    pub fn check(&mut self, sender: usize, message: RippleMessageObject) {
         self.timeout.check();
         self.insufficient_support.check(sender, message);
     }

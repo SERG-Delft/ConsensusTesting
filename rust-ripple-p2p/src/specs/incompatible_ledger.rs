@@ -24,7 +24,7 @@ impl IncompatibleLedgerChecker {
         }
     }
 
-    pub async fn attach(&mut self) -> () {
+    pub async fn attach(&mut self) {
         let containers = self
             .docker
             .list_containers(Some(ListContainersOptions {
@@ -50,18 +50,15 @@ impl IncompatibleLedgerChecker {
         let sender = self.sender.clone();
         let task = tokio::spawn(async move {
             while let Some(Ok(log)) = stream.next().await {
-                match log {
-                    LogOutput::Console { message } => {
-                        let string = std::str::from_utf8(&message).unwrap();
-                        for line in string.lines() {
-                            if line.contains("incompatible") {
-                                sender
-                                    .send(Flags::IncompatibleLedger(line.to_owned()))
-                                    .unwrap();
-                            }
+                if let LogOutput::Console { message } = log {
+                    let string = std::str::from_utf8(&message).unwrap();
+                    for line in string.lines() {
+                        if line.contains("incompatible") {
+                            sender
+                                .send(Flags::IncompatibleLedger(line.to_owned()))
+                                .unwrap();
                         }
                     }
-                    _ => {}
                 }
             }
         });

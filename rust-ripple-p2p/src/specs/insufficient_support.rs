@@ -23,11 +23,11 @@ impl InsufficientSupportChecker {
         }
     }
 
-    pub fn check(&mut self, sender: usize, message: RippleMessageObject) -> () {
+    pub fn check(&mut self, sender: usize, message: RippleMessageObject) {
         if let RippleMessageObject::TMValidation(ref validation) = message {
             let validation = match parse2(validation.get_validation()) {
                 Ok((_, validation)) => validation,
-                Err(_) => return (),
+                Err(_) => return,
             };
 
             let sequence = validation["LedgerSequence"].as_usize().unwrap();
@@ -41,7 +41,7 @@ impl InsufficientSupportChecker {
             let hashes = self.validation_history.get_mut(&sequence).unwrap();
 
             if process_index != sender || sender == 3 || hashes[process_index].is_some() {
-                return ();
+                return;
             }
 
             hashes[process_index] = Some(validation["hash"].as_str().unwrap().to_owned());
