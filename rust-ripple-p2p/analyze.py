@@ -3,7 +3,7 @@ import re
 
 uncategorized_count = 0
 
-print('          |CORR|INCO|UNKO')
+print('          |TOTL|CORR|INCO|UNKO')
 
 for config in os.listdir('traces'):
     (c, d, scope) = re.search('buggy-7-(\d)-(\d)-6-(.*)-0\.2\.4', config).groups()
@@ -26,6 +26,7 @@ for config in os.listdir('traces'):
         else:
             uncategorized.append(run)
             uncategorized_count += 1
+    print(f'{len(runs):4d}', end = '|')
     print(f'{len(correct):4d}', end = '|')
     print(f'{len(incomplete):4d}', end = '|')
     print(f'{len(uncategorized):4d}', uncategorized)
