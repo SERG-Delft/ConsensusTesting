@@ -31,7 +31,7 @@ def count(f, flags):
 
 print('          |TOTAL|CORRECT|INSUFFICIENT|INCOMPATIBLE|TIMEOUT|INCOMPLETE|UNCATEGORIZED')
 
-for config in os.listdir('traces'):
+for config in sorted(os.listdir('traces')):
     (c, d, scope) = re.search('buggy-7-(\d)-(\d)-6-(.*)-0\.2\.4', config).groups()
     if scope == 'any-scope':
         scope = 'as'
