@@ -20,7 +20,6 @@ type P2PConnections = HashMap<usize, HashMap<usize, PeerChannel>>;
 pub struct Scheduler {
     p2p_connections: P2PConnections,
     collector_sender: TokioSender<Box<RippleMessage>>,
-    stable: Arc<Mutex<bool>>,
     latest_validated_ledger: Arc<Mutex<u32>>,
     byzz_fuzz: ByzzFuzz,
     spec_checker: SpecChecker,
@@ -37,12 +36,11 @@ impl Scheduler {
         shutdown_tx: Sender<(HashMap<usize, String>, usize, String)>,
         shutdown_rx: Receiver<(HashMap<usize, String>, usize, String)>,
         public_key_to_index: HashMap<String, usize>,
-        flags_tx: tokio::sync::broadcast::Sender<Flags>,
+        flags_tx: Sender<Flags>,
     ) -> Self {
         Scheduler {
             p2p_connections,
             collector_sender,
-            stable: Arc::new(Mutex::new(false)),
             latest_validated_ledger: Arc::new(Mutex::new(0)),
             byzz_fuzz,
             spec_checker: SpecChecker::new(public_key_to_index, flags_tx.clone()).await,
@@ -57,7 +55,6 @@ impl Scheduler {
         mut receiver: TokioReceiver<Event>,
         collector_receiver: STDReceiver<PeerSubscriptionObject>,
     ) {
-        let stable_clone = self.stable.clone();
         let latest_validated_ledger_clone = self.latest_validated_ledger.clone();
         let transactions = Arc::new(Mutex::new(HashSet::new()));
         let collector_txs = transactions.clone();
@@ -68,7 +65,6 @@ impl Scheduler {
         let task = tokio::spawn(async move {
             Self::listen_to_collector(
                 collector_receiver,
-                stable_clone,
                 latest_validated_ledger_clone,
                 collector_txs,
                 mutex_clone,
@@ -91,11 +87,11 @@ impl Scheduler {
             tokio::select! {
                 event_option = receiver.recv() => match event_option {
                     Some(event) => {
-                        let (keep_going, reason) = self.execute_event(event).await;
+                        self.execute_event(event).await;
                         let committed = transactions.lock().unwrap().len();
                         let message = disagree_message.lock().unwrap();
-                        if !keep_going || committed == 7 || !message.is_empty() {
-                            self.shutdown_tx.send((mutex_sequences_hashes.lock().unwrap().clone(), committed, if !message.is_empty() { message.clone() } else if committed == 7 { "all committed".to_string() } else { reason.to_string() })).unwrap();
+                        if committed == 7 || !message.is_empty() {
+                            self.shutdown_tx.send((mutex_sequences_hashes.lock().unwrap().clone(), committed, if !message.is_empty() { message.clone() } else { "all committed".to_string() })).unwrap();
                         }
                     },
                     None => error!("Peer senders failed")
@@ -108,7 +104,7 @@ impl Scheduler {
         task.await.unwrap();
     }
 
-    async fn execute_event(&mut self, mut event: Event) -> (bool, &'static str) {
+    async fn execute_event(&mut self, mut event: Event) {
         event = self.byzz_fuzz.on_message(event).await;
         self.spec_checker
             .check(event.from, from_bytes(&event.message));
@@ -120,7 +116,7 @@ impl Scheduler {
             .send(event.message.clone())
             .await;
         if self.byzz_fuzz.baseline {
-            return (true, "everything good");
+            return;
         }
         let collector_message = RippleMessage::new(
             event.from.to_string(),
@@ -135,18 +131,15 @@ impl Scheduler {
             .send(collector_message)
             .await
             .expect("Collector receiver failed");
-        (true, "everything good")
     }
 
     fn listen_to_collector(
         collector_receiver: STDReceiver<PeerSubscriptionObject>,
-        stable: Arc<Mutex<bool>>,
         latest_validated_ledger: Arc<Mutex<u32>>,
         transactions: Arc<Mutex<HashSet<u16>>>,
         mutex_sequences_hashes: Arc<Mutex<HashMap<usize, String>>>,
         mutex_disagree_messages: Arc<Mutex<String>>,
     ) {
-        let mut set_stable = false;
         let mut local_latest_validated_ledger = 0;
         while let Ok(subscription_object) = collector_receiver.recv() {
             if let SubscriptionObject::ValidatedLedger(ledger) =
@@ -157,7 +150,7 @@ impl Scheduler {
                         .lock()
                         .unwrap()
                         .insert(subscription_object.peer);
-                    println!("transactions {:?}", transactions);
+                    println!("transactions {:?}", transactions.lock().unwrap());
                 }
 
                 let sequence = ledger.ledger_index as usize;
@@ -179,10 +172,6 @@ impl Scheduler {
                     }
                 }
 
-                if !set_stable {
-                    *stable.lock().unwrap() = true;
-                    set_stable = true;
-                }
                 if local_latest_validated_ledger < ledger.ledger_index {
                     *latest_validated_ledger.lock().unwrap() = ledger.ledger_index;
                     local_latest_validated_ledger = ledger.ledger_index;

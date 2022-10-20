@@ -24,5 +24,6 @@ logs_backup/validator*/*
 config/validator*/rippled.cfg
 config/validator*/validators.txt
 rust-ripple-p2p/execution.txt
+rust-ripple-p2p/results.txt
 rust-ripple-p2p/subscription*.json
-
+rust-ripple-p2p/traces/*

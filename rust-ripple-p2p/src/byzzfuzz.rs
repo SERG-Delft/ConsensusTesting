@@ -108,9 +108,9 @@ impl ByzzFuzz {
     }
 
     pub async fn on_message(&mut self, mut event: Event) -> Event {
-        let mut message = from_bytes(&event.message);
         if self.baseline {
             if event.from != 3 {
+                let message = from_bytes(&event.message);
                 self.update_round(&message).await;
             }
             if event.from == 3 && self.current_round > 1 && thread_rng().gen_bool(0.2) {
@@ -119,6 +119,7 @@ impl ByzzFuzz {
             }
             return event;
         }
+        let mut message = from_bytes(&event.message);
         self.update_round(&message).await;
         self.apply_partition().await;
         if self.process_faults.contains_key(&self.current_round)

@@ -183,9 +183,10 @@ impl Display for RippleMessage {
                 };
                 writeln!(
                     f,
-                    "{} [{}->{}] Validation {} validates {}",
+                    "-- {} [{}->{}] Validation {} validates {}",
                     time_since, from_node_buf, to_node_buf, node, parsed
                 )
+                .unwrap();
             }
             RippleMessageObject::TMProposeSet(proposal) => {
                 let ripple_epoch =
@@ -212,7 +213,7 @@ impl Display for RippleMessage {
                 };
                 writeln!(
                     f,
-                    "{} [{}->{}] ProposeSet<{} proposes {}, seq={}, prev={}>",
+                    "-- {} [{}->{}] ProposeSet<{} proposes {}, seq={}, prev={}>",
                     time_since,
                     from_node_buf,
                     to_node_buf,
@@ -221,27 +222,27 @@ impl Display for RippleMessage {
                     proposal.get_proposeSeq(),
                     hex::encode(proposal.get_previousledger())
                 )
+                .unwrap();
             }
-            _ => {
-                let ripple_epoch =
-                    DateTime::parse_from_rfc3339("2000-01-01T00:00:00+00:00").unwrap();
-                let from_node_buf = &self.from_node;
-                let to_node_buf = &self.to_node;
-                let time_since = self
-                    .timestamp
-                    .signed_duration_since(ripple_epoch)
-                    .num_seconds();
-                let message_buf = self.message.to_string();
-                writeln!(
-                    f,
-                    "{} {} [{}->{}] sent {}",
-                    time_since,
-                    self.message.node_pub_key().get_or_insert("".to_string()),
-                    from_node_buf,
-                    to_node_buf,
-                    message_buf
-                )
-            }
-        }
+            _ => {}
+        };
+
+        let ripple_epoch = DateTime::parse_from_rfc3339("2000-01-01T00:00:00+00:00").unwrap();
+        let from_node_buf = &self.from_node;
+        let to_node_buf = &self.to_node;
+        let time_since = self
+            .timestamp
+            .signed_duration_since(ripple_epoch)
+            .num_seconds();
+        let message_buf = self.message.to_string();
+        writeln!(
+            f,
+            "{} {} [{}->{}] sent {}",
+            time_since,
+            self.message.node_pub_key().get_or_insert("".to_string()),
+            from_node_buf,
+            to_node_buf,
+            message_buf
+        )
     }
 }

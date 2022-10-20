@@ -2223,7 +2223,7 @@ dependencies = [
 
 [[package]]
 name = "rust-ripple-p2p"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "base64 0.12.3",
  "bollard",
