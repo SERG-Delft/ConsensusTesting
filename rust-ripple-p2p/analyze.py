@@ -15,8 +15,8 @@ def neg(x):
     return lambda x: not x
 
 def insufficient_support_l(line: str):
-    return bool(re.search('[flag] Timeout after \d+ messages\n', line)) or \
-        bool(re.search('[flag] Ledger \d+ diverged and has insufficient support\n', line))
+    return bool(re.search('\[flag\] Timeout after \d+ messages\n', line)) or \
+        bool(re.search('\[flag\] Ledger \d+ diverged and has insufficient support\n', line))
 
 print('          |TOTAL|CORRECT|INSUFFICIENT|INCOMPLETE|UNCATEGORIZED')
 
