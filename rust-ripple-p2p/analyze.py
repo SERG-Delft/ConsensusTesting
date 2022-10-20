@@ -60,6 +60,9 @@ for config in sorted(os.listdir('traces')):
                 insufficient_support.append(run)
             elif count(f_not(f_or(f_incompatible, f_timeout)), flags) == 0 and count(f_incompatible, flags) > 0:
                 incompatible.append(run)
+            elif count(f_not(f_or(f_or(f_incompatible, f_insufficient), f_timeout)), flags) == 0 and count(f_incompatible, flags) > 0 and count(f_insufficient, flags) > 0:
+                insufficient_support.append(run)
+                incompatible.append(run)
             else:
                 uncategorized.append(run)
                 uncategorized_count += 1
