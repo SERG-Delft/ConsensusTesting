@@ -12,7 +12,7 @@ if len(sys.argv) == 3:
 uncategorized_count = 0
 
 def neg(x):
-    return lambda x: not x
+    return lambda y: not x(y)
 
 def insufficient_support_l(line: str):
     return bool(re.search('\[flag\] Timeout after \d+ messages\n', line)) or \
