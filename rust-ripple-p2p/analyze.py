@@ -11,14 +11,22 @@ if len(sys.argv) == 3:
 
 uncategorized_count = 0
 
-def neg(x):
+def f_or(x, y):
+    return lambda z: x(z) or y(z)
+
+def f_not(x):
     return lambda y: not x(y)
 
-def insufficient_support_l(line: str):
-    return bool(re.search('\[flag\] Timeout after \d+ messages\n', line)) or \
-        bool(re.search('\[flag\] Ledger \d+ diverged and has insufficient support\n', line))
+def f_insufficient(line):
+    return bool(re.search('\[flag\] Ledger \d+ diverged and has insufficient support\n', line))
 
-print('          |TOTAL|CORRECT|INSUFFICIENT|INCOMPLETE|UNCATEGORIZED')
+def f_timeout(line):
+    return bool(re.search('\[flag\] Timeout after \d+ messages\n', line))
+
+def count(f, flags):
+    return len(list(filter(f, flags)))
+
+print('          |TOTAL|CORRECT|INSUFFICIENT|TIMEOUT|INCOMPLETE|UNCATEGORIZED')
 
 for config in os.listdir('traces'):
     (c, d, scope) = re.search('buggy-7-(\d)-(\d)-6-(.*)-0\.2\.4', config).groups()
@@ -33,6 +41,7 @@ for config in os.listdir('traces'):
     incomplete = []
     uncategorized = []
     insufficient_support = []
+    timeout = []
     for run in runs:
         results = open('traces/' + config + '/' + run + '/results.txt').readlines()
         if results[-1] != 'done!\n':
@@ -41,7 +50,9 @@ for config in os.listdir('traces'):
             correct.append(run)
         elif results[4] == 'reason: flags\n':
             flags = results[5:-1]
-            if len(list(filter(neg(insufficient_support_l), flags))) == 0:
+            if count(f_not(f_timeout), flags) == 0:
+                timeout.append(run)
+            elif count(f_not(f_or(f_insufficient, f_timeout)), flags) == 0 and count(f_insufficient, flags) > 0:
                 insufficient_support.append(run)
             else:
                 uncategorized.append(run)
@@ -52,6 +63,7 @@ for config in os.listdir('traces'):
     print(f'{len(runs):5d}', end = '|')
     print(f'{len(correct):7d}', end = '|')
     print(f'{len(insufficient_support):12d}', end = '|')
+    print(f'{len(timeout):7d}', end = '|')
     print(f'{len(incomplete):10d}', end = '|')
     print(f'{len(uncategorized):13d}', uncategorized)
 
