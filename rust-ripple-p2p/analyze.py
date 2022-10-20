@@ -1,11 +1,19 @@
 import os
+import re
 
 uncategorized_count = 0
 
+print('          |CORR|INCO|UNKO')
+
 for config in os.listdir('traces'):
-    print(config)
+    (c, d, scope) = re.search('buggy-7-(\d)-(\d)-6-(.*)-0\.2\.4', config).groups()
+    if scope == 'any-scope':
+        scope = 'as'
+    else:
+        scope = 'ss'
+    print(f'c={c} d={d} {scope}|', end = '')
     runs = os.listdir('traces/' + config)
-    print('- found', len(runs), 'runs')
+    # print('- found', len(runs), 'runs')
     correct = []
     incomplete = []
     uncategorized = []
@@ -18,9 +26,8 @@ for config in os.listdir('traces'):
         else:
             uncategorized.append(run)
             uncategorized_count += 1
-    print('- correct', len(correct))
-    print('- incomplete', len(incomplete), incomplete)
-    print('- uncategorized', len(uncategorized), uncategorized)
-    print()
+    print(f'{len(correct):4d}', end = '|')
+    print(f'{len(incomplete):4d}', end = '|')
+    print(f'{len(uncategorized):4d}', uncategorized)
 
 print(uncategorized_count, 'uncategorized')
