@@ -37,7 +37,7 @@ for config in os.listdir('traces'):
         results = open('traces/' + config + '/' + run + '/results.txt').readlines()
         if results[-1] != 'done!\n':
             incomplete.append(run)
-        elif results[-2] == 'reason: all committed\n':
+        elif results[4] == 'reason: all committed\n':
             correct.append(run)
         elif results[4] == 'reason: flags\n':
             flags = results[5:-1]
