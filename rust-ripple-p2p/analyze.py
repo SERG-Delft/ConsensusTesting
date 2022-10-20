@@ -23,10 +23,13 @@ def f_insufficient(line):
 def f_timeout(line):
     return bool(re.search('\[flag\] Timeout after \d+ messages\n', line))
 
+def f_incompatible(line):
+    return bool(re.search('\[flag\] Incompatible ledger <.+>\n', line))
+
 def count(f, flags):
     return len(list(filter(f, flags)))
 
-print('          |TOTAL|CORRECT|INSUFFICIENT|TIMEOUT|INCOMPLETE|UNCATEGORIZED')
+print('          |TOTAL|CORRECT|INSUFFICIENT|INCOMPATIBLE|TIMEOUT|INCOMPLETE|UNCATEGORIZED')
 
 for config in os.listdir('traces'):
     (c, d, scope) = re.search('buggy-7-(\d)-(\d)-6-(.*)-0\.2\.4', config).groups()
@@ -41,6 +44,7 @@ for config in os.listdir('traces'):
     incomplete = []
     uncategorized = []
     insufficient_support = []
+    incompatible = []
     timeout = []
     for run in runs:
         results = open('traces/' + config + '/' + run + '/results.txt').readlines()
@@ -54,6 +58,8 @@ for config in os.listdir('traces'):
                 timeout.append(run)
             elif count(f_not(f_or(f_insufficient, f_timeout)), flags) == 0 and count(f_insufficient, flags) > 0:
                 insufficient_support.append(run)
+            elif count(f_not(f_or(f_incompatible, f_timeout)), flags) == 0 and count(f_incompatible, flags) > 0:
+                incompatible.append(run)
             else:
                 uncategorized.append(run)
                 uncategorized_count += 1
@@ -63,6 +69,7 @@ for config in os.listdir('traces'):
     print(f'{len(runs):5d}', end = '|')
     print(f'{len(correct):7d}', end = '|')
     print(f'{len(insufficient_support):12d}', end = '|')
+    print(f'{len(incompatible):12d}', end = '|')
     print(f'{len(timeout):7d}', end = '|')
     print(f'{len(incomplete):10d}', end = '|')
     print(f'{len(uncategorized):13d}', uncategorized)
