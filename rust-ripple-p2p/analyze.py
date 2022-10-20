@@ -1,9 +1,17 @@
 import os
 import re
+import sys
+
+if len(sys.argv) == 3:
+    if sys.argv[1] == 'show':
+        for config in os.listdir('traces'):
+            if os.path.exists('traces/' + config + '/' + sys.argv[2]):
+                print(open('traces/' + config + '/' + sys.argv[2] + '/results.txt').read(), end = '')
+                exit(0)
 
 uncategorized_count = 0
 
-print('          |TOTL|CORR|INCO|UNKO')
+print('          |TOTL|CORR|INCO|UNKN')
 
 for config in os.listdir('traces'):
     (c, d, scope) = re.search('buggy-7-(\d)-(\d)-6-(.*)-0\.2\.4', config).groups()
