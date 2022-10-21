@@ -81,4 +81,5 @@ for config in sorted(os.listdir('traces')):
     print(f'{len(uncategorized):13d}', uncategorized)
 
 print(uncategorized_count, 'uncategorized')
-print('timeouts:', all_timeout)
+if len(sys.argv) == 3 and sys.argv[1] == 'list' and sys.argv[2] == 'timeouts':
+    print('timeouts:', all_timeout)
