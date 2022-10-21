@@ -31,6 +31,8 @@ def count(f, flags):
 
 print('          |TOTAL|CORRECT|INSUFFICIENT|INCOMPATIBLE|TIMEOUT|INCOMPLETE|UNCATEGORIZED')
 
+all_timeout = []
+
 for config in sorted(os.listdir('traces')):
     (c, d, scope) = re.search('buggy-7-(\d)-(\d)-6-(.*)-0\.2\.4', config).groups()
     if scope == 'any-scope':
@@ -56,6 +58,7 @@ for config in sorted(os.listdir('traces')):
             flags = results[5:-1]
             if count(f_not(f_timeout), flags) == 0:
                 timeout.append(run)
+                all_timeout.append(config + '/' + run)
             elif count(f_not(f_or(f_insufficient, f_timeout)), flags) == 0 and count(f_insufficient, flags) > 0:
                 insufficient_support.append(run)
             elif count(f_not(f_or(f_incompatible, f_timeout)), flags) == 0 and count(f_incompatible, flags) > 0:
@@ -78,3 +81,4 @@ for config in sorted(os.listdir('traces')):
     print(f'{len(uncategorized):13d}', uncategorized)
 
 print(uncategorized_count, 'uncategorized')
+print('timeouts:', all_timeout)
