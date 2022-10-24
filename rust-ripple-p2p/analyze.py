@@ -2,6 +2,10 @@ import os
 import re
 import sys
 
+cap = 1000000
+if len(sys.argv) == 3 and sys.argv[1] == 'cap':
+    cap = int(sys.argv[2])
+
 if len(sys.argv) == 3:
     if sys.argv[1] == 'show':
         for config in os.listdir('traces'):
@@ -48,7 +52,7 @@ for config in sorted(os.listdir('traces')):
     insufficient_support = []
     incompatible = []
     timeout = []
-    for run in runs:
+    for run in runs[:cap]:
         results = open('traces/' + config + '/' + run + '/results.txt').readlines()
         if results[-1] != 'done!\n':
             incomplete.append(run)
@@ -72,7 +76,7 @@ for config in sorted(os.listdir('traces')):
         else:
             uncategorized.append(run)
             uncategorized_count += 1
-    print(f'{len(runs):5d}', end = '|')
+    print(f'{len(runs[:cap]):5d}', end = '|')
     print(f'{len(correct):7d}', end = '|')
     print(f'{len(insufficient_support):12d}', end = '|')
     print(f'{len(incompatible):12d}', end = '|')
