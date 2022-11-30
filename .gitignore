@@ -27,3 +27,6 @@ rust-ripple-p2p/execution.txt
 rust-ripple-p2p/results.txt
 rust-ripple-p2p/subscription*.json
 rust-ripple-p2p/traces/*
+
+.cargo
+traces/*

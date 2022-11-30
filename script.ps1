@@ -1,0 +1,1 @@
+(Get-Content "C:\Users\levin\git\ConsensusTesting\pull.txt") | Foreach-Object {echo $_; target\debug\analyze.exe .\rust-ripple-p2p\traces\$_}

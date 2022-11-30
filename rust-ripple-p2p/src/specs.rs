@@ -1,6 +1,6 @@
 use tokio::sync::broadcast::Sender;
 
-use crate::message_handler::RippleMessageObject;
+use serialize::RippleMessageObject;
 use std::collections::HashMap;
 use std::fmt::Display;
 

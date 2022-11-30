@@ -12,8 +12,8 @@ use tokio::sync::broadcast::{Receiver, Sender};
 use tokio::sync::mpsc::{Receiver as TokioReceiver, Sender as TokioSender};
 
 use crate::client::{PeerSubscriptionObject, SubscriptionObject};
-use crate::collector::RippleMessage;
 use crate::message_handler::{from_bytes, invoke_protocol_message};
+use serialize::RippleMessage;
 
 type P2PConnections = HashMap<usize, HashMap<usize, PeerChannel>>;
 
@@ -146,10 +146,10 @@ impl Scheduler {
                 subscription_object.subscription_object
             {
                 if ledger.txn_count == 1 {
-                    transactions
-                        .lock()
-                        .unwrap()
-                        .insert(subscription_object.peer);
+                    // transactions
+                    //     .lock()
+                    //     .unwrap()
+                    //     .insert(subscription_object.peer);
                     println!("transactions {:?}", transactions.lock().unwrap());
                 }
 

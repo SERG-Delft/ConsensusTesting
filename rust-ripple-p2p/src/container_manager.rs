@@ -65,7 +65,7 @@ fn get_node_keys(n: usize) -> Vec<NodeKeys> {
     let keys: Vec<NodeKeys> = (0..n)
         .into_par_iter()
         .map(|i| {
-            let path = format!("../config/validator_{}", i);
+            let path = format!("./config/validator_{}", i);
             if Path::new(&format!("{}/keys.json", path)).exists() {
                 let keys: NodeKeys =
                     serde_json::from_str(&*read_to_string(&format!("{}/keys.json", path)).unwrap())
@@ -100,11 +100,11 @@ fn acquire_keys() -> NodeKeys {
 }
 
 fn create_configs(peers: usize, keys: &[NodeKeys]) {
-    let base = read_to_string("../config/rippled.cfg").unwrap();
+    let base = read_to_string("./config/rippled.cfg").unwrap();
     (0..peers).into_par_iter().for_each(|i| {
-        let path = format!("../config/validator_{}", i);
+        let path = format!("./config/validator_{}", i);
         fs::create_dir_all(&path).unwrap();
-        fs::copy("../config/ledger.json", format!("{}/ledger.json", path)).unwrap();
+        fs::copy("./config/ledger.json", format!("{}/ledger.json", path)).unwrap();
         let config = base.replace("{validation_seed}", &keys[i].validation_seed);
         File::create(&format!("{}/rippled.cfg", path))
             .unwrap()
@@ -116,7 +116,7 @@ fn create_configs(peers: usize, keys: &[NodeKeys]) {
 
 fn configure_unls(unls: &Vec<Vec<usize>>, keys: &[NodeKeys]) {
     (0..unls.len()).into_par_iter().for_each(|i| {
-        let path = format!("../config/validator_{}/validators.txt", i);
+        let path = format!("./config/validator_{}/validators.txt", i);
         let mut validators = "[validators]\n".to_owned();
         for (node, key) in keys.iter().enumerate() {
             if i != node && unls[i].contains(&node) {
@@ -145,7 +145,7 @@ fn start_node_with_options(name: &str, offset: usize, expose_to_network: bool) {
     let mut command = command
         .arg("run")
         .args(["-dit", "--name", name])
-        .args(["--mount", &format!("type=bind,source={}/../config/{},target=/.config/ripple", env::current_dir().unwrap().to_str().unwrap(), name)])
+        .args(["--mount", &format!("type=bind,source={}/./config/{},target=/.config/ripple", env::current_dir().unwrap().to_str().unwrap(), name)])
         // .args(["--mount", &format!("type=bind,source={}/../logs/{},target=/var/log/rippled", env::current_dir().unwrap().to_str().unwrap(), name)])
     ;
     if expose_to_network {

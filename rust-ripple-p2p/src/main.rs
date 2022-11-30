@@ -22,10 +22,8 @@ mod byzzfuzz;
 mod client;
 mod collector;
 mod container_manager;
-mod deserialization;
 mod message_handler;
 mod peer_connection;
-mod protos;
 mod scheduler;
 mod specs;
 mod toxiproxy;
@@ -69,20 +67,20 @@ fn main() {
     env_logger::Builder::new().parse_default_env().init();
 
     let configs = [
-        // (7, 0, 0, 6, false, true),
-        (7, 0, 0, 6, false, false),
-        (7, 1, 0, 6, false, false),
-        (7, 1, 0, 6, true, false),
-        (7, 2, 0, 6, false, false),
-        (7, 2, 0, 6, true, false),
-        (7, 0, 1, 6, false, false),
-        (7, 0, 1, 6, true, false),
-        (7, 1, 1, 6, false, false),
-        (7, 1, 1, 6, true, false),
-        (7, 0, 2, 6, false, false),
-        (7, 0, 2, 6, true, false),
-        (7, 1, 2, 6, false, false),
-        (7, 1, 2, 6, true, false),
+        (7, 30, 0, 6, false, false),
+        // (7, 0, 0, 6, false, false),
+        // (7, 1, 0, 6, false, false),
+        // (7, 1, 0, 6, true, false),
+        // (7, 2, 0, 6, false, false),
+        // (7, 2, 0, 6, true, false),
+        // (7, 0, 1, 6, false, false),
+        // (7, 0, 1, 6, true, false),
+        // (7, 1, 1, 6, false, false),
+        // (7, 1, 1, 6, true, false),
+        // (7, 0, 2, 6, false, false),
+        // (7, 0, 2, 6, true, false),
+        // (7, 1, 2, 6, false, false),
+        // (7, 1, 2, 6, true, false),
     ];
     for (_, c, d, r, any, base) in configs {
         let args = Args {

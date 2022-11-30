@@ -1,12 +1,11 @@
-use crate::protos::ripple::{
+use byteorder::{BigEndian, ByteOrder};
+use serialize::ripple::{
     TMCluster, TMEndpoints, TMGetLedger, TMGetObjectByHash, TMGetPeerShardInfo, TMGetShardInfo,
     TMHaveTransactionSet, TMLedgerData, TMManifest, TMPeerShardInfo, TMPing, TMProposeSet,
     TMShardInfo, TMStatusChange, TMTransaction, TMValidation, TMValidatorList,
 };
-use byteorder::{BigEndian, ByteOrder};
-use openssl::sha::sha256;
-use std::fmt::{Debug, Display, Formatter};
-// use crate::deserialization::{deserialize_validation};
+use serialize::RippleMessageObject;
+use std::fmt::Debug;
 
 pub fn from_bytes(bytes: &[u8]) -> RippleMessageObject {
     invoke_protocol_message(BigEndian::read_u16(&bytes[4..6]), &bytes[6..])
@@ -41,108 +40,6 @@ pub fn invoke_protocol_message(message_type: u16, payload: &[u8]) -> RippleMessa
 
 pub fn parse_message<T: protobuf::Message>(payload: &[u8]) -> T {
     protobuf::Message::parse_from_bytes(payload).unwrap()
-}
-
-#[derive(Debug)]
-pub enum RippleMessageObject {
-    TMManifest(TMManifest),
-    TMPing(TMPing),
-    TMCluster(TMCluster),
-    TMEndpoints(TMEndpoints),
-    TMTransaction(TMTransaction),
-    TMGetLedger(TMGetLedger),
-    TMLedgerData(TMLedgerData),
-    TMProposeSet(TMProposeSet),
-    TMStatusChange(TMStatusChange),
-    TMHaveTransactionSet(TMHaveTransactionSet),
-    TMValidation(TMValidation),
-    TMGetObjectByHash(TMGetObjectByHash),
-    TMGetShardInfo(TMGetShardInfo),
-    TMShardInfo(TMShardInfo),
-    TMGetPeerShardInfo(TMGetPeerShardInfo),
-    TMPeerShardInfo(TMPeerShardInfo),
-    TMValidatorList(TMValidatorList),
-}
-
-impl RippleMessageObject {
-    pub fn node_pub_key(&self) -> Option<String> {
-        match self {
-            RippleMessageObject::TMProposeSet(propose_set) => {
-                let type_prefixed_key = [&[28u8], propose_set.get_nodePubKey()].concat();
-                let checksum = sha256(&sha256(&type_prefixed_key));
-                let propose_key = [&type_prefixed_key, &checksum[..4]].concat();
-                let node_key = bs58::encode(propose_key)
-                    .with_alphabet(bs58::Alphabet::RIPPLE)
-                    .into_string();
-                Some(node_key)
-            }
-            _ => None,
-        }
-    }
-}
-
-impl Display for RippleMessageObject {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let (name, string) = match self {
-            RippleMessageObject::TMManifest(manifest) => {
-                ("Manifest", serde_json::to_string(manifest).unwrap())
-            }
-            RippleMessageObject::TMPing(ping) => ("Ping", serde_json::to_string(ping).unwrap()),
-            RippleMessageObject::TMCluster(cluster) => {
-                ("Cluster", serde_json::to_string(cluster).unwrap())
-            }
-            RippleMessageObject::TMEndpoints(endpoints) => {
-                ("Endpoints", serde_json::to_string(endpoints).unwrap())
-            }
-            RippleMessageObject::TMTransaction(transaction) => {
-                ("Transaction", serde_json::to_string(transaction).unwrap())
-            }
-            RippleMessageObject::TMGetLedger(get_ledger) => {
-                ("GetLedger", serde_json::to_string(get_ledger).unwrap())
-            }
-            RippleMessageObject::TMLedgerData(ledger_data) => {
-                ("LedgerData", serde_json::to_string(ledger_data).unwrap())
-            }
-            RippleMessageObject::TMProposeSet(propose_set) => {
-                ("ProposeSet", serde_json::to_string(propose_set).unwrap())
-            }
-            RippleMessageObject::TMStatusChange(status_change) => (
-                "StatusChange",
-                serde_json::to_string(status_change).unwrap(),
-            ),
-            RippleMessageObject::TMHaveTransactionSet(have_transaction_set) => (
-                "HaveTransactionSet",
-                serde_json::to_string(have_transaction_set).unwrap(),
-            ),
-            RippleMessageObject::TMValidation(validation) => {
-                ("Validation", serde_json::to_string(validation).unwrap())
-            }
-            RippleMessageObject::TMGetObjectByHash(get_object_by_hash) => (
-                "GetObjectByHash",
-                serde_json::to_string(get_object_by_hash).unwrap(),
-            ),
-            RippleMessageObject::TMGetShardInfo(get_shard_info) => (
-                "GetShardInfo",
-                serde_json::to_string(get_shard_info).unwrap(),
-            ),
-            RippleMessageObject::TMShardInfo(shard_info) => {
-                ("ShardInfo", serde_json::to_string(shard_info).unwrap())
-            }
-            RippleMessageObject::TMGetPeerShardInfo(get_peer_shard_info) => (
-                "GetPeerShardInfo",
-                serde_json::to_string(get_peer_shard_info).unwrap(),
-            ),
-            RippleMessageObject::TMPeerShardInfo(peer_shard_info) => (
-                "PeerShardInfo",
-                serde_json::to_string(peer_shard_info).unwrap(),
-            ),
-            RippleMessageObject::TMValidatorList(validator_list) => (
-                "ValidatorList",
-                serde_json::to_string(validator_list).unwrap(),
-            ),
-        };
-        write!(f, "{}: {}", name, string)
-    }
 }
 
 #[derive(Default, serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq, Eq)]

@@ -13,6 +13,7 @@ default = ["with-serde"]
 with-serde = ["protobuf/with-serde"]
 
 [dependencies]
+serialize = { path = "../serialize" }
 base64 = "0.12.0"
 byteorder = "1"
 bytes = "0.5.4"

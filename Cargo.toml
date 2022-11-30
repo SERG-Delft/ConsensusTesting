@@ -1,0 +1,2 @@
+[workspace]
+members = ["analyze", "rust-ripple-p2p", "serialize"]

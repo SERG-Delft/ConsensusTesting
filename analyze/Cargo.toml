@@ -1,0 +1,19 @@
+[package]
+name = "analyze"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+serialize = { path = "../serialize" }
+clap = { version = "4.0.18", features = ["derive"] }
+lazy_static = "1.4.0"
+regex = "1.6.0"
+serde_json = "1.0.87"
+chrono = "0.4.22"
+hex = "0.4.3"
+openssl = "0.10.42"
+bs58 = "0.4.0"
+polars = { version = "0.24.3", features = ["lazy", "list", "concat_str"] }
+serde = { version = "1.0.147", features = ["derive"] }

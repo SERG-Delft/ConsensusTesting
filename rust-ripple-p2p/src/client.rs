@@ -22,8 +22,8 @@ pub const _GENESIS_ADDRESS: &str = "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh";
 
 const _AMOUNT: u32 = 2u32.pow(31);
 
-#[allow(unused)]
 pub struct Client<'a> {
+    #[allow(unused)]
     peer: u16,
     pub sender_channel: Sender<Message<'a>>,
     send_loop: JoinHandle<()>,

@@ -1,0 +1,26 @@
+[package]
+name = "serialize"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[build-dependencies]
+protobuf-codegen-pure = "2.3"
+
+[features]
+default = ["with-serde"]
+with-serde = ["protobuf/with-serde"]
+
+[dependencies]
+bs58 = "0.4.0"
+serde = { version = "1.0", features = ["derive"] }
+chrono = "0.4.22"
+hex = "0.4.3"
+json = "0.12.4"
+lazy_static = "1.4.0"
+nom = "7.1.1"
+openssl = "0.10.42"
+protobuf = { version = "2" }
+ripple-address-codec = "0.1.1"
+serde_json = "1.0.87"

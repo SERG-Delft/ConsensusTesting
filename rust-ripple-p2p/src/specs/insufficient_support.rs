@@ -2,9 +2,9 @@ use std::collections::HashMap;
 
 use tokio::sync::broadcast::Sender;
 
-use crate::deserialization::parse2;
-use crate::message_handler::RippleMessageObject;
 use crate::utils::public_key_to_b58;
+use serialize::parser::parse;
+use serialize::RippleMessageObject;
 
 use super::Flags;
 
@@ -25,7 +25,7 @@ impl InsufficientSupportChecker {
 
     pub fn check(&mut self, sender: usize, message: RippleMessageObject) {
         if let RippleMessageObject::TMValidation(ref validation) = message {
-            let validation = match parse2(validation.get_validation()) {
+            let validation = match parse(validation.get_validation()) {
                 Ok((_, validation)) => validation,
                 Err(_) => return,
             };

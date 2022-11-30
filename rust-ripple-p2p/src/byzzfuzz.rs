@@ -1,6 +1,7 @@
 use bs58::Alphabet;
 use itertools::Itertools;
 use protobuf::Message;
+use serialize::ripple::NodeEvent;
 use std::collections::{HashMap, HashSet};
 use std::net::TcpStream;
 use std::sync::Arc;
@@ -8,19 +9,18 @@ use websocket::Message as WsMessage;
 
 use crate::client::Client;
 use crate::container_manager::NodeKeys;
-use crate::deserialization::parse2;
-use crate::message_handler::{from_bytes, RippleMessageObject};
-use crate::protos::ripple::NodeEvent;
+use crate::message_handler::from_bytes;
 use crate::scheduler::Event;
 use crate::toxiproxy::ToxiproxyClient;
 use rand::prelude::*;
 use secp256k1::{Secp256k1, SecretKey};
 use serde_json::json;
+use serialize::parser::parse;
+use serialize::RippleMessageObject::{self, TMProposeSet, TMStatusChange, TMValidation};
 use set_partitions::{set_partitions, ArrayVecSetPartition, HashSubsets};
 use websocket::sender::Writer;
 use websocket::ClientBuilder;
 use xrpl::core::keypairs::utils::sha512_first_half;
-use RippleMessageObject::{TMProposeSet, TMStatusChange, TMValidation};
 
 pub struct ByzzFuzz {
     n: usize, // number of processes
@@ -145,16 +145,16 @@ impl ByzzFuzz {
             }
         }
         if event.from == 3
-            && self.process_faults.contains_key(&self.current_round)
-            && self
-                .process_faults
-                .get(&self.current_round)
-                .unwrap()
-                .0
-                .contains(&event.to)
+        // && self.process_faults.contains_key(&self.current_round)
+        // && self
+        //     .process_faults
+        //     .get(&self.current_round)
+        //     .unwrap()
+        //     .0
+        //     .contains(&event.to)
         {
-            let seed = self.process_faults.get(&self.current_round).unwrap().1;
-            event = self.apply_mutation(event, &mut message, seed);
+            // let seed = self.process_faults.get(&self.current_round).unwrap().1;
+            event = self.apply_mutation(event, &mut message, 0);
         }
         event
     }
@@ -207,7 +207,7 @@ impl ByzzFuzz {
         match message {
             TMProposeSet(_) => Some(self.current_index * 2),
             TMValidation(validation) => {
-                let (_, validation) = parse2(validation.get_validation()).unwrap();
+                let (_, validation) = parse(validation.get_validation()).unwrap();
                 if validation["LedgerSequence"].as_usize().unwrap() != self.current_index + 5 {
                     return None;
                 }
@@ -239,70 +239,70 @@ impl ByzzFuzz {
     ) -> Event {
         let mutate_sequence_ids = seed % 2 == 0;
         match message {
-            RippleMessageObject::TMTransaction(ref mut transaction) => {
-                let mutation = "1200002280000000240000000161400000000BED48A068400000000000000A73210330E7FC9D56BB25D6893BA3F317AE5BCF33B3291BD63DB32654A313222F7FD02074473045022100F1D8AA686F6241A5F39106FFDA94AA218118D385B58A00E633425D882B17205902200B38092D3F990359928F393485DC352CD0F3C22E4559280354FB423BC7F08BEC8114B5F762798A53D543A014CAF8B297CFF8F2F937E883149D94BFF9BAAA5267D5733CA2B59950B4C9A01564";
-                transaction.set_rawTransaction(hex::decode(mutation).unwrap());
-                event.message =
-                    [&event.message[0..6], &transaction.write_to_bytes().unwrap()].concat();
-            }
-            TMProposeSet(ref mut proposal) => {
-                if proposal.get_nodePubKey()[1] == 149 {
-                    if !mutate_sequence_ids {
-                        if !self.any_scope || (seed / 2) % 2 == 0 {
-                            proposal.set_currentTxHash(
-                                    hex::decode(
-                                        "e803e1999369975aed1bfd2444a3552a73383c03a2004cb784ce07e13ebd7d7c",
-                                    )
-                                        .unwrap(),
-                                );
-                        } else {
-                            proposal.set_currentTxHash(
-                                    hex::decode(
-                                        "0000000000000000000000000000000000000000000000000000000000000000",
-                                    )
-                                        .unwrap(),
-                                );
-                        }
-                    } else {
-                        let initial_propose_seq = proposal.get_proposeSeq();
-                        let mut corrupted_propose_seq = initial_propose_seq + 1;
-                        if self.any_scope {
-                            corrupted_propose_seq = seed / 2;
-                        }
-                        proposal.set_proposeSeq(corrupted_propose_seq);
-                    }
-                    let hash = sha512_first_half(
-                        [
-                            &[80, 82, 80, 00],
-                            &proposal.get_proposeSeq().to_be_bytes(),
-                            &proposal.get_closeTime().to_be_bytes(),
-                            proposal.get_previousledger(),
-                            proposal.get_currentTxHash(),
-                        ]
-                        .concat()
-                        .as_slice(),
-                    );
-                    let keys = &self.node_keys[3];
-                    let algo = Secp256k1::new();
-                    let priv_key = bs58::decode(&keys.validation_private_key)
-                        .with_alphabet(Alphabet::RIPPLE)
-                        .into_vec()
-                        .unwrap();
-                    let message = secp256k1::Message::from_slice(&hash).unwrap();
-                    let signature = algo
-                        .sign_ecdsa(&message, &SecretKey::from_slice(&priv_key[1..33]).unwrap());
-                    proposal.set_signature(signature.serialize_der().to_vec());
-                }
-                event.message =
-                    [&event.message[0..6], &proposal.write_to_bytes().unwrap()].concat();
-                let bytes = ((event.message.len() - 6) as u32).to_be_bytes();
-                event.message[0] = bytes[0];
-                event.message[1] = bytes[1];
-                event.message[2] = bytes[2];
-                event.message[3] = bytes[3];
-            }
+            // RippleMessageObject::TMTransaction(ref mut transaction) => {
+            //     let mutation = "1200002280000000240000000161400000000BED48A068400000000000000A73210330E7FC9D56BB25D6893BA3F317AE5BCF33B3291BD63DB32654A313222F7FD02074473045022100F1D8AA686F6241A5F39106FFDA94AA218118D385B58A00E633425D882B17205902200B38092D3F990359928F393485DC352CD0F3C22E4559280354FB423BC7F08BEC8114B5F762798A53D543A014CAF8B297CFF8F2F937E883149D94BFF9BAAA5267D5733CA2B59950B4C9A01564";
+            //     transaction.set_rawTransaction(hex::decode(mutation).unwrap());
+            //     event.message =
+            //         [&event.message[0..6], &transaction.write_to_bytes().unwrap()].concat();
+            // }
+            // TMProposeSet(ref mut proposal) => {
+            //     if proposal.get_nodePubKey()[1] == 149 {
+            //         if !mutate_sequence_ids {
+            //             if !self.any_scope || (seed / 2) % 2 == 0 {
+            //                 proposal.set_currentTxHash(
+            //                         hex::decode(
+            //                             "e803e1999369975aed1bfd2444a3552a73383c03a2004cb784ce07e13ebd7d7c",
+            //                         )
+            //                             .unwrap(),
+            //                     );
+            //             } else {
+            //                 proposal.set_currentTxHash(
+            //                         hex::decode(
+            //                             "0000000000000000000000000000000000000000000000000000000000000000",
+            //                         )
+            //                             .unwrap(),
+            //                     );
+            //             }
+            //         } else {
+            //             let initial_propose_seq = proposal.get_proposeSeq();
+            //             let mut corrupted_propose_seq = initial_propose_seq + 1;
+            //             if self.any_scope {
+            //                 corrupted_propose_seq = seed / 2;
+            //             }
+            //             proposal.set_proposeSeq(corrupted_propose_seq);
+            //         }
+            //         let hash = sha512_first_half(
+            //             [
+            //                 &[80, 82, 80, 00],
+            //                 &proposal.get_proposeSeq().to_be_bytes(),
+            //                 &proposal.get_closeTime().to_be_bytes(),
+            //                 proposal.get_previousledger(),
+            //                 proposal.get_currentTxHash(),
+            //             ]
+            //             .concat()
+            //             .as_slice(),
+            //         );
+            //         let keys = &self.node_keys[3];
+            //         let algo = Secp256k1::new();
+            //         let priv_key = bs58::decode(&keys.validation_private_key)
+            //             .with_alphabet(Alphabet::RIPPLE)
+            //             .into_vec()
+            //             .unwrap();
+            //         let message = secp256k1::Message::from_slice(&hash).unwrap();
+            //         let signature = algo
+            //             .sign_ecdsa(&message, &SecretKey::from_slice(&priv_key[1..33]).unwrap());
+            //         proposal.set_signature(signature.serialize_der().to_vec());
+            //     }
+            //     event.message =
+            //         [&event.message[0..6], &proposal.write_to_bytes().unwrap()].concat();
+            //     let bytes = ((event.message.len() - 6) as u32).to_be_bytes();
+            //     event.message[0] = bytes[0];
+            //     event.message[1] = bytes[1];
+            //     event.message[2] = bytes[2];
+            //     event.message[3] = bytes[3];
+            // }
             TMValidation(ref mut validation) => {
-                let (_, parsed) = parse2(validation.get_validation()).unwrap();
+                let (_, parsed) = parse(validation.get_validation()).unwrap();
                 if event.from == 3
                     && parsed["SigningPubKey"]
                         .as_str()
@@ -320,7 +320,7 @@ impl ByzzFuzz {
                     )
                     .unwrap();
 
-                    if !mutate_sequence_ids {
+                    if false {
                         let corruped_hash = if self.any_scope {
                             let n = (seed as usize / 2) % self.all_mutated_ledger_hashes.len();
                             self.all_mutated_ledger_hashes.iter().nth(n).unwrap()
@@ -369,9 +369,9 @@ impl ByzzFuzz {
                         validation.set_validation(val);
                     } else {
                         let ledger_sequence = parsed["LedgerSequence"].as_u32().unwrap();
-                        let mut new_ledger_sequence = ledger_sequence + 1;
-                        if self.any_scope {
-                            new_ledger_sequence = seed / 2;
+                        let mut new_ledger_sequence = ledger_sequence;
+                        if new_ledger_sequence == 5 {
+                            new_ledger_sequence += 200;
                         }
 
                         let mutated_validation = hex::decode(format!(
@@ -413,6 +413,7 @@ impl ByzzFuzz {
                         ))
                         .unwrap();
 
+                        println!("mutated {}", hex::encode(&val));
                         validation.set_validation(val);
                     }
 
