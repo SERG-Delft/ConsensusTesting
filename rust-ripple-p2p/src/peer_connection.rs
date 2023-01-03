@@ -1,5 +1,4 @@
 use crate::scheduler::Event;
-use byteorder::{BigEndian, ByteOrder};
 use bytes::{Buf, BytesMut};
 use log::*;
 use openssl::ssl::{Ssl, SslContext, SslMethod};
@@ -61,8 +60,7 @@ impl PeerConnection {
             .expect("Ssl connection failed");
         let ss = ssl_stream.ssl();
 
-        let mut buf = Vec::<u8>::with_capacity(4096);
-        buf.resize(buf.capacity(), 0);
+        let mut buf = vec![0; 4096];
 
         // The magic finished message that guarantees identity of both ends of the ssl channel
         let mut size = ss.finished(&mut buf[..]);
@@ -90,7 +88,7 @@ impl PeerConnection {
         let secp = Secp256k1::new();
         let sk = SecretKey::from_slice(key).unwrap();
         let sig = secp.sign_ecdsa(&msg, &sk).serialize_der();
-        let b64sig = base64::encode(&sig);
+        let b64sig = base64::encode(sig);
 
         let content = format!(
             "\
@@ -266,7 +264,7 @@ impl PeerConnection {
                 error!("Unknow version header");
             }
 
-            let payload_size = BigEndian::read_u32(&bytes[0..4]) as usize;
+            let payload_size = u32::from_be_bytes(bytes[0..4].try_into().unwrap()) as usize;
 
             if payload_size > 64 * 1024 * 1024 {
                 panic!("Message size too large");
@@ -279,6 +277,7 @@ impl PeerConnection {
             // Send received message to scheduler
             let message = bytes[0..(6 + payload_size)].to_vec();
             let event = Event { from, to, message };
+            // println!("received message");
             match sender.send(event).await {
                 Ok(_) => {}
                 Err(_) => error!(
@@ -286,6 +285,7 @@ impl PeerConnection {
                     from, to
                 ),
             }
+            // println!("forwarded to scheduler");
 
             buf.advance(payload_size + 6);
         }

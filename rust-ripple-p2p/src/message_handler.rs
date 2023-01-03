@@ -1,4 +1,3 @@
-use byteorder::{BigEndian, ByteOrder};
 use serialize::ripple::{
     TMCluster, TMEndpoints, TMGetLedger, TMGetObjectByHash, TMGetPeerShardInfo, TMGetShardInfo,
     TMHaveTransactionSet, TMLedgerData, TMManifest, TMPeerShardInfo, TMPing, TMProposeSet,
@@ -8,7 +7,10 @@ use serialize::RippleMessageObject;
 use std::fmt::Debug;
 
 pub fn from_bytes(bytes: &[u8]) -> RippleMessageObject {
-    invoke_protocol_message(BigEndian::read_u16(&bytes[4..6]), &bytes[6..])
+    invoke_protocol_message(
+        u16::from_be_bytes(bytes[4..6].try_into().unwrap()),
+        &bytes[6..],
+    )
 }
 
 /// Deserialize message

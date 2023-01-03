@@ -59,6 +59,8 @@ struct Args {
 }
 
 fn main() {
+    console_subscriber::init();
+
     let args: Args = Args::parse();
     // let args: Vec<String> = env::args().collect();
     let n: usize = args.n;
@@ -67,20 +69,19 @@ fn main() {
     env_logger::Builder::new().parse_default_env().init();
 
     let configs = [
-        (7, 30, 0, 6, false, false),
         // (7, 0, 0, 6, false, false),
-        // (7, 1, 0, 6, false, false),
-        // (7, 1, 0, 6, true, false),
-        // (7, 2, 0, 6, false, false),
-        // (7, 2, 0, 6, true, false),
-        // (7, 0, 1, 6, false, false),
-        // (7, 0, 1, 6, true, false),
-        // (7, 1, 1, 6, false, false),
-        // (7, 1, 1, 6, true, false),
-        // (7, 0, 2, 6, false, false),
-        // (7, 0, 2, 6, true, false),
-        // (7, 1, 2, 6, false, false),
-        // (7, 1, 2, 6, true, false),
+        (7, 1, 0, 6, false, false),
+        (7, 1, 0, 6, true, false),
+        (7, 2, 0, 6, false, false),
+        (7, 2, 0, 6, true, false),
+        (7, 0, 1, 6, false, false),
+        (7, 0, 1, 6, true, false),
+        (7, 1, 1, 6, false, false),
+        (7, 1, 1, 6, true, false),
+        (7, 0, 2, 6, false, false),
+        (7, 0, 2, 6, true, false),
+        (7, 1, 2, 6, false, false),
+        (7, 1, 2, 6, true, false),
     ];
     for (_, c, d, r, any, base) in configs {
         let args = Args {
@@ -169,25 +170,29 @@ fn main() {
             let (flags_tx, mut flags_rx) = broadcast::channel(32);
             let flag_collector = runtime.spawn(async move {
                 let mut flags = Vec::new();
-                while let Ok(message) = flags_rx.recv().await {
-                    flags.push(message);
+                loop {
+                    match flags_rx.recv().await {
+                        Ok(flag) => flags.push(flag),
+                        Err(broadcast::error::RecvError::Closed) => return flags,
+                        Err(broadcast::error::RecvError::Lagged(n)) => panic!("flag collector lagged {} messages behind", n),
+                    }
                 }
-                flags
             });
 
             let (shutdown_tx, shutdown_rx) = broadcast::channel(16);
             let mut results = shutdown_rx.resubscribe();
 
             let mut toxiproxy = Command::new(toxiproxypath)
-                .stderr(Stdio::null())
+                .stdout(Stdio::null())
                 .spawn()
                 .unwrap();
+
             let node_keys = start_docker_containers(n, &bug_unls);
             for k in &node_keys {
                 println!("node key {}", k.validation_public_key);
             }
 
-            let byzz_fuzz = ByzzFuzz::new(
+            let byzz_fuzz = runtime.block_on(ByzzFuzz::new(
                 args.n,
                 args.c,
                 args.d,
@@ -195,7 +200,7 @@ fn main() {
                 args.any_scope,
                 args.baseline,
                 node_keys.clone(),
-            );
+            ));
             println!("{:?}", &byzz_fuzz.process_faults);
             file.write_fmt(format_args!(
                 "process faults {:?}\n",

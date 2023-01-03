@@ -12,8 +12,13 @@ RUN apt-get update && \
 	update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-7 700 --slave /usr/bin/g++ g++ /usr/bin/g++-7 && \
 	update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-8 800 --slave /usr/bin/g++ g++ /usr/bin/g++-8
 	
-RUN wget https://github.com/Kitware/CMake/releases/download/v3.13.3/cmake-3.13.3-Linux-x86_64.sh && \
-	sh cmake-3.13.3-Linux-x86_64.sh --prefix=/usr/local --exclude-subdir && \
+RUN wget https://github.com/Kitware/CMake/releases/download/v3.25.1/cmake-3.25.1.tar.gz && \
+	tar xvzf cmake-3.25.1.tar.gz && \
+	cd cmake-3.25.1 && \
+	./bootstrap && \
+	make && \
+	make install && \
+	cd .. && \
 	wget https://boostorg.jfrog.io/artifactory/main/release/1.75.0/source/boost_1_75_0.tar.gz && \
 	tar xvzf boost_1_75_0.tar.gz && \
 	cd boost_1_75_0 && \
@@ -21,19 +26,17 @@ RUN wget https://github.com/Kitware/CMake/releases/download/v3.13.3/cmake-3.13.3
 	./b2 -j 4 && \
 	export BOOST_ROOT=/boost_1_75_0
 
-RUN git clone https://github.com/mvanmeerten/rippled.git &&\
+RUN git clone https://github.com/xrplf/rippled.git && \
 	export BOOST_ROOT=/boost_1_75_0 && \
-	cd rippled &&\
-	git checkout consensus-testing &&  \
+	cd rippled && \
+	git checkout tags/1.7.2 && \
+	sed -i '319,321d' src/ripple/overlay/impl/Handshake.cpp && \
 	mkdir my_build && \
 	cd my_build && \
 	cmake .. && \
 	cmake --build . -- -j 4
 
-EXPOSE 51235
+FROM ubuntu:18.04
+COPY --from=0 /rippled/my_build/rippled /rippled/my_build/rippled
 
-COPY entrypoint /entrypoint.sh
-
-RUN chmod +x /entrypoint.sh
-
-ENTRYPOINT [ "/entrypoint.sh" ]
+ENTRYPOINT [ "/rippled/my_build/rippled" ]

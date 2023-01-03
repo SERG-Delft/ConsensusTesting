@@ -15,7 +15,6 @@ with-serde = ["protobuf/with-serde"]
 [dependencies]
 serialize = { path = "../serialize" }
 base64 = "0.12.0"
-byteorder = "1"
 bytes = "0.5.4"
 futures = "0.3"
 hex = "0.4.2"
@@ -25,30 +24,26 @@ num_cpus = "1.12"
 openssl = { version = "0.10.36" }
 sha2 = "0.8.1"
 secp256k1 = "0.22.1"
-tokio = { version = "1.13.0", features = ["full"] }
+tokio = { version = "1.23.0", features = ["full"] }
 tokio-openssl = "0.6.3"
 protobuf = { version = "2" }
-websocket = "0.26.2"
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
-powershell_script = "0.2.1"
 bs58 = { version = "0.4.0", features = ["check"] }
-ripemd160 = "0.9.1"
 ripple-address-codec = "0.1.1"
 env_logger = "0.9.0"
 log = "0.4.14"
 itertools = "0.10.1"
 chrono = "0.4.19"
-jql = "3.0.4"
 rayon = "1.5.1"
 json = "0.12.4"
-xrpl-rust = "0.1.1"
-rippled_binary_codec = "0.0.4"
-ripple-keypairs = "0.1.0"
-nom = "7.1.1"
+xrpl-rust = "0.1.1"  # sha512-half hashing
+nom = "7.1.1"  # parsing canonical format
 lazy_static = "1.4.0"
 rand = "0.8.5"
-set-partitions = "1.0.1"
-reqwest = { version = "0.11", features = ["json"] }
-clap = { version = "3.2.8", features = ["derive"] }
-bollard = "0.13.0"
+set-partitions = "1.0.1"  # enumerate set partitions
+reqwest = { version = "0.11", features = ["json"] }  # toxiproxy communication
+clap = { version = "3.2.8", features = ["derive", "cargo"] }  # parsing args
+bollard = "0.13.0"  # used when saving logs
+console-subscriber = "0.1.8"
+tokio-tungstenite = "0.18.0"

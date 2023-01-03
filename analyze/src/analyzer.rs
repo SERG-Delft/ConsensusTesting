@@ -20,7 +20,7 @@ pub fn public_key_to_b58(key: &[u8]) -> String {
 pub fn analyze(messages: &[RippleMessage], subscriptions: Vec<Vec<Validated>>) {
     println!("found {} messages", messages.len());
 
-    let mut proposals = HashMap::new();
+    let mut proposals: HashMap<_, HashMap<_, HashMap<_, HashSet<_>>>> = HashMap::new();
     let mut proposals_vec = vec![];
     let mut propo_recv = vec![];
     let mut val_recv = vec![];
@@ -43,8 +43,8 @@ pub fn analyze(messages: &[RippleMessage], subscriptions: Vec<Vec<Validated>>) {
         match message {
             RippleMessageObject::TMProposeSet(proposal) => {
                 proposals_vec.push(proposal);
-                propo_recv.push(u64::from_str_radix(&message1.to_node, 10).unwrap());
-                propo_sender.push(u64::from_str_radix(&message1.from_node, 10).unwrap());
+                propo_recv.push(message1.to_node.parse::<u64>().unwrap());
+                propo_sender.push(message1.from_node.parse::<u64>().unwrap());
                 let ledger = hex::encode(proposal.get_previousledger());
                 let tx_hash = hex::encode(proposal.get_currentTxHash());
                 let node = match public_key_to_b58(proposal.get_nodePubKey()).as_str() {
@@ -61,16 +61,16 @@ pub fn analyze(messages: &[RippleMessage], subscriptions: Vec<Vec<Validated>>) {
 
                 proposals
                     .entry(ledger)
-                    .or_insert(HashMap::new())
+                    .or_default()
                     .entry(seq)
-                    .or_insert(HashMap::new())
+                    .or_default()
                     .entry(tx_hash)
-                    .or_insert(HashSet::new())
+                    .or_default()
                     .insert(node);
             }
             RippleMessageObject::TMValidation(validation) => {
-                val_recv.push(u64::from_str_radix(&message1.to_node, 10).unwrap());
-                val_sender.push(u64::from_str_radix(&message1.from_node, 10).unwrap());
+                val_recv.push(message1.to_node.parse::<u64>().unwrap());
+                val_sender.push(message1.from_node.parse::<u64>().unwrap());
                 validations.push(validation);
             }
             _ => {}
@@ -203,19 +203,50 @@ pub fn analyze(messages: &[RippleMessage], subscriptions: Vec<Vec<Validated>>) {
 
     println!("{}", proposals_new);
 
-    let mutations = proposals_new.clone().lazy().filter(col("to").eq(lit("0,1,2")));
-    let res = proposals_new.clone().lazy().filter(col("from").neq(lit("3"))).join(mutations, [col("sequence")], [col("sequence")], JoinType::Inner)
-    // .groupby([col("sequence")]).agg([col("seq").max()])
-    .filter(col("from").neq(lit("0,1,2")).and(col("from").neq(lit("3")).and(col("from").neq(lit("4,5,6")))))
-    .fetch(50000).unwrap()
-    .select(["sequence", "seq", "consensus", "from", "to"]).unwrap();
+    let mutations = proposals_new
+        .clone()
+        .lazy()
+        .filter(col("to").eq(lit("0,1,2")));
+    let res = proposals_new
+        .clone()
+        .lazy()
+        .filter(col("from").neq(lit("3")))
+        .join(
+            mutations,
+            [col("sequence")],
+            [col("sequence")],
+            JoinType::Inner,
+        )
+        // .groupby([col("sequence")]).agg([col("seq").max()])
+        .filter(
+            col("from")
+                .neq(lit("0,1,2"))
+                .and(col("from").neq(lit("3")).and(col("from").neq(lit("4,5,6")))),
+        )
+        .fetch(50000)
+        .unwrap()
+        .select(["sequence", "seq", "consensus", "from", "to"])
+        .unwrap();
     println!("{}", res);
 
-    let mutations = proposals_new.clone().lazy().filter(col("to").eq(lit("0,1,2")));
-    let res = proposals_new.clone().lazy().filter(col("from").neq(lit("3"))).join(mutations, [col("sequence")], [col("sequence")], JoinType::Inner)
-    .groupby([col("sequence")]).agg([col("seq").max()])
-    // .filter(col("from").neq(lit("0,1,2")).and(col("from").neq(lit("3")).and(col("from").neq(lit("4,5,6")))))
-    .fetch(50000).unwrap();
+    let mutations = proposals_new
+        .clone()
+        .lazy()
+        .filter(col("to").eq(lit("0,1,2")));
+    let res = proposals_new
+        .lazy()
+        .filter(col("from").neq(lit("3")))
+        .join(
+            mutations,
+            [col("sequence")],
+            [col("sequence")],
+            JoinType::Inner,
+        )
+        .groupby([col("sequence")])
+        .agg([col("seq").max()])
+        // .filter(col("from").neq(lit("0,1,2")).and(col("from").neq(lit("3")).and(col("from").neq(lit("4,5,6")))))
+        .fetch(50000)
+        .unwrap();
     println!("{}", res);
 
     let validations_new = validations

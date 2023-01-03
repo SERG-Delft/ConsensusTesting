@@ -63,7 +63,7 @@ fn read(path: String) -> io::Result<Vec<RippleMessage>> {
             from_node: captures[3].to_string(),
             to_node: captures[4].to_string(),
             timestamp: Utc.from_utc_datetime(&NaiveDateTime::from_timestamp(
-                i64::from_str_radix(&captures[1], 10).unwrap(),
+                captures[1].parse::<i64>().unwrap(),
                 0,
             )),
             message: message.unwrap(),
@@ -91,9 +91,8 @@ fn read_subscriptions(path: String) -> io::Result<Vec<Validated>> {
     for line in reader.lines().skip(1) {
         let line = line?;
         let captures = VALIDATION_RE.captures(line.as_str()).unwrap();
-        match &captures[1] {
-            "LedgerValidated" => validations.push(serde_json::from_str(&captures[2]).unwrap()),
-            _ => {}
+        if &captures[1] == "LedgerValidated" {
+            validations.push(serde_json::from_str(&captures[2]).unwrap())
         }
     }
 

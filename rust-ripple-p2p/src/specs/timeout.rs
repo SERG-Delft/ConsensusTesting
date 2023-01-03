@@ -2,7 +2,7 @@ use tokio::sync::broadcast::Sender;
 
 use super::Flags;
 
-pub const MESSAGE_TIMEOUT: usize = 1000_000;
+pub const MESSAGE_TIMEOUT: usize = 10_000;
 
 pub(super) struct TimeoutChecker {
     message_count: usize,

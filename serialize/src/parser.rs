@@ -175,7 +175,7 @@ fn read_from_file() -> HashMap<FieldType, FieldInformation> {
         .expect("Reading from file did not work.");
 
     let all_values: serde_json::Value =
-        serde_json::from_str(&*data).expect("Parsing the data did not work.");
+        serde_json::from_str(&data).expect("Parsing the data did not work.");
     // get only the fields
     let fields = serde_json::json!(all_values["FIELDS"]);
 

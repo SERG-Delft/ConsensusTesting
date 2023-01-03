@@ -1,11 +1,9 @@
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
-use std::sync::mpsc::Receiver as STDReceiver;
 use std::sync::{Arc, Mutex};
 
 use crate::specs::{Flags, SpecChecker};
 use crate::ByzzFuzz;
-use byteorder::{BigEndian, ByteOrder};
 use chrono::Utc;
 use log::error;
 use tokio::sync::broadcast::{Receiver, Sender};
@@ -53,7 +51,7 @@ impl Scheduler {
     pub async fn start(
         &mut self,
         mut receiver: TokioReceiver<Event>,
-        collector_receiver: STDReceiver<PeerSubscriptionObject>,
+        collector_receiver: TokioReceiver<PeerSubscriptionObject>,
     ) {
         let latest_validated_ledger_clone = self.latest_validated_ledger.clone();
         let transactions = Arc::new(Mutex::new(HashSet::new()));
@@ -62,15 +60,14 @@ impl Scheduler {
         let mutex_sequences_hashes = Arc::new(Mutex::new(HashMap::new()));
         let message_clone = disagree_message.clone();
         let mutex_clone = mutex_sequences_hashes.clone();
-        let task = tokio::spawn(async move {
+        let task = tokio::spawn(
             Self::listen_to_collector(
                 collector_receiver,
                 latest_validated_ledger_clone,
                 collector_txs,
                 mutex_clone,
                 message_clone,
-            )
-        });
+            ));
         let mut flags_rx = self.flags_tx.subscribe();
         let shutdown_tx = self.shutdown_tx.clone();
         tokio::spawn(async move {
@@ -87,12 +84,14 @@ impl Scheduler {
             tokio::select! {
                 event_option = receiver.recv() => match event_option {
                     Some(event) => {
+                        // println!("event incoming");
                         self.execute_event(event).await;
                         let committed = transactions.lock().unwrap().len();
                         let message = disagree_message.lock().unwrap();
                         if committed == 7 || !message.is_empty() {
                             self.shutdown_tx.send((mutex_sequences_hashes.lock().unwrap().clone(), committed, if !message.is_empty() { message.clone() } else { "all committed".to_string() })).unwrap();
                         }
+                        // println!("executed event");
                     },
                     None => error!("Peer senders failed")
                 },
@@ -105,6 +104,7 @@ impl Scheduler {
     }
 
     async fn execute_event(&mut self, mut event: Event) {
+        // println!("{} to {}", event.from, event.to);
         event = self.byzz_fuzz.on_message(event).await;
         self.spec_checker
             .check(event.from, from_bytes(&event.message));
@@ -123,7 +123,7 @@ impl Scheduler {
             event.to.to_string(),
             Utc::now(),
             invoke_protocol_message(
-                BigEndian::read_u16(&event.message[4..6]),
+                u16::from_be_bytes(event.message[4..6].try_into().unwrap()),
                 &event.message[6..],
             ),
         );
@@ -133,23 +133,23 @@ impl Scheduler {
             .expect("Collector receiver failed");
     }
 
-    fn listen_to_collector(
-        collector_receiver: STDReceiver<PeerSubscriptionObject>,
+    async fn listen_to_collector(
+        mut collector_receiver: tokio::sync::mpsc::Receiver<PeerSubscriptionObject>,
         latest_validated_ledger: Arc<Mutex<u32>>,
         transactions: Arc<Mutex<HashSet<u16>>>,
         mutex_sequences_hashes: Arc<Mutex<HashMap<usize, String>>>,
         mutex_disagree_messages: Arc<Mutex<String>>,
     ) {
         let mut local_latest_validated_ledger = 0;
-        while let Ok(subscription_object) = collector_receiver.recv() {
+        while let Some(subscription_object) = collector_receiver.recv().await {
             if let SubscriptionObject::ValidatedLedger(ledger) =
                 subscription_object.subscription_object
             {
                 if ledger.txn_count == 1 {
-                    // transactions
-                    //     .lock()
-                    //     .unwrap()
-                    //     .insert(subscription_object.peer);
+                    transactions
+                        .lock()
+                        .unwrap()
+                        .insert(subscription_object.peer);
                     println!("transactions {:?}", transactions.lock().unwrap());
                 }
 
@@ -198,6 +198,7 @@ impl PeerChannel {
     }
 }
 
+#[derive(Debug)]
 pub struct Event {
     pub from: usize,
     pub to: usize,

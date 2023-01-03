@@ -1,26 +1,27 @@
 use bs58::Alphabet;
+use futures::{StreamExt, SinkExt};
+use futures::stream::SplitSink;
 use itertools::Itertools;
-use protobuf::Message;
-use serialize::ripple::NodeEvent;
+use protobuf::Message as ProtoMessage;
+use tokio_tungstenite::tungstenite::Message;
+use tokio_tungstenite::{WebSocketStream, MaybeTlsStream};
 use std::collections::{HashMap, HashSet};
-use std::net::TcpStream;
 use std::sync::Arc;
-use websocket::Message as WsMessage;
 
 use crate::client::Client;
 use crate::container_manager::NodeKeys;
 use crate::message_handler::from_bytes;
+use serialize::ripple::NodeEvent;
+use serialize::parser::parse;
+use serialize::RippleMessageObject;
 use crate::scheduler::Event;
 use crate::toxiproxy::ToxiproxyClient;
 use rand::prelude::*;
 use secp256k1::{Secp256k1, SecretKey};
 use serde_json::json;
-use serialize::parser::parse;
-use serialize::RippleMessageObject::{self, TMProposeSet, TMStatusChange, TMValidation};
 use set_partitions::{set_partitions, ArrayVecSetPartition, HashSubsets};
-use websocket::sender::Writer;
-use websocket::ClientBuilder;
 use xrpl::core::keypairs::utils::sha512_first_half;
+use RippleMessageObject::{TMProposeSet, TMStatusChange, TMValidation};
 
 pub struct ByzzFuzz {
     n: usize, // number of processes
@@ -36,11 +37,11 @@ pub struct ByzzFuzz {
     mutated_ledger_hash: Vec<u8>,
     node_keys: Vec<NodeKeys>,
     pub sequences_hashes: HashMap<usize, String>,
-    byzantine_sender: Writer<TcpStream>,
+    byzantine_sender: SplitSink<WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>, Message>,
 }
 
 impl ByzzFuzz {
-    pub fn new(
+    pub async fn new(
         n: usize,
         c: usize,
         d: usize,
@@ -78,11 +79,8 @@ impl ByzzFuzz {
                 network_faults.insert(fault.round, fault.partition);
             });
         let sequences_hashes: HashMap<usize, String> = HashMap::new();
-        let client = ClientBuilder::new("ws://127.0.0.1:6008")
-            .unwrap()
-            .connect_insecure()
-            .unwrap();
-        let (_, sender) = client.split().unwrap();
+        let (client, _) = tokio_tungstenite::connect_async("ws://localhost:6008").await.unwrap();
+        let (sender, _) = client.split();
         Self {
             n,
             any_scope,
@@ -145,16 +143,16 @@ impl ByzzFuzz {
             }
         }
         if event.from == 3
-        // && self.process_faults.contains_key(&self.current_round)
-        // && self
-        //     .process_faults
-        //     .get(&self.current_round)
-        //     .unwrap()
-        //     .0
-        //     .contains(&event.to)
+            && self.process_faults.contains_key(&self.current_round)
+            && self
+                .process_faults
+                .get(&self.current_round)
+                .unwrap()
+                .0
+                .contains(&event.to)
         {
-            // let seed = self.process_faults.get(&self.current_round).unwrap().1;
-            event = self.apply_mutation(event, &mut message, 0);
+            let seed = self.process_faults.get(&self.current_round).unwrap().1;
+            event = self.apply_mutation(event, &mut message, seed);
         }
         event
     }
@@ -178,8 +176,8 @@ impl ByzzFuzz {
                         "secret": crate::client::_GENESIS_SEED
                     });
                     self.byzantine_sender
-                        .send_message(&WsMessage::text(json.to_string()))
-                        .unwrap();
+                        .send(Message::text(json.to_string()))
+                        .await.unwrap();
                     println!("submitted");
                 }
             }
@@ -239,68 +237,68 @@ impl ByzzFuzz {
     ) -> Event {
         let mutate_sequence_ids = seed % 2 == 0;
         match message {
-            // RippleMessageObject::TMTransaction(ref mut transaction) => {
-            //     let mutation = "1200002280000000240000000161400000000BED48A068400000000000000A73210330E7FC9D56BB25D6893BA3F317AE5BCF33B3291BD63DB32654A313222F7FD02074473045022100F1D8AA686F6241A5F39106FFDA94AA218118D385B58A00E633425D882B17205902200B38092D3F990359928F393485DC352CD0F3C22E4559280354FB423BC7F08BEC8114B5F762798A53D543A014CAF8B297CFF8F2F937E883149D94BFF9BAAA5267D5733CA2B59950B4C9A01564";
-            //     transaction.set_rawTransaction(hex::decode(mutation).unwrap());
-            //     event.message =
-            //         [&event.message[0..6], &transaction.write_to_bytes().unwrap()].concat();
-            // }
-            // TMProposeSet(ref mut proposal) => {
-            //     if proposal.get_nodePubKey()[1] == 149 {
-            //         if !mutate_sequence_ids {
-            //             if !self.any_scope || (seed / 2) % 2 == 0 {
-            //                 proposal.set_currentTxHash(
-            //                         hex::decode(
-            //                             "e803e1999369975aed1bfd2444a3552a73383c03a2004cb784ce07e13ebd7d7c",
-            //                         )
-            //                             .unwrap(),
-            //                     );
-            //             } else {
-            //                 proposal.set_currentTxHash(
-            //                         hex::decode(
-            //                             "0000000000000000000000000000000000000000000000000000000000000000",
-            //                         )
-            //                             .unwrap(),
-            //                     );
-            //             }
-            //         } else {
-            //             let initial_propose_seq = proposal.get_proposeSeq();
-            //             let mut corrupted_propose_seq = initial_propose_seq + 1;
-            //             if self.any_scope {
-            //                 corrupted_propose_seq = seed / 2;
-            //             }
-            //             proposal.set_proposeSeq(corrupted_propose_seq);
-            //         }
-            //         let hash = sha512_first_half(
-            //             [
-            //                 &[80, 82, 80, 00],
-            //                 &proposal.get_proposeSeq().to_be_bytes(),
-            //                 &proposal.get_closeTime().to_be_bytes(),
-            //                 proposal.get_previousledger(),
-            //                 proposal.get_currentTxHash(),
-            //             ]
-            //             .concat()
-            //             .as_slice(),
-            //         );
-            //         let keys = &self.node_keys[3];
-            //         let algo = Secp256k1::new();
-            //         let priv_key = bs58::decode(&keys.validation_private_key)
-            //             .with_alphabet(Alphabet::RIPPLE)
-            //             .into_vec()
-            //             .unwrap();
-            //         let message = secp256k1::Message::from_slice(&hash).unwrap();
-            //         let signature = algo
-            //             .sign_ecdsa(&message, &SecretKey::from_slice(&priv_key[1..33]).unwrap());
-            //         proposal.set_signature(signature.serialize_der().to_vec());
-            //     }
-            //     event.message =
-            //         [&event.message[0..6], &proposal.write_to_bytes().unwrap()].concat();
-            //     let bytes = ((event.message.len() - 6) as u32).to_be_bytes();
-            //     event.message[0] = bytes[0];
-            //     event.message[1] = bytes[1];
-            //     event.message[2] = bytes[2];
-            //     event.message[3] = bytes[3];
-            // }
+            RippleMessageObject::TMTransaction(ref mut transaction) => {
+                let mutation = "1200002280000000240000000161400000000BED48A068400000000000000A73210330E7FC9D56BB25D6893BA3F317AE5BCF33B3291BD63DB32654A313222F7FD02074473045022100F1D8AA686F6241A5F39106FFDA94AA218118D385B58A00E633425D882B17205902200B38092D3F990359928F393485DC352CD0F3C22E4559280354FB423BC7F08BEC8114B5F762798A53D543A014CAF8B297CFF8F2F937E883149D94BFF9BAAA5267D5733CA2B59950B4C9A01564";
+                transaction.set_rawTransaction(hex::decode(mutation).unwrap());
+                event.message =
+                    [&event.message[0..6], &transaction.write_to_bytes().unwrap()].concat();
+            }
+            TMProposeSet(ref mut proposal) => {
+                if proposal.get_nodePubKey()[1] == 149 {
+                    if !mutate_sequence_ids {
+                        if !self.any_scope || (seed / 2) % 2 == 0 {
+                            proposal.set_currentTxHash(
+                                    hex::decode(
+                                        "e803e1999369975aed1bfd2444a3552a73383c03a2004cb784ce07e13ebd7d7c",
+                                    )
+                                        .unwrap(),
+                                );
+                        } else {
+                            proposal.set_currentTxHash(
+                                    hex::decode(
+                                        "0000000000000000000000000000000000000000000000000000000000000000",
+                                    )
+                                        .unwrap(),
+                                );
+                        }
+                    } else {
+                        let initial_propose_seq = proposal.get_proposeSeq();
+                        let mut corrupted_propose_seq = initial_propose_seq + 1;
+                        if self.any_scope {
+                            corrupted_propose_seq = seed / 2;
+                        }
+                        proposal.set_proposeSeq(corrupted_propose_seq);
+                    }
+                    let hash = sha512_first_half(
+                        [
+                            &[80, 82, 80, 00],
+                            &proposal.get_proposeSeq().to_be_bytes(),
+                            &proposal.get_closeTime().to_be_bytes(),
+                            proposal.get_previousledger(),
+                            proposal.get_currentTxHash(),
+                        ]
+                        .concat()
+                        .as_slice(),
+                    );
+                    let keys = &self.node_keys[3];
+                    let algo = Secp256k1::new();
+                    let priv_key = bs58::decode(&keys.validation_private_key)
+                        .with_alphabet(Alphabet::RIPPLE)
+                        .into_vec()
+                        .unwrap();
+                    let message = secp256k1::Message::from_slice(&hash).unwrap();
+                    let signature = algo
+                        .sign_ecdsa(&message, &SecretKey::from_slice(&priv_key[1..33]).unwrap());
+                    proposal.set_signature(signature.serialize_der().to_vec());
+                }
+                event.message =
+                    [&event.message[0..6], &proposal.write_to_bytes().unwrap()].concat();
+                let bytes = ((event.message.len() - 6) as u32).to_be_bytes();
+                event.message[0] = bytes[0];
+                event.message[1] = bytes[1];
+                event.message[2] = bytes[2];
+                event.message[3] = bytes[3];
+            }
             TMValidation(ref mut validation) => {
                 let (_, parsed) = parse(validation.get_validation()).unwrap();
                 if event.from == 3
@@ -320,19 +318,22 @@ impl ByzzFuzz {
                     )
                     .unwrap();
 
-                    if false {
+                    if !mutate_sequence_ids {
                         let corruped_hash = if self.any_scope {
                             let n = (seed as usize / 2) % self.all_mutated_ledger_hashes.len();
                             self.all_mutated_ledger_hashes.iter().nth(n).unwrap()
                         } else {
                             &self.mutated_ledger_hash
                         };
+
+                        // println!("validation: {}", hex::encode(validation.get_validation()));
+
                         let mutated_validation = hex::decode(format!(
-                            "22{}26{}29{}3A{}51{}5017{}5019{}7321{}",
+                            "22{}26{}29{}51{}5017{}5019{}7321{}",
                             hex::encode(parsed["Flags"].as_u32().unwrap().to_be_bytes()),
                             hex::encode(parsed["LedgerSequence"].as_u32().unwrap().to_be_bytes()),
                             hex::encode(parsed["SigningTime"].as_u32().unwrap().to_be_bytes()),
-                            hex::encode(parsed["Cookie"].as_u64().unwrap().to_be_bytes()),
+                            // hex::encode(parsed["Cookie"].as_u64().unwrap().to_be_bytes()),
                             hex::encode(corruped_hash),
                             "E803E1999369975AED1BFD2444A3552A73383C03A2004CB784CE07E13EBD7D7C",
                             parsed["ValidatedHash"].as_str().unwrap(),
@@ -352,11 +353,11 @@ impl ByzzFuzz {
                         let der_sign = mutated_signature.serialize_der().to_vec();
 
                         let val = hex::decode(format!(
-                            "22{}26{}29{}3A{}51{}5017{}5019{}7321{}76{}{}",
+                            "22{}26{}29{}51{}5017{}5019{}7321{}76{}{}",
                             hex::encode(parsed["Flags"].as_u32().unwrap().to_be_bytes()),
                             hex::encode(parsed["LedgerSequence"].as_u32().unwrap().to_be_bytes()),
                             hex::encode(parsed["SigningTime"].as_u32().unwrap().to_be_bytes()),
-                            hex::encode(parsed["Cookie"].as_u64().unwrap().to_be_bytes()),
+                            // hex::encode(parsed["Cookie"].as_u64().unwrap().to_be_bytes()),
                             hex::encode(corruped_hash),
                             "E803E1999369975AED1BFD2444A3552A73383C03A2004CB784CE07E13EBD7D7C",
                             parsed["ValidatedHash"].as_str().unwrap(),
@@ -369,17 +370,19 @@ impl ByzzFuzz {
                         validation.set_validation(val);
                     } else {
                         let ledger_sequence = parsed["LedgerSequence"].as_u32().unwrap();
-                        let mut new_ledger_sequence = ledger_sequence;
-                        if new_ledger_sequence == 5 {
-                            new_ledger_sequence += 200;
+                        let mut new_ledger_sequence = ledger_sequence + 1;
+                        if self.any_scope {
+                            new_ledger_sequence = seed / 2;
                         }
 
+                        // println!("validation: {}", hex::encode(validation.get_validation()));
+
                         let mutated_validation = hex::decode(format!(
-                            "22{}26{}29{}3A{}51{}5017{}5019{}7321{}",
+                            "22{}26{}29{}51{}5017{}5019{}7321{}",
                             hex::encode(parsed["Flags"].as_u32().unwrap().to_be_bytes()),
                             hex::encode(new_ledger_sequence.to_be_bytes()),
                             hex::encode(parsed["SigningTime"].as_u32().unwrap().to_be_bytes()),
-                            hex::encode(parsed["Cookie"].as_u64().unwrap().to_be_bytes()),
+                            // hex::encode(parsed["Cookie"].as_u64().unwrap().to_be_bytes()),
                             parsed["hash"].as_str().unwrap(),
                             parsed["ConsensusHash"].as_str().unwrap(),
                             parsed["ValidatedHash"].as_str().unwrap(),
@@ -399,11 +402,11 @@ impl ByzzFuzz {
                         let der_sign = mutated_signature.serialize_der().to_vec();
 
                         let val = hex::decode(format!(
-                            "22{}26{}29{}3A{}51{}5017{}5019{}7321{}76{}{}",
+                            "22{}26{}29{}51{}5017{}5019{}7321{}76{}{}",
                             hex::encode(parsed["Flags"].as_u32().unwrap().to_be_bytes()),
                             hex::encode(new_ledger_sequence.to_be_bytes()),
                             hex::encode(parsed["SigningTime"].as_u32().unwrap().to_be_bytes()),
-                            hex::encode(parsed["Cookie"].as_u64().unwrap().to_be_bytes()),
+                            // hex::encode(parsed["Cookie"].as_u64().unwrap().to_be_bytes()),
                             parsed["hash"].as_str().unwrap(),
                             parsed["ConsensusHash"].as_str().unwrap(),
                             parsed["ValidatedHash"].as_str().unwrap(),
@@ -413,7 +416,6 @@ impl ByzzFuzz {
                         ))
                         .unwrap();
 
-                        println!("mutated {}", hex::encode(&val));
                         validation.set_validation(val);
                     }
 

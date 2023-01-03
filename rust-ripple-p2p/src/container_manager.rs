@@ -4,7 +4,7 @@ use std::path::Path;
 use std::process::Command;
 use std::str::from_utf8;
 use std::time::Duration;
-use std::{env, fs, thread};
+use std::{fs, thread};
 
 use log::debug;
 use rayon::prelude::*;
@@ -24,11 +24,11 @@ fn remove_containers(name: &str) {
     let leftovers = Command::new("docker")
         .arg("ps")
         .args(["--all", "--quiet"])
-        .args(["--filter", "ancestor=mvanmeerten/rippled-boost-cmake"])
+        .args(["--filter", "ancestor=ripple"])
         .args(["--filter", &format!("name={}", name)])
         .output()
         .unwrap();
-    let ids: Vec<&str> = from_utf8(&*leftovers.stdout).unwrap().lines().collect();
+    let ids: Vec<&str> = from_utf8(&leftovers.stdout).unwrap().lines().collect();
     debug!("found following nodes to kill: {:?}", ids);
     Command::new("docker")
         .args(["rm", "-f", "-v"])
@@ -68,7 +68,7 @@ fn get_node_keys(n: usize) -> Vec<NodeKeys> {
             let path = format!("./config/validator_{}", i);
             if Path::new(&format!("{}/keys.json", path)).exists() {
                 let keys: NodeKeys =
-                    serde_json::from_str(&*read_to_string(&format!("{}/keys.json", path)).unwrap())
+                    serde_json::from_str(&read_to_string(&format!("{}/keys.json", path)).unwrap())
                         .unwrap();
                 keys
             } else {
@@ -120,7 +120,7 @@ fn configure_unls(unls: &Vec<Vec<usize>>, keys: &[NodeKeys]) {
         let mut validators = "[validators]\n".to_owned();
         for (node, key) in keys.iter().enumerate() {
             if i != node && unls[i].contains(&node) {
-                validators.push_str(&*key.validation_public_key);
+                validators.push_str(&key.validation_public_key);
                 validators.push('\n');
             }
         }
@@ -143,23 +143,29 @@ fn start_node(id: usize) {
 fn start_node_with_options(name: &str, offset: usize, expose_to_network: bool) {
     let mut command = Command::new("docker");
     let mut command = command
-        .arg("run")
-        .args(["-dit", "--name", name])
-        .args(["--mount", &format!("type=bind,source={}/./config/{},target=/.config/ripple", env::current_dir().unwrap().to_str().unwrap(), name)])
-        // .args(["--mount", &format!("type=bind,source={}/../logs/{},target=/var/log/rippled", env::current_dir().unwrap().to_str().unwrap(), name)])
-    ;
+        .arg("create")
+        .args(["-it", "--rm", "--name", name]);
     if expose_to_network {
         command = command
-            .args(["--net", "ripple-net"])
             .args(["--hostname", name])
             .args(["-p", &format!("{}:6005", 6005 + offset)])
             .args(["-p", &format!("{}:51235", 51235 + offset)])
     }
-    let result = command
-        .arg("mvanmeerten/rippled-boost-cmake")
+    // let result = command.arg("mvanmeerten/rippled-boost-cmake").output().unwrap();
+    let result = command.arg("ripple").output().unwrap();
+    let container_id = from_utf8(result.stdout.as_slice()).unwrap().trim();
+    let _ = Command::new("docker")
+        .args([
+            "cp",
+            &format!("config/{}", name),
+            &format!("{}:/etc/opt/ripple", container_id),
+        ])
         .output()
         .unwrap();
-    println!("{}", from_utf8(result.stdout.as_slice()).unwrap());
-    println!("{}", from_utf8(result.stderr.as_slice()).unwrap());
+    let _ = Command::new("docker")
+        .args(["start", container_id])
+        .output()
+        .unwrap();
+
     debug!("started {}", name);
 }

@@ -54,14 +54,13 @@ impl App {
         let mut tokio_tasks = vec![];
         let (collector_tx, collector_rx) = tokio::sync::mpsc::channel(32);
         let (subscription_tx, subscription_rx) = tokio::sync::mpsc::channel(32);
-        let (collector_state_tx, scheduler_state_rx) = std::sync::mpsc::channel();
+        let (collector_state_tx, scheduler_state_rx) = tokio::sync::mpsc::channel(32);
         let peer = self.peers;
         // Start the collector which writes output to files
-        let collector_task = tokio::spawn(async move {
+        let collector_task = tokio::spawn(
             Collector::new(peer, collector_rx, subscription_rx, collector_state_tx)
                 .start()
-                .await;
-        });
+        );
         tokio_tasks.push(collector_task);
 
         let scheduler_thread;
@@ -173,15 +172,17 @@ impl App {
                     i,
                     format!("ws://127.0.0.1:600{}", 5 + i),
                     subscription_tx.clone(),
-                );
+                ).await;
             } else {
                 let _client = Client::new(
                     i,
                     format!("ws://127.0.0.1:60{}", 5 + i),
                     subscription_tx.clone(),
-                );
+                ).await;
             }
         }
+
+        // println!("connected clients");
 
         scheduler_thread
             .await

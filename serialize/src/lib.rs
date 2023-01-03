@@ -5,7 +5,8 @@ use openssl::sha::sha256;
 use parser::parse;
 
 pub mod parser;
-pub mod ripple;
+
+include!(concat!(env!("OUT_DIR"), "/mod.rs"));
 
 use crate::ripple::{
     TMCluster, TMEndpoints, TMGetLedger, TMGetObjectByHash, TMGetPeerShardInfo, TMGetShardInfo,

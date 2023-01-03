@@ -74,7 +74,8 @@ impl ToxiproxyClient {
 
     async fn allow_communication(&self, from: usize, to: usize, allow: bool) {
         // let bandwidth = if allow { 1048576 } else { 0 };
-        // self.update_toxic(from, to, Toxic::bandwidth(from, to, Stream::Downstream, bandwidth)).await;
+        // // self.update_toxic(from, to, Toxic::bandwidth(from, to, Stream::Downstream, bandwidth)).await;
+        // println!("allow start");
         let (latency, jitter) = if allow { (50, 0) } else { (30_000, 0) };
         self.update_toxic(
             from,
@@ -82,6 +83,7 @@ impl ToxiproxyClient {
             Toxic::latency(from, to, Stream::Downstream, latency, jitter),
         )
         .await;
+        // println!("allow end");
     }
 
     pub async fn remove_all_toxics(&self) {

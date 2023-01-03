@@ -3,7 +3,6 @@ use serialize::RippleMessage;
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::Path;
-use std::sync::mpsc::Sender;
 
 use crate::client::{PeerSubscriptionObject, SubscriptionObject};
 
@@ -13,7 +12,7 @@ use crate::client::{PeerSubscriptionObject, SubscriptionObject};
 pub struct Collector {
     ripple_message_receiver: tokio::sync::mpsc::Receiver<Box<RippleMessage>>,
     subscription_receiver: tokio::sync::mpsc::Receiver<PeerSubscriptionObject>,
-    scheduler_sender: Sender<PeerSubscriptionObject>,
+    scheduler_sender: tokio::sync::mpsc::Sender<PeerSubscriptionObject>,
     execution_file: BufWriter<File>,
     subscription_files: Vec<BufWriter<File>>,
 }
@@ -23,7 +22,7 @@ impl Collector {
         number_of_nodes: u16,
         ripple_message_receiver: tokio::sync::mpsc::Receiver<Box<RippleMessage>>,
         subscription_receiver: tokio::sync::mpsc::Receiver<PeerSubscriptionObject>,
-        scheduler_sender: Sender<PeerSubscriptionObject>,
+        scheduler_sender: tokio::sync::mpsc::Sender<PeerSubscriptionObject>,
     ) -> Self {
         let execution_file =
             File::create(Path::new("execution.txt")).expect("Opening execution file failed");
@@ -83,6 +82,7 @@ impl Collector {
                             );
                             scheduler_sender
                                 .send(subscription_object)
+                                .await
                                 .expect("Scheduler send failed");
                         }
                         SubscriptionObject::ReceivedValidation(validation) => {

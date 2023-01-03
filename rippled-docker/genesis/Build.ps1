@@ -1,1 +1,0 @@
-docker build --tag mvanmeerten/genesis ${pwd}/.

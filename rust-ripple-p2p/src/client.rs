@@ -1,10 +1,9 @@
+use futures::{StreamExt, SinkExt};
 use log::*;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::sync::mpsc::{channel, Sender};
-use std::thread;
-use std::thread::JoinHandle;
-use websocket::{ClientBuilder, Message, OwnedMessage};
+use tokio::sync::mpsc::Sender;
+use tokio_tungstenite::tungstenite::Message;
 
 const _NODE_PRIVATE_KEY: &str = "e55dc8f3741ac9668dbe858409e5d64f5ce88380f7228eccfe82b92b2c7848ba";
 const _NODE_PUBLIC_KEY_BASE58: &str = "n9KAa2zVWjPHgfzsE3iZ8HAbzJtPrnoh4H2M2HgE7dfqtvyEb1KJ";
@@ -22,82 +21,88 @@ pub const _GENESIS_ADDRESS: &str = "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh";
 
 const _AMOUNT: u32 = 2u32.pow(31);
 
-pub struct Client<'a> {
+pub struct Client {
     #[allow(unused)]
     peer: u16,
-    pub sender_channel: Sender<Message<'a>>,
-    send_loop: JoinHandle<()>,
+    pub sender_channel: Sender<Message>,
+    send_loop: tokio::task::JoinHandle<()>,
     receive_loop: tokio::task::JoinHandle<()>,
 }
 
-impl Client<'static> {
-    pub fn new(
+impl Client {
+    pub async fn new(
         peer: u16,
         connection: String,
         subscription_collector_sender: tokio::sync::mpsc::Sender<PeerSubscriptionObject>,
     ) -> Self {
-        let client = ClientBuilder::new(&connection)
-            .unwrap()
-            .connect_insecure()
-            .unwrap();
+        let (client, _) = tokio_tungstenite::connect_async(&connection).await.unwrap();
 
-        let (mut receiver, mut sender) = client.split().unwrap();
+        let (mut ws_tx , mut ws_rx) = client.split();
 
-        let (tx, rx) = channel();
+        // let client = ClientBuilder::new(&connection)
+        //     .unwrap()
+        //     .connect_insecure()
+        //     .unwrap();
 
-        let tx_1: Sender<Message> = tx.clone();
+        // let (mut receiver, mut sender) = client.split().unwrap();
 
-        let send_loop = thread::spawn(move || {
+        let (tx, mut rx) = tokio::sync::mpsc::channel(16);
+
+        let send_loop = tokio::spawn(async move {
             loop {
                 // Send loop
-                let message = match rx.recv() {
-                    Ok(m) => m,
-                    Err(e) => {
-                        debug!("Send Loop: {:?}", e);
+                let message = match rx.recv().await {
+                    Some(m) => m,
+                    None => {
+                        debug!("Send Loop: None()");
                         return;
                     }
                 };
                 // Send the message
-                match sender.send_message(&message) {
-                    Ok(()) => {
-                        debug!("Send Loop sent message: {:?}", message);
-                    }
-                    Err(e) => {
-                        debug!("Send Loop: {:?}", e);
-                        let _ = sender.send_message(&Message::close());
-                        return;
-                    }
-                }
+                ws_tx.send(message).await.unwrap();
             }
         });
 
         let receive_loop = tokio::spawn(async move {
             // Receive loop
-            for message in receiver.incoming_messages() {
-                let message = match message {
-                    Ok(m) => m,
-                    Err(e) => {
-                        debug!("Receive Loop erred: {:?}", e);
-                        let _ = tx_1.send(Message::from(OwnedMessage::Close(None)));
-                        return;
+            while let Some(Ok(message)) = ws_rx.next().await {
+                match serde_json::from_str::<SubscriptionObject>(message.to_text().unwrap()) {
+                    Ok(subscription_object) => subscription_collector_sender
+                        .send(PeerSubscriptionObject::new(peer, subscription_object))
+                        .await
+                        .unwrap(),
+                    Err(_) => {
+                        warn!("Could not parse")
                     }
-                };
-                match message {
-                    // Say what we received
-                    OwnedMessage::Text(text) => {
-                        match serde_json::from_str::<SubscriptionObject>(text.as_str()) {
-                            Ok(subscription_object) => subscription_collector_sender
-                                .send(PeerSubscriptionObject::new(peer, subscription_object))
-                                .await
-                                .unwrap(),
-                            Err(_) => {
-                                warn!("Could not parse")
-                            }
-                        }
-                    }
-                    _ => debug!("Receive Loop: {:?}", message),
                 }
-            }
+            };
+
+            // for message in receiver.incoming_messages() {
+            //     let message = match message {
+            //         Ok(m) => m,
+            //         Err(e) => {
+            //             debug!("Receive Loop erred: {:?}", e);
+            //             let _ = tx_1.send(Message::from(OwnedMessage::Close(None)));
+            //             return;
+            //         }
+            //     };
+            //     match message {
+            //         // Say what we received
+            //         OwnedMessage::Text(text) => {
+            //             // println!("{}", text);
+            //             match serde_json::from_str::<SubscriptionObject>(text.as_str()) {
+            //                 Ok(subscription_object) => subscription_collector_sender
+            //                     .send(PeerSubscriptionObject::new(peer, subscription_object))
+            //                     .await
+            //                     .unwrap(),
+            //                 Err(_) => {
+            //                     warn!("Could not parse")
+            //                 }
+            //             }
+            //         }
+            //         _ => debug!("Receive Loop: {:?}", message),
+            //     }
+            // }
         });
 
         // Start subscription
@@ -105,7 +110,7 @@ impl Client<'static> {
             &tx,
             format!("Ripple{} subscription", peer).as_str(),
             vec!["consensus", "ledger", "validations", "peer_status"],
-        );
+        ).await;
 
         Client {
             peer,
@@ -117,7 +122,7 @@ impl Client<'static> {
 
     #[allow(unused)]
     pub async fn start(self) {
-        self.send_loop.join().unwrap();
+        self.send_loop.await.unwrap();
         self.receive_loop.await.unwrap();
     }
 
@@ -154,18 +159,19 @@ impl Client<'static> {
     }
 
     #[allow(unused)]
-    pub fn ping(&mut self, id: &str) {
+    pub async fn ping(&mut self, id: &str) {
         let json = json!({
             "id": id,
             "command": "ping"
         });
         self.sender_channel
             .send(Message::text(json.to_string()))
+            .await
             .unwrap();
     }
 
     #[allow(unused)]
-    pub fn ledger(tx: &Sender<Message>, id: &str) {
+    pub async fn ledger(tx: &Sender<Message>, id: &str) {
         let json = json!({
             "id": id,
             "command": "ledger",
@@ -176,11 +182,11 @@ impl Client<'static> {
             "expand": true,
             "owner_funds": true
         });
-        tx.send(Message::text(json.to_string())).unwrap();
+        tx.send(Message::text(json.to_string())).await.unwrap();
     }
 
     #[allow(unused)]
-    pub fn sign_and_submit(
+    pub async fn sign_and_submit(
         tx: &Sender<Message>,
         id: &str,
         transaction: &Transaction,
@@ -192,16 +198,16 @@ impl Client<'static> {
             "tx_json": transaction,
             "secret": secret
         });
-        tx.send(Message::text(json.to_string())).unwrap();
+        tx.send(Message::text(json.to_string())).await.unwrap();
     }
 
-    pub fn subscribe(tx: &Sender<Message>, id: &str, streams: Vec<&str>) {
+    pub async fn subscribe(tx: &Sender<Message>, id: &str, streams: Vec<&str>) {
         let json = json!({
             "id": id,
             "command": "subscribe",
             "streams": streams
         });
-        tx.send(Message::text(json.to_string())).unwrap();
+        tx.send(Message::text(json.to_string())).await.unwrap();
     }
 }
 
