@@ -74,7 +74,7 @@ impl ByzzFuzz {
 
         let mut network_faults = HashMap::with_capacity(d);
         (0..d)
-            .map(|_| NetworkFault::sample_network_fault(n, r)) //TODO network faults right time
+            .map(|_| NetworkFault::sample_network_fault(n, r))
             .for_each(|fault| {
                 network_faults.insert(fault.round, fault.partition);
             });

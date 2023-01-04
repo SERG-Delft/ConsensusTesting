@@ -17,8 +17,6 @@ lazy_static! {
     static ref MAPPING: HashMap<FieldType, FieldInformation> = read_from_file();
 }
 
-//TODO add support to parse UInt8 and Vector256
-
 fn decode_type_code(type_code: u8) -> &'static str {
     match type_code {
         0 => "NotPresent",
@@ -125,7 +123,6 @@ fn parse_blob(input: &[u8]) -> IResult<&[u8], JsonValue> {
 }
 
 fn parse_amount(input: &[u8]) -> IResult<&[u8], JsonValue> {
-    //TODO add check for issued currency
     map(be_u64, |n: u64| {
         JsonValue::String((n ^ 0x4000000000000000).to_string())
     })(input)

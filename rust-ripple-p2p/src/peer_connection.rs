@@ -221,7 +221,7 @@ impl PeerConnection {
         (thread1, thread2)
     }
 
-    // Receive and send p2p messages to the node
+    /// Receive and send p2p messages to the node
     async fn handle_peer_communication(
         ssl_stream: SslStream<TcpStream>,
         from: usize,
