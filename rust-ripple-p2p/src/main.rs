@@ -68,7 +68,6 @@ fn main() {
     env_logger::Builder::new().parse_default_env().init();
 
     let configs = [
-        // (7, 0, 0, 6, false, false),
         (7, 1, 0, 6, false, false),
         (7, 1, 0, 6, true, false),
         (7, 2, 0, 6, false, false),

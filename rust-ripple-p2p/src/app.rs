@@ -187,7 +187,6 @@ impl App {
             .await
             .expect("could not await scheduler thread");
 
-        //TODO reimplement sending control signals
         for tokio_task in tokio_tasks {
             tokio_task.abort();
         }

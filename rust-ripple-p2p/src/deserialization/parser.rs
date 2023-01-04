@@ -17,8 +17,6 @@ lazy_static! {
     static ref MAPPING: HashMap<FieldType, FieldInformation> = read_from_file();
 }
 
-//TODO add support to parse UInt8 and Vector256
-
 fn decode_type_code(type_code: u8) -> &'static str {
     match type_code {
         0 => "NotPresent",
@@ -59,7 +57,6 @@ fn decode_field_code(field_type: &str, field_code: u8) -> String {
 }
 
 fn field_id(input: &[u8]) -> IResult<&[u8], (u8, u8)> {
-    // let next_byte = &;
     let (input, (high, low)) = bits::<_, _, Error<(&[u8], usize)>, _, _>(pair(
         bits::complete::take(4usize),
         bits::complete::take(4usize),

@@ -277,6 +277,7 @@ impl PeerConnection {
             // Send received message to scheduler
             let message = bytes[0..(6 + payload_size)].to_vec();
             let event = Event { from, to, message };
+
             // println!("received message");
             match sender.send(event).await {
                 Ok(_) => {}
