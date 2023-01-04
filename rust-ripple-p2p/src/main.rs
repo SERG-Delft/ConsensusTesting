@@ -62,7 +62,6 @@ fn main() {
     console_subscriber::init();
 
     let args: Args = Args::parse();
-    // let args: Vec<String> = env::args().collect();
     let n: usize = args.n;
     let toxiproxypath = &args.toxiproxy_path;
 
@@ -102,44 +101,6 @@ fn main() {
             vec![2, 3, 4, 5, 6], // 4
             vec![2, 3, 4, 5, 6], // 5
             vec![2, 3, 4, 5, 6], // 6
-
-                                 // vec![0, 1, 2, 3, 4, 5], // 0
-                                 // vec![0, 1, 2, 3, 4, 5], // 1
-                                 // vec![0, 1, 2, 3, 4, 5], // 2
-                                 // vec![0, 1, 2, 3, 4, 5], // 3
-                                 // vec![1, 2, 3, 4, 5, 6], // 4
-                                 // vec![1, 2, 3, 4, 5, 6], // 5
-                                 // vec![1, 2, 3, 4, 5, 6], // 6
-
-                                 // vec![0, 1, 2, 3, 4, 5, 6], // 0
-                                 // vec![0, 1, 2, 3, 4, 5, 6], // 1
-                                 // vec![0, 1, 2, 3, 4, 5, 6], // 2
-                                 // vec![0, 1, 2, 3, 4, 5, 6], // 3
-                                 // vec![0, 1, 2, 3, 4, 5, 6], // 4
-                                 // vec![0, 1, 2, 3, 4, 5, 6], // 5
-                                 // vec![0, 1, 2, 3, 4, 5, 6], // 6
-
-                                 // // config 1.5
-                                 // vec![0, 1, 2, 3, 7], // 0
-                                 // vec![0, 1, 2, 3, 7], // 1
-                                 // vec![0, 1, 2, 3, 7], // 2
-                                 // vec![0, 1, 2, 3, 4, 5, 6, 7, 8], // 3
-                                 // vec![3, 4, 5, 6, 8], // 4
-                                 // vec![3, 4, 5, 6, 8], // 5
-                                 // vec![3, 4, 5, 6, 8], // 6
-                                 // vec![0, 1, 2, 3, 7], // 7
-                                 // vec![3, 4, 5, 6, 8], // 8
-
-                                 // config 2
-                                 // vec![0, 1, 2, 3, 7, 8], // 0
-                                 // vec![0, 1, 2, 3, 7, 8], // 1
-                                 // vec![0, 1, 2, 3, 7, 8], // 2
-                                 // vec![0, 1, 2, 3, 4, 5, 6, 7, 8], // 3
-                                 // vec![3, 4, 5, 6, 7, 8], // 4
-                                 // vec![3, 4, 5, 6, 7, 8], // 5
-                                 // vec![3, 4, 5, 6, 7, 8], // 6
-                                 // vec![0, 1, 2, 3, 4, 5, 6, 7, 8], // 7
-                                 // vec![0, 1, 2, 3, 4, 5, 6, 7, 8], // 8
         ];
 
         let execution_string = format!(
@@ -218,7 +179,6 @@ fn main() {
                 error!("Error: {}", error);
             }
 
-            // let check = Command::new("node").arg(r"C:\Users\levin\git\xrp\index.js").output().unwrap();
             let (map, agreed, reason) = runtime.block_on(async { results.recv().await.unwrap() });
             file.write_all(format!("{:?}\n{:?}\nreason: {}\n", map, agreed, reason).as_bytes())
                 .expect("could not write");

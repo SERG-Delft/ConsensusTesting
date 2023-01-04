@@ -217,7 +217,6 @@ pub fn analyze(messages: &[RippleMessage], subscriptions: Vec<Vec<Validated>>) {
             [col("sequence")],
             JoinType::Inner,
         )
-        // .groupby([col("sequence")]).agg([col("seq").max()])
         .filter(
             col("from")
                 .neq(lit("0,1,2"))
@@ -244,7 +243,6 @@ pub fn analyze(messages: &[RippleMessage], subscriptions: Vec<Vec<Validated>>) {
         )
         .groupby([col("sequence")])
         .agg([col("seq").max()])
-        // .filter(col("from").neq(lit("0,1,2")).and(col("from").neq(lit("3")).and(col("from").neq(lit("4,5,6")))))
         .fetch(50000)
         .unwrap();
     println!("{}", res);
@@ -259,7 +257,6 @@ pub fn analyze(messages: &[RippleMessage], subscriptions: Vec<Vec<Validated>>) {
         )
         .groupby(["hash", "sequence", "sender"])
         .agg([
-            // col("sender").unique(),
             col("from")
                 .unique()
                 .apply(|x| Ok(x.str_concat(",").into_series()), Default::default())

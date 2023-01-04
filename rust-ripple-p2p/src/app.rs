@@ -143,7 +143,6 @@ impl App {
             let peer_sender_j = peer_senders.get_mut(&j).unwrap().remove(&i).unwrap();
 
             let name = format!("ripple{}, ripple{}", i + 1, j + 1);
-            // let thread = thread::Builder::new().name(String::from(name.clone())).spawn(move || {
             let peer = PeerConnection::new(
                 &name,
                 self.node_keys[i].validation_seed.clone(),
@@ -165,7 +164,7 @@ impl App {
             tokio_tasks.push(thread2);
         }
 
-        // // Connect websocket client to ripples
+        // Connect websocket client to ripples
         for i in 0..self.peers {
             if i < 5 {
                 let _client = Client::new(

@@ -39,13 +39,6 @@ impl Client {
 
         let (mut ws_tx , mut ws_rx) = client.split();
 
-        // let client = ClientBuilder::new(&connection)
-        //     .unwrap()
-        //     .connect_insecure()
-        //     .unwrap();
-
-        // let (mut receiver, mut sender) = client.split().unwrap();
-
         let (tx, mut rx) = tokio::sync::mpsc::channel(16);
 
         let send_loop = tokio::spawn(async move {
@@ -76,33 +69,6 @@ impl Client {
                     }
                 }
             };
-
-            // for message in receiver.incoming_messages() {
-            //     let message = match message {
-            //         Ok(m) => m,
-            //         Err(e) => {
-            //             debug!("Receive Loop erred: {:?}", e);
-            //             let _ = tx_1.send(Message::from(OwnedMessage::Close(None)));
-            //             return;
-            //         }
-            //     };
-            //     match message {
-            //         // Say what we received
-            //         OwnedMessage::Text(text) => {
-            //             // println!("{}", text);
-            //             match serde_json::from_str::<SubscriptionObject>(text.as_str()) {
-            //                 Ok(subscription_object) => subscription_collector_sender
-            //                     .send(PeerSubscriptionObject::new(peer, subscription_object))
-            //                     .await
-            //                     .unwrap(),
-            //                 Err(_) => {
-            //                     warn!("Could not parse")
-            //                 }
-            //             }
-            //         }
-            //         _ => debug!("Receive Loop: {:?}", message),
-            //     }
-            // }
         });
 
         // Start subscription

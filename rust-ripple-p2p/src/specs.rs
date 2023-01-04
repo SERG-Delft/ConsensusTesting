@@ -40,7 +40,7 @@ impl Display for Flags {
 pub struct SpecChecker {
     timeout: TimeoutChecker,
     insufficient_support: InsufficientSupportChecker,
-    #[allow(dead_code)] // contains tasks that need to be dropped with specchecker
+    #[allow(dead_code)] // contains tasks that need to be dropped with spec checker
     incompatible_ledger: IncompatibleLedgerChecker,
 }
 
