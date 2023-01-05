@@ -59,8 +59,6 @@ struct Args {
 }
 
 fn main() {
-    console_subscriber::init();
-
     let args: Args = Args::parse();
     let n: usize = args.n;
     let toxiproxypath = &args.toxiproxy_path;

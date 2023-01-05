@@ -45,5 +45,4 @@ set-partitions = "1.0.1"  # enumerate set partitions
 reqwest = { version = "0.11", features = ["json"] }  # toxiproxy communication
 clap = { version = "3.2.8", features = ["derive", "cargo"] }  # parsing args
 bollard = "0.13.0"  # used when saving logs
-console-subscriber = "0.1.8"
 tokio-tungstenite = "0.18.0"
