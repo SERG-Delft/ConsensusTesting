@@ -329,13 +329,12 @@ impl ByzzFuzz {
                         // println!("validation: {}", hex::encode(validation.get_validation()));
 
                         let mutated_validation = hex::decode(format!(
-                            "22{}26{}29{}51{}5017{}5019{}7321{}",
+                            "22{}26{}29{}51{}5017{}7321{}",
                             hex::encode(parsed["Flags"].as_u32().unwrap().to_be_bytes()),
                             hex::encode(parsed["LedgerSequence"].as_u32().unwrap().to_be_bytes()),
                             hex::encode(parsed["SigningTime"].as_u32().unwrap().to_be_bytes()),
                             hex::encode(corruped_hash),
                             "E803E1999369975AED1BFD2444A3552A73383C03A2004CB784CE07E13EBD7D7C",
-                            parsed["ValidatedHash"].as_str().unwrap(),
                             parsed["SigningPubKey"].as_str().unwrap()
                         ))
                         .unwrap();
@@ -352,13 +351,12 @@ impl ByzzFuzz {
                         let der_sign = mutated_signature.serialize_der().to_vec();
 
                         let val = hex::decode(format!(
-                            "22{}26{}29{}51{}5017{}5019{}7321{}76{}{}",
+                            "22{}26{}29{}51{}5017{}7321{}76{}{}",
                             hex::encode(parsed["Flags"].as_u32().unwrap().to_be_bytes()),
                             hex::encode(parsed["LedgerSequence"].as_u32().unwrap().to_be_bytes()),
                             hex::encode(parsed["SigningTime"].as_u32().unwrap().to_be_bytes()),
                             hex::encode(corruped_hash),
                             "E803E1999369975AED1BFD2444A3552A73383C03A2004CB784CE07E13EBD7D7C",
-                            parsed["ValidatedHash"].as_str().unwrap(),
                             parsed["SigningPubKey"].as_str().unwrap(),
                             hex::encode((der_sign.len() as u8).to_be_bytes()),
                             hex::encode(der_sign)
@@ -376,13 +374,12 @@ impl ByzzFuzz {
                         // println!("validation: {}", hex::encode(validation.get_validation()));
 
                         let mutated_validation = hex::decode(format!(
-                            "22{}26{}29{}51{}5017{}5019{}7321{}",
+                            "22{}26{}29{}51{}5017{}7321{}",
                             hex::encode(parsed["Flags"].as_u32().unwrap().to_be_bytes()),
                             hex::encode(new_ledger_sequence.to_be_bytes()),
                             hex::encode(parsed["SigningTime"].as_u32().unwrap().to_be_bytes()),
                             parsed["hash"].as_str().unwrap(),
                             parsed["ConsensusHash"].as_str().unwrap(),
-                            parsed["ValidatedHash"].as_str().unwrap(),
                             parsed["SigningPubKey"].as_str().unwrap()
                         ))
                         .unwrap();
@@ -399,13 +396,12 @@ impl ByzzFuzz {
                         let der_sign = mutated_signature.serialize_der().to_vec();
 
                         let val = hex::decode(format!(
-                            "22{}26{}29{}51{}5017{}5019{}7321{}76{}{}",
+                            "22{}26{}29{}51{}5017{}7321{}76{}{}",
                             hex::encode(parsed["Flags"].as_u32().unwrap().to_be_bytes()),
                             hex::encode(new_ledger_sequence.to_be_bytes()),
                             hex::encode(parsed["SigningTime"].as_u32().unwrap().to_be_bytes()),
                             parsed["hash"].as_str().unwrap(),
                             parsed["ConsensusHash"].as_str().unwrap(),
-                            parsed["ValidatedHash"].as_str().unwrap(),
                             parsed["SigningPubKey"].as_str().unwrap(),
                             hex::encode((der_sign.len() as u8).to_be_bytes()),
                             hex::encode(der_sign)
