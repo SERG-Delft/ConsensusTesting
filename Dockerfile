@@ -7,7 +7,8 @@ WORKDIR /usr/src/byzzfuzz
 COPY . .
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/src/byzzfuzz/target \
-    cargo build --package rust-ripple-p2p --release
+    cargo build --package rust-ripple-p2p --release && \
+    cp /usr/src/byzzfuzz/target/release/rust-ripple-p2p /home
 
 FROM debian:bullseye-slim AS docker-runtime
 WORKDIR /home
@@ -20,7 +21,7 @@ RUN apt-get update && \
     apt-get install -y docker-ce-cli
 COPY ./config ./config
 COPY --from=toxiproxy /usr/src/toxiproxy/dist/toxiproxy-server .
-COPY --from=byzzfuzz /usr/src/byzzfuzz/target/release/rust-ripple-p2p .
+COPY --from=byzzfuzz /home/rust-ripple-p2p .
 COPY serialize/src/deserialization/definitions.json serialize/src/deserialization/definitions.json
 
 CMD [ "./rust-ripple-p2p", "-n", "7", "-c", "0", "-d", "0", "-r", "0", "--toxiproxy-path", "./toxiproxy-server" ]
