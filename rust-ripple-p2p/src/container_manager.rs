@@ -142,9 +142,7 @@ fn start_node(id: usize) {
 
 fn start_node_with_options(name: &str, offset: usize, expose_to_network: bool) {
     let mut command = Command::new("docker");
-    let mut command = command
-        .arg("create")
-        .args(["-it", "--rm", "--name", name]);
+    let mut command = command.arg("create").args(["-it", "--rm", "--name", name]);
     if expose_to_network {
         command = command
             .args(["--hostname", name])

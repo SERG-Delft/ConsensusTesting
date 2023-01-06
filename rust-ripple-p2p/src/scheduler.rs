@@ -60,14 +60,13 @@ impl Scheduler {
         let mutex_sequences_hashes = Arc::new(Mutex::new(HashMap::new()));
         let message_clone = disagree_message.clone();
         let mutex_clone = mutex_sequences_hashes.clone();
-        let task = tokio::spawn(
-            Self::listen_to_collector(
-                collector_receiver,
-                latest_validated_ledger_clone,
-                collector_txs,
-                mutex_clone,
-                message_clone,
-            ));
+        let task = tokio::spawn(Self::listen_to_collector(
+            collector_receiver,
+            latest_validated_ledger_clone,
+            collector_txs,
+            mutex_clone,
+            message_clone,
+        ));
         let mut flags_rx = self.flags_tx.subscribe();
         let shutdown_tx = self.shutdown_tx.clone();
         tokio::spawn(async move {

@@ -33,53 +33,43 @@ type AnyError = Box<dyn std::error::Error + Send + Sync>;
 type AnyResult<T> = Result<T, AnyError>;
 type EmptyResult = AnyResult<()>;
 
-#[derive(Parser, Debug)]
-struct Args {
-    /// Number of validator nodes
-    #[clap(short, value_parser)]
-    n: usize,
-    /// Bound on the number of rounds with process faults
-    #[clap(short, value_parser)]
-    c: usize,
-    /// Bound on the number of rounds with network faults
-    #[clap(short, value_parser)]
-    d: usize,
-    /// Bound on the number of rounds with faults
-    #[clap(short, value_parser)]
-    r: usize,
-    /// Use any-scope corruptions
-    #[clap(long, value_parser)]
-    any_scope: bool,
-    /// Test baseline algorithm
-    #[clap(long, value_parser)]
-    baseline: bool,
-    /// Path to the toxiproxy executable
+#[derive(Parser)]
+struct Cli {
     #[clap(long, value_parser)]
     toxiproxy_path: String,
 }
 
+struct Args {
+    n: usize,
+    c: usize,
+    d: usize,
+    r: usize,
+    any_scope: bool,
+    baseline: bool,
+}
+
 fn main() {
-    let args: Args = Args::parse();
-    let n: usize = args.n;
-    let toxiproxypath = &args.toxiproxy_path;
+    let cli: Cli = Cli::parse();
 
     env_logger::Builder::new().parse_default_env().init();
 
-    let configs = [
-        (7, 1, 0, 6, false, false),
-        (7, 1, 0, 6, true, false),
-        (7, 2, 0, 6, false, false),
-        (7, 2, 0, 6, true, false),
+    let table = [
+        // baseline
+        (7, 0, 0, 0, true, true),
+        //  d, c, r, any-scope
         (7, 0, 1, 6, false, false),
         (7, 0, 1, 6, true, false),
-        (7, 1, 1, 6, false, false),
-        (7, 1, 1, 6, true, false),
         (7, 0, 2, 6, false, false),
         (7, 0, 2, 6, true, false),
-        (7, 1, 2, 6, false, false),
-        (7, 1, 2, 6, true, false),
+        (7, 1, 0, 6, true, false),
+        (7, 1, 1, 6, false, false),
+        (7, 1, 1, 6, true, false),
+        (7, 2, 0, 6, true, false),
+        (7, 2, 1, 6, false, false),
+        (7, 2, 1, 6, true, false),
     ];
-    for (_, c, d, r, any, base) in configs {
+
+    for (n, d, c, r, any, base) in table {
         let args = Args {
             n,
             c,
@@ -87,7 +77,6 @@ fn main() {
             r,
             any_scope: any,
             baseline: base,
-            toxiproxy_path: args.toxiproxy_path.clone(),
         };
         let bug_unls: Vec<Vec<usize>> = vec![
             // symmetric
@@ -132,7 +121,9 @@ fn main() {
                     match flags_rx.recv().await {
                         Ok(flag) => flags.push(flag),
                         Err(broadcast::error::RecvError::Closed) => return flags,
-                        Err(broadcast::error::RecvError::Lagged(n)) => panic!("flag collector lagged {} messages behind", n),
+                        Err(broadcast::error::RecvError::Lagged(n)) => {
+                            panic!("flag collector lagged {} messages behind", n)
+                        }
                     }
                 }
             });
@@ -140,7 +131,7 @@ fn main() {
             let (shutdown_tx, shutdown_rx) = broadcast::channel(16);
             let mut results = shutdown_rx.resubscribe();
 
-            let mut toxiproxy = Command::new(toxiproxypath)
+            let mut toxiproxy = Command::new(&cli.toxiproxy_path)
                 .stdout(Stdio::null())
                 .spawn()
                 .unwrap();
@@ -244,4 +235,10 @@ async fn save_results(id: &str, time: u64) {
 #[inline]
 fn move_file(path: &String, filename: &str) {
     fs::copy(filename, format!("{}/{}", &path, filename)).unwrap();
+}
+
+#[test]
+fn verify_cli() {
+    use clap::CommandFactory;
+    Cli::command().debug_assert()
 }

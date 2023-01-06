@@ -1,4 +1,4 @@
-use futures::{StreamExt, SinkExt};
+use futures::{SinkExt, StreamExt};
 use log::*;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -37,7 +37,7 @@ impl Client {
     ) -> Self {
         let (client, _) = tokio_tungstenite::connect_async(&connection).await.unwrap();
 
-        let (mut ws_tx , mut ws_rx) = client.split();
+        let (mut ws_tx, mut ws_rx) = client.split();
 
         let (tx, mut rx) = tokio::sync::mpsc::channel(16);
 
@@ -68,7 +68,7 @@ impl Client {
                         warn!("Could not parse")
                     }
                 }
-            };
+            }
         });
 
         // Start subscription
@@ -76,7 +76,8 @@ impl Client {
             &tx,
             format!("Ripple{} subscription", peer).as_str(),
             vec!["consensus", "ledger", "validations", "peer_status"],
-        ).await;
+        )
+        .await;
 
         Client {
             peer,

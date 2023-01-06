@@ -76,10 +76,6 @@ fn read(path: String) -> io::Result<Vec<RippleMessage>> {
 #[derive(Deserialize)]
 pub struct Validated {
     ledger_hash: String,
-    ledger_index: u64,
-    ledger_time: u64,
-    txn_count: u64,
-    validated_ledgers: String,
 }
 
 fn read_subscriptions(path: String) -> io::Result<Vec<Validated>> {

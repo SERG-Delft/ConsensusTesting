@@ -1,7 +1,5 @@
 FROM ubuntu:18.04
 
-LABEL maintainer="email=martijnvanmeerten@hotmail.com"
-
 RUN export LANGUAGE=C.UTF-8; export LANG=C.UTF-8; export LC_ALL=C.UTF-8; export DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && \

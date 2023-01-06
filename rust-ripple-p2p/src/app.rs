@@ -58,8 +58,7 @@ impl App {
         let peer = self.peers;
         // Start the collector which writes output to files
         let collector_task = tokio::spawn(
-            Collector::new(peer, collector_rx, subscription_rx, collector_state_tx)
-                .start()
+            Collector::new(peer, collector_rx, subscription_rx, collector_state_tx).start(),
         );
         tokio_tasks.push(collector_task);
 
@@ -171,13 +170,15 @@ impl App {
                     i,
                     format!("ws://127.0.0.1:600{}", 5 + i),
                     subscription_tx.clone(),
-                ).await;
+                )
+                .await;
             } else {
                 let _client = Client::new(
                     i,
                     format!("ws://127.0.0.1:60{}", 5 + i),
                     subscription_tx.clone(),
-                ).await;
+                )
+                .await;
             }
         }
 

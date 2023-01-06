@@ -1,24 +1,24 @@
 use bs58::Alphabet;
-use futures::{StreamExt, SinkExt};
 use futures::stream::SplitSink;
+use futures::{SinkExt, StreamExt};
 use itertools::Itertools;
 use protobuf::Message as ProtoMessage;
-use tokio_tungstenite::tungstenite::Message;
-use tokio_tungstenite::{WebSocketStream, MaybeTlsStream};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+use tokio_tungstenite::tungstenite::Message;
+use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
 
 use crate::client::Client;
 use crate::container_manager::NodeKeys;
 use crate::message_handler::from_bytes;
-use serialize::ripple::NodeEvent;
-use serialize::parser::parse;
-use serialize::RippleMessageObject;
 use crate::scheduler::Event;
 use crate::toxiproxy::ToxiproxyClient;
 use rand::prelude::*;
 use secp256k1::{Secp256k1, SecretKey};
 use serde_json::json;
+use serialize::parser::parse;
+use serialize::ripple::NodeEvent;
+use serialize::RippleMessageObject;
 use set_partitions::{set_partitions, ArrayVecSetPartition, HashSubsets};
 use xrpl::core::keypairs::utils::sha512_first_half;
 use RippleMessageObject::{TMProposeSet, TMStatusChange, TMValidation};
@@ -79,7 +79,9 @@ impl ByzzFuzz {
                 network_faults.insert(fault.round, fault.partition);
             });
         let sequences_hashes: HashMap<usize, String> = HashMap::new();
-        let (client, _) = tokio_tungstenite::connect_async("ws://localhost:6008").await.unwrap();
+        let (client, _) = tokio_tungstenite::connect_async("ws://localhost:6008")
+            .await
+            .unwrap();
         let (sender, _) = client.split();
         Self {
             n,
@@ -177,7 +179,8 @@ impl ByzzFuzz {
                     });
                     self.byzantine_sender
                         .send(Message::text(json.to_string()))
-                        .await.unwrap();
+                        .await
+                        .unwrap();
                     println!("submitted");
                 }
             }
