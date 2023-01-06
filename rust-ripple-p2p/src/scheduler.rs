@@ -10,7 +10,7 @@ use tokio::sync::broadcast::{Receiver, Sender};
 use tokio::sync::mpsc::{Receiver as TokioReceiver, Sender as TokioSender};
 
 use crate::client::{PeerSubscriptionObject, SubscriptionObject};
-use crate::message_handler::{from_bytes, invoke_protocol_message};
+use crate::message_handler::from_bytes;
 use serialize::RippleMessage;
 
 type P2PConnections = HashMap<usize, HashMap<usize, PeerChannel>>;
@@ -103,10 +103,20 @@ impl Scheduler {
     }
 
     async fn execute_event(&mut self, mut event: Event) {
-        // println!("{} to {}", event.from, event.to);
         event = self.byzz_fuzz.on_message(event).await;
-        self.spec_checker
-            .check(event.from, from_bytes(&event.message));
+        if let Ok(message) = from_bytes(&event.message) {
+            self.spec_checker.check(event.from, &message);
+            let collector_message = RippleMessage::new(
+                event.from.to_string(),
+                event.to.to_string(),
+                Utc::now(),
+                message,
+            );
+            self.collector_sender
+                .send(collector_message)
+                .await
+                .expect("Collector receiver failed");
+        }
         self.p2p_connections
             .get(&event.to)
             .unwrap()
@@ -114,22 +124,6 @@ impl Scheduler {
             .unwrap()
             .send(event.message.clone())
             .await;
-        if self.byzz_fuzz.baseline {
-            return;
-        }
-        let collector_message = RippleMessage::new(
-            event.from.to_string(),
-            event.to.to_string(),
-            Utc::now(),
-            invoke_protocol_message(
-                u16::from_be_bytes(event.message[4..6].try_into().unwrap()),
-                &event.message[6..],
-            ),
-        );
-        self.collector_sender
-            .send(collector_message)
-            .await
-            .expect("Collector receiver failed");
     }
 
     async fn listen_to_collector(

@@ -2,7 +2,7 @@ use json::{object, JsonValue};
 use lazy_static::lazy_static;
 use nom::branch::alt;
 use nom::bytes::complete::take;
-use nom::combinator::{map, rest, success, value, verify};
+use nom::combinator::{fail, map, rest, success, value, verify};
 use nom::error::Error;
 use nom::multi::{length_value, many0};
 use nom::number::complete::{be_u16, be_u32, be_u64, be_u8};
@@ -29,9 +29,7 @@ fn decode_type_code(type_code: u8) -> &'static str {
         8 => "AccountID",
         14 => "STObject",
         19 => "Vector256",
-        _ => {
-            panic!("unknown type code: {}", type_code)
-        }
+        _ => "Unknown",
     }
 }
 
@@ -71,6 +69,10 @@ fn field_id(input: &[u8]) -> IResult<&[u8], (u8, u8)> {
             map(take(1usize), |x: &[u8]| x[0]),
         )(input),
     }
+}
+
+fn parse_fail(input: &[u8]) -> IResult<&[u8], JsonValue> {
+    map(fail, |n: u16| JsonValue::Number(n.into()))(input)
 }
 
 fn parse_uint16(input: &[u8]) -> IResult<&[u8], JsonValue> {
@@ -150,7 +152,7 @@ fn parse_field(input: &[u8]) -> IResult<&[u8], (String, JsonValue)> {
             "Blob" => parse_blob,
             "Amount" => parse_amount,
             "AccountID" => parse_account_id,
-            _ => panic!("...nono"),
+            _ => parse_fail,
         },
     )(input)
 }

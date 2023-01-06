@@ -110,8 +110,9 @@ impl ByzzFuzz {
     pub async fn on_message(&mut self, mut event: Event) -> Event {
         if self.baseline {
             if event.from != 3 {
-                let message = from_bytes(&event.message);
-                self.update_round(&message).await;
+                if let Ok(message) = from_bytes(&event.message) {
+                    self.update_round(&message).await;
+                }
             }
             if event.from == 3 && self.current_round > 1 && thread_rng().gen_bool(0.2) {
                 let index = thread_rng().gen_range(0..event.message.len());
@@ -119,42 +120,43 @@ impl ByzzFuzz {
             }
             return event;
         }
-        let mut message = from_bytes(&event.message);
-        self.update_round(&message).await;
-        self.apply_partition().await;
-        if self.process_faults.contains_key(&self.current_round)
-            && self
-                .process_faults
-                .get(&self.current_round)
-                .unwrap()
-                .0
-                .contains(&event.from)
-        {
-            if let TMStatusChange(ref mut status) = message {
-                if status.get_newEvent() == NodeEvent::neACCEPTED_LEDGER
-                    && !status
-                        .get_ledgerHash()
-                        .to_vec()
-                        .eq(&self.mutated_ledger_hash)
-                {
-                    self.mutated_ledger_hash = status.get_ledgerHash().to_vec();
-                    self.all_mutated_ledger_hashes
-                        .insert(status.get_ledgerHash().to_vec());
-                    println!("cached ledger {}", hex::encode(&self.mutated_ledger_hash))
+        if let Ok(mut message) = from_bytes(&event.message) {
+            self.update_round(&message).await;
+            self.apply_partition().await;
+            if self.process_faults.contains_key(&self.current_round)
+                && self
+                    .process_faults
+                    .get(&self.current_round)
+                    .unwrap()
+                    .0
+                    .contains(&event.from)
+            {
+                if let TMStatusChange(ref mut status) = message {
+                    if status.get_newEvent() == NodeEvent::neACCEPTED_LEDGER
+                        && !status
+                            .get_ledgerHash()
+                            .to_vec()
+                            .eq(&self.mutated_ledger_hash)
+                    {
+                        self.mutated_ledger_hash = status.get_ledgerHash().to_vec();
+                        self.all_mutated_ledger_hashes
+                            .insert(status.get_ledgerHash().to_vec());
+                        println!("cached ledger {}", hex::encode(&self.mutated_ledger_hash))
+                    }
                 }
             }
-        }
-        if event.from == 3
-            && self.process_faults.contains_key(&self.current_round)
-            && self
-                .process_faults
-                .get(&self.current_round)
-                .unwrap()
-                .0
-                .contains(&event.to)
-        {
-            let seed = self.process_faults.get(&self.current_round).unwrap().1;
-            event = self.apply_mutation(event, &mut message, seed);
+            if event.from == 3
+                && self.process_faults.contains_key(&self.current_round)
+                && self
+                    .process_faults
+                    .get(&self.current_round)
+                    .unwrap()
+                    .0
+                    .contains(&event.to)
+            {
+                let seed = self.process_faults.get(&self.current_round).unwrap().1;
+                event = self.apply_mutation(event, &mut message, seed);
+            }
         }
         event
     }
@@ -208,11 +210,14 @@ impl ByzzFuzz {
         match message {
             TMProposeSet(_) => Some(self.current_index * 2),
             TMValidation(validation) => {
-                let (_, validation) = parse(validation.get_validation()).unwrap();
-                if validation["LedgerSequence"].as_usize().unwrap() != self.current_index + 5 {
-                    return None;
+                if let Ok((_, validation)) = parse(validation.get_validation()) {
+                    if validation["LedgerSequence"].as_usize().unwrap() != self.current_index + 5 {
+                        return None;
+                    }
+                    Some(self.current_index * 2 + 1)
+                } else {
+                    None
                 }
-                Some(self.current_index * 2 + 1)
             }
             _ => None,
         }
@@ -303,124 +308,129 @@ impl ByzzFuzz {
                 event.message[3] = bytes[3];
             }
             TMValidation(ref mut validation) => {
-                let (_, parsed) = parse(validation.get_validation()).unwrap();
-                if event.from == 3
-                    && parsed["SigningPubKey"]
-                        .as_str()
-                        .unwrap()
-                        .eq_ignore_ascii_case(
+                if let Ok((_, parsed)) = parse(validation.get_validation()) {
+                    if event.from == 3
+                        && parsed["SigningPubKey"]
+                            .as_str()
+                            .unwrap()
+                            .eq_ignore_ascii_case(
                             "02954103E420DA5361F00815929207B36559492B6C37C62CB2FE152CCC6F3C11C5",
                         )
-                {
-                    let secp256k1 = Secp256k1::new();
-                    let private_key = SecretKey::from_slice(
-                        &bs58::decode(&self.node_keys[3].validation_private_key)
-                            .with_alphabet(Alphabet::RIPPLE)
-                            .into_vec()
-                            .unwrap()[1..33],
-                    )
-                    .unwrap();
+                    {
+                        let secp256k1 = Secp256k1::new();
+                        let private_key = SecretKey::from_slice(
+                            &bs58::decode(&self.node_keys[3].validation_private_key)
+                                .with_alphabet(Alphabet::RIPPLE)
+                                .into_vec()
+                                .unwrap()[1..33],
+                        )
+                        .unwrap();
 
-                    if !mutate_sequence_ids {
-                        let corruped_hash = if self.any_scope {
-                            let n = (seed as usize / 2) % self.all_mutated_ledger_hashes.len();
-                            self.all_mutated_ledger_hashes.iter().nth(n).unwrap()
+                        if !mutate_sequence_ids {
+                            let corruped_hash = if self.any_scope {
+                                let n = (seed as usize / 2) % self.all_mutated_ledger_hashes.len();
+                                self.all_mutated_ledger_hashes.iter().nth(n).unwrap()
+                            } else {
+                                &self.mutated_ledger_hash
+                            };
+
+                            // println!("validation: {}", hex::encode(validation.get_validation()));
+
+                            let mutated_validation = hex::decode(format!(
+                                "22{}26{}29{}51{}5017{}7321{}",
+                                hex::encode(parsed["Flags"].as_u32().unwrap().to_be_bytes()),
+                                hex::encode(
+                                    parsed["LedgerSequence"].as_u32().unwrap().to_be_bytes()
+                                ),
+                                hex::encode(parsed["SigningTime"].as_u32().unwrap().to_be_bytes()),
+                                hex::encode(corruped_hash),
+                                "E803E1999369975AED1BFD2444A3552A73383C03A2004CB784CE07E13EBD7D7C",
+                                parsed["SigningPubKey"].as_str().unwrap()
+                            ))
+                            .unwrap();
+
+                            let mutated_signing_hash = sha512_first_half(
+                                [&[86, 65, 76, 00], mutated_validation.as_slice()]
+                                    .concat()
+                                    .as_slice(),
+                            );
+                            let mutated_message =
+                                secp256k1::Message::from_slice(&mutated_signing_hash).unwrap();
+                            let mutated_signature =
+                                secp256k1.sign_ecdsa(&mutated_message, &private_key);
+                            let der_sign = mutated_signature.serialize_der().to_vec();
+
+                            let val = hex::decode(format!(
+                                "22{}26{}29{}51{}5017{}7321{}76{}{}",
+                                hex::encode(parsed["Flags"].as_u32().unwrap().to_be_bytes()),
+                                hex::encode(
+                                    parsed["LedgerSequence"].as_u32().unwrap().to_be_bytes()
+                                ),
+                                hex::encode(parsed["SigningTime"].as_u32().unwrap().to_be_bytes()),
+                                hex::encode(corruped_hash),
+                                "E803E1999369975AED1BFD2444A3552A73383C03A2004CB784CE07E13EBD7D7C",
+                                parsed["SigningPubKey"].as_str().unwrap(),
+                                hex::encode((der_sign.len() as u8).to_be_bytes()),
+                                hex::encode(der_sign)
+                            ))
+                            .unwrap();
+
+                            validation.set_validation(val);
                         } else {
-                            &self.mutated_ledger_hash
-                        };
+                            let ledger_sequence = parsed["LedgerSequence"].as_u32().unwrap();
+                            let mut new_ledger_sequence = ledger_sequence + 1;
+                            if self.any_scope {
+                                new_ledger_sequence = seed / 2;
+                            }
 
-                        // println!("validation: {}", hex::encode(validation.get_validation()));
+                            // println!("validation: {}", hex::encode(validation.get_validation()));
 
-                        let mutated_validation = hex::decode(format!(
-                            "22{}26{}29{}51{}5017{}7321{}",
-                            hex::encode(parsed["Flags"].as_u32().unwrap().to_be_bytes()),
-                            hex::encode(parsed["LedgerSequence"].as_u32().unwrap().to_be_bytes()),
-                            hex::encode(parsed["SigningTime"].as_u32().unwrap().to_be_bytes()),
-                            hex::encode(corruped_hash),
-                            "E803E1999369975AED1BFD2444A3552A73383C03A2004CB784CE07E13EBD7D7C",
-                            parsed["SigningPubKey"].as_str().unwrap()
-                        ))
-                        .unwrap();
+                            let mutated_validation = hex::decode(format!(
+                                "22{}26{}29{}51{}5017{}7321{}",
+                                hex::encode(parsed["Flags"].as_u32().unwrap().to_be_bytes()),
+                                hex::encode(new_ledger_sequence.to_be_bytes()),
+                                hex::encode(parsed["SigningTime"].as_u32().unwrap().to_be_bytes()),
+                                parsed["hash"].as_str().unwrap(),
+                                parsed["ConsensusHash"].as_str().unwrap(),
+                                parsed["SigningPubKey"].as_str().unwrap()
+                            ))
+                            .unwrap();
 
-                        let mutated_signing_hash = sha512_first_half(
-                            [&[86, 65, 76, 00], mutated_validation.as_slice()]
-                                .concat()
-                                .as_slice(),
-                        );
-                        let mutated_message =
-                            secp256k1::Message::from_slice(&mutated_signing_hash).unwrap();
-                        let mutated_signature =
-                            secp256k1.sign_ecdsa(&mutated_message, &private_key);
-                        let der_sign = mutated_signature.serialize_der().to_vec();
+                            let mutated_signing_hash = sha512_first_half(
+                                [&[86, 65, 76, 00], mutated_validation.as_slice()]
+                                    .concat()
+                                    .as_slice(),
+                            );
+                            let mutated_message =
+                                secp256k1::Message::from_slice(&mutated_signing_hash).unwrap();
+                            let mutated_signature =
+                                secp256k1.sign_ecdsa(&mutated_message, &private_key);
+                            let der_sign = mutated_signature.serialize_der().to_vec();
 
-                        let val = hex::decode(format!(
-                            "22{}26{}29{}51{}5017{}7321{}76{}{}",
-                            hex::encode(parsed["Flags"].as_u32().unwrap().to_be_bytes()),
-                            hex::encode(parsed["LedgerSequence"].as_u32().unwrap().to_be_bytes()),
-                            hex::encode(parsed["SigningTime"].as_u32().unwrap().to_be_bytes()),
-                            hex::encode(corruped_hash),
-                            "E803E1999369975AED1BFD2444A3552A73383C03A2004CB784CE07E13EBD7D7C",
-                            parsed["SigningPubKey"].as_str().unwrap(),
-                            hex::encode((der_sign.len() as u8).to_be_bytes()),
-                            hex::encode(der_sign)
-                        ))
-                        .unwrap();
+                            let val = hex::decode(format!(
+                                "22{}26{}29{}51{}5017{}7321{}76{}{}",
+                                hex::encode(parsed["Flags"].as_u32().unwrap().to_be_bytes()),
+                                hex::encode(new_ledger_sequence.to_be_bytes()),
+                                hex::encode(parsed["SigningTime"].as_u32().unwrap().to_be_bytes()),
+                                parsed["hash"].as_str().unwrap(),
+                                parsed["ConsensusHash"].as_str().unwrap(),
+                                parsed["SigningPubKey"].as_str().unwrap(),
+                                hex::encode((der_sign.len() as u8).to_be_bytes()),
+                                hex::encode(der_sign)
+                            ))
+                            .unwrap();
 
-                        validation.set_validation(val);
-                    } else {
-                        let ledger_sequence = parsed["LedgerSequence"].as_u32().unwrap();
-                        let mut new_ledger_sequence = ledger_sequence + 1;
-                        if self.any_scope {
-                            new_ledger_sequence = seed / 2;
+                            validation.set_validation(val);
                         }
 
-                        // println!("validation: {}", hex::encode(validation.get_validation()));
-
-                        let mutated_validation = hex::decode(format!(
-                            "22{}26{}29{}51{}5017{}7321{}",
-                            hex::encode(parsed["Flags"].as_u32().unwrap().to_be_bytes()),
-                            hex::encode(new_ledger_sequence.to_be_bytes()),
-                            hex::encode(parsed["SigningTime"].as_u32().unwrap().to_be_bytes()),
-                            parsed["hash"].as_str().unwrap(),
-                            parsed["ConsensusHash"].as_str().unwrap(),
-                            parsed["SigningPubKey"].as_str().unwrap()
-                        ))
-                        .unwrap();
-
-                        let mutated_signing_hash = sha512_first_half(
-                            [&[86, 65, 76, 00], mutated_validation.as_slice()]
-                                .concat()
-                                .as_slice(),
-                        );
-                        let mutated_message =
-                            secp256k1::Message::from_slice(&mutated_signing_hash).unwrap();
-                        let mutated_signature =
-                            secp256k1.sign_ecdsa(&mutated_message, &private_key);
-                        let der_sign = mutated_signature.serialize_der().to_vec();
-
-                        let val = hex::decode(format!(
-                            "22{}26{}29{}51{}5017{}7321{}76{}{}",
-                            hex::encode(parsed["Flags"].as_u32().unwrap().to_be_bytes()),
-                            hex::encode(new_ledger_sequence.to_be_bytes()),
-                            hex::encode(parsed["SigningTime"].as_u32().unwrap().to_be_bytes()),
-                            parsed["hash"].as_str().unwrap(),
-                            parsed["ConsensusHash"].as_str().unwrap(),
-                            parsed["SigningPubKey"].as_str().unwrap(),
-                            hex::encode((der_sign.len() as u8).to_be_bytes()),
-                            hex::encode(der_sign)
-                        ))
-                        .unwrap();
-
-                        validation.set_validation(val);
+                        event.message =
+                            [&event.message[0..6], &validation.write_to_bytes().unwrap()].concat();
+                        let bytes = ((event.message.len() - 6) as u32).to_be_bytes();
+                        event.message[0] = bytes[0];
+                        event.message[1] = bytes[1];
+                        event.message[2] = bytes[2];
+                        event.message[3] = bytes[3];
                     }
-
-                    event.message =
-                        [&event.message[0..6], &validation.write_to_bytes().unwrap()].concat();
-                    let bytes = ((event.message.len() - 6) as u32).to_be_bytes();
-                    event.message[0] = bytes[0];
-                    event.message[1] = bytes[1];
-                    event.message[2] = bytes[2];
-                    event.message[3] = bytes[3];
                 }
             }
             _ => (),

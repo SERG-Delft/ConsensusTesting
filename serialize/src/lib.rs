@@ -89,7 +89,12 @@ impl Display for RippleMessage {
                     .signed_duration_since(ripple_epoch)
                     .num_seconds();
                 // write!(f, "{}\n", hex::encode(validation.get_validation()));
-                let parsed = parse(validation.get_validation()).unwrap().1;
+                let parsed = parse(validation.get_validation());
+                if parsed.is_err() {
+                    return writeln!(f, "-- cannot parse validation");
+                }
+                let parsed = parsed.unwrap().1;
+
                 // let pub_key = self.message.node_pub_key();
                 let type_prefixed_key = [
                     &[28u8],

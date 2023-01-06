@@ -23,7 +23,7 @@ impl InsufficientSupportChecker {
         }
     }
 
-    pub fn check(&mut self, sender: usize, message: RippleMessageObject) {
+    pub fn check(&mut self, sender: usize, message: &RippleMessageObject) {
         if let RippleMessageObject::TMValidation(ref validation) = message {
             let validation = match parse(validation.get_validation()) {
                 Ok((_, validation)) => validation,
@@ -37,28 +37,29 @@ impl InsufficientSupportChecker {
 
             let public_key = hex::decode(validation["SigningPubKey"].as_str().unwrap()).unwrap();
             let public_key_b58 = public_key_to_b58(public_key.as_slice());
-            let process_index = *self.public_key_to_index.get(&public_key_b58).unwrap();
-            let hashes = self.validation_history.get_mut(&sequence).unwrap();
+            if let Some(&process_index) = self.public_key_to_index.get(&public_key_b58) {
+                let hashes = self.validation_history.get_mut(&sequence).unwrap();
 
-            if process_index != sender || sender == 3 || hashes[process_index].is_some() {
-                return;
-            }
+                if process_index != sender || sender == 3 || hashes[process_index].is_some() {
+                    return;
+                }
 
-            hashes[process_index] = Some(validation["hash"].as_str().unwrap().to_owned());
+                hashes[process_index] = Some(validation["hash"].as_str().unwrap().to_owned());
 
-            if hashes[0].eq(&hashes[1])
-                && hashes[0].eq(&hashes[2])
-                && hashes[4].eq(&hashes[5])
-                && hashes[4].eq(&hashes[6])
-                && !hashes[0].eq(&hashes[6])
-                && hashes[0].is_some()
-                && hashes[6].is_some()
-            {
-                println!("validation {}", validation);
-                println!("history[{}] = {:?}", sequence, hashes);
-                self.sender
-                    .send(Flags::InsufficientSupport(sequence))
-                    .unwrap();
+                if hashes[0].eq(&hashes[1])
+                    && hashes[0].eq(&hashes[2])
+                    && hashes[4].eq(&hashes[5])
+                    && hashes[4].eq(&hashes[6])
+                    && !hashes[0].eq(&hashes[6])
+                    && hashes[0].is_some()
+                    && hashes[6].is_some()
+                {
+                    println!("validation {}", validation);
+                    println!("history[{}] = {:?}", sequence, hashes);
+                    self.sender
+                        .send(Flags::InsufficientSupport(sequence))
+                        .unwrap();
+                }
             }
         };
     }

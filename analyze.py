@@ -38,12 +38,14 @@ print('          |TOTAL|CORRECT|INSUFFICIENT|INCOMPATIBLE|TIMEOUT|INCOMPLETE|UNC
 all_timeout = []
 
 for config in sorted(os.listdir('traces')):
-    (c, d, scope) = re.search('buggy-7-(\d)-(\d)-6-(.*)-0\.2\.4', config).groups()
+    (c, d, scope) = re.search('buggy-7-(\d)-(\d)-\d-(.*)-0\.2\.4', config).groups()
     if scope == 'any-scope':
         scope = 'as'
+    elif scope == 'baseline':
+        scope = 'bs'
     else:
         scope = 'ss'
-    print(f'c={c} d={d} {scope}|', end = '')
+    print(f'd={d} c={c} {scope}|', end = '')
     runs = os.listdir('traces/' + config)
     # print('- found', len(runs), 'runs')
     correct = []
@@ -65,7 +67,6 @@ for config in sorted(os.listdir('traces')):
                 all_timeout.append(config + '/' + run)
             elif count(f_not(f_or(f_insufficient, f_timeout)), flags) == 0 and count(f_insufficient, flags) > 0:
                 insufficient_support.append(run)
-                print(run)
             elif count(f_not(f_or(f_incompatible, f_timeout)), flags) == 0 and count(f_incompatible, flags) > 0:
                 incompatible.append(run)
             elif count(f_not(f_or(f_or(f_incompatible, f_insufficient), f_timeout)), flags) == 0 and count(f_incompatible, flags) > 0 and count(f_insufficient, flags) > 0:

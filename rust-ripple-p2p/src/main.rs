@@ -137,9 +137,6 @@ fn main() {
                 .unwrap();
 
             let node_keys = start_docker_containers(n, &bug_unls);
-            for k in &node_keys {
-                println!("node key {}", k.validation_public_key);
-            }
 
             let byzz_fuzz = runtime.block_on(ByzzFuzz::new(
                 args.n,
@@ -150,7 +147,22 @@ fn main() {
                 args.baseline,
                 node_keys.clone(),
             ));
-            println!("{:?}", &byzz_fuzz.process_faults);
+
+            println!(
+                "d = {}, c = {}, {}",
+                args.d,
+                args.c,
+                if args.baseline {
+                    "baseline"
+                } else if args.any_scope {
+                    "any-scope"
+                } else {
+                    "small-scope"
+                }
+            );
+            println!("process faults: {:?}", &byzz_fuzz.process_faults);
+            println!("network faults: {:?}", &byzz_fuzz.network_faults);
+
             file.write_fmt(format_args!(
                 "process faults {:?}\n",
                 &byzz_fuzz.process_faults
