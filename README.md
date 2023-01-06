@@ -29,6 +29,8 @@ Run the container for a certain time of iterations using the following:
 ./run.sh <number of iterations>
 ```
 
+The output of the executions will be saved to the `traces` folder. For each configuration, a folder is created (e.g. `buggy-7-1-1-6-any-scope-0.2.4`, following the scheme `buggy-7-{c}-{d}-{any-scope|small-scope|baseline}-{version-of-code}`) in which a subfolder for each run is created with the UNIX timestamp of its creation as name. In that folder, for each run the full message lineage is saved to `execution.txt` and ByzzFuzz's output is saved to `results.txt`. The `subscription_*.json` and `validator_*.txt` files contain the events published by each process and its logs, respectively.
+
 ## Analyzing Results
 After running hundreds of iterations of the different executions, you can use the `analyze.py` script to aggregate the results into a table as follows:
    
