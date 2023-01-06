@@ -1,36 +1,63 @@
-# Consensus Testing
-This repository contains the code for testing Ripple's consensus algorithm.
+# Byzzfuzz randomized testing for checking Byzantine fault-tolerance of the XRP Ledger Consensus Protocol of Ripple
 
-## How to run a private Ripple network on Windows
-### Requirements
-[Docker](https://docs.docker.com/get-started/) \
-[Rust](https://www.rust-lang.org/learn/get-started) \
-[PowerShell](https://docs.microsoft.com/en-us/powershell/scripting/install/installing-powershell-on-windows?view=powershell-7.1) (Should be installed by default on Windows) \
-[OpenSSL](https://www.openssl.org/source/)  (1.0.1 - 1.1.1)
+This repository contains the implementation of Byzzfuzz testing algorithm for testing the implementation of the Ripple consensus protocol.
 
-### Run the network
-To run the network, follow the steps below.
-1. Clone this repository
-`git clone https://github.com/SERG-Delft/ConsensusTesting`
-2. Change directory to rippled-docker `cd ConsensusTesting/rippled-docker`
-3. Create the docker network ripple-net `docker network create ripple-net`
+You can access the repository for the implementation of `rippled` server [here](https://github.com/XRPLF/rippled) and a proof of concept used as a basis for our work [here](https://github.com/fanatid/rust-ripple-p2p).
 
-##### Without proxy
-3. Run the powershell script `.\Run.ps1 [n (1-5)] [1 for connected network without proxy]` \
-`.\Run.ps1 5 1` will run a private network with 5 nodes connected and without proxy
+## Requirements 
+- [Docker](https://docs.docker.com/get-started/)
+- [Rust](https://www.rust-lang.org/learn/get-started)
 
-##### With proxy
-3. `.\Run.ps1 5 [p to start/stop the containers in parallel]` will run a private network with 5 nodes connected by the proxy
-4. Change directory to rust-ripple-p2p `cd ../rust-ripple-p2p`
-5. Run the proxy
-    - PowerShell: `$Env:RUST_LOG="trace";$Env:OPENSSL_DIR="[path/to/openssl/dir]"; cargo run [n (1-5)]`
-    - Other: `RUST_LOG=trace;OPENSSL_DIR=[path/to/openssl/dir] cargo run [n (1-5)]`
+## Context
 
-### Is the network validating ledgers?
-If the network is running as expected, it should be validating ledgers. \
-Run the script `.\LastValidatedLedger.ps1 [i (1-5)]` to see the latest ledger that has been validated by the network according to node i.
-If the output of the script is similar to the image below, the network is valiating correctly.
-![image](https://user-images.githubusercontent.com/9784016/137471993-fbc688db-73e3-4961-8f43-9588f31653ed.png)
+We tested Ripple in a network of 7 processes (`p0`, `p1`, `p2`, `p3`, `p4`, `p5`, `p6`). Processes {`p0`, `p1`, `p2`} trust `UNL1` = {`p0`, `p1`, `p2`, `p3`, `p4`}
+and {`p4`, `p5`, `p6`} trust `UNL2` = {`p2`, `p3`, `p4`, `p5`, `p6`}.
 
-If the output is similar to the image below, the node is either not yet synced to the network correctly or the network is not running correctly. The first ledger should be validated after ~5 seconds.
-![image](https://user-images.githubusercontent.com/9784016/137471932-06099354-987c-4532-9e8a-5c8beca98eec.png)
+Given the number of rounds with network faults (`d`), the number of rounds with process faults (`c`), and the number of rounds (`r`) to distribute the faults as test parameters, Byzzfuzz randomly generates a test execution that injects `d` random network and `c` random process faults into the execution. Alternatively, it can enforce the execution of a given fault configuration of which faults to inject in which rounds.
+
+## Building and running the system
+
+Build the container from the Dockerfile:
+
+```
+docker build -t ripple -f rippled.Dockerfile .
+DOCKER_BUILDKIT=1 docker build -t byzzfuzz .
+```
+
+Run the container for a certain time of iterations using the following:
+```
+./run.sh <number of iterations>
+```
+
+## Analyzing Results
+After running hundreds of iterations of the different executions, you can use the `analyze.py` script to aggregate the results into a table as follows:
+   
+   ```
+   python3 analyze.py
+   ```
+   
+   The script is expected to print out a table with the structure of the example below:
+   
+   ```
+              |TOTAL|CORRECT|INSUFFICIENT|INCOMPATIBLE|TIMEOUT|INCOMPLETE|UNCATEGORIZED
+    c=0 d=0 bs|  300|    259|           0|           0|     41|         0|            0 []
+    d=1 c=0 as|  300|    280|          19|           0|      0|         0|            1 ['1666645928']
+    d=2 c=0 as|  300|    280|          16|           0|      2|         0|            2 ['1666506880', '1666900309']
+    d=0 c=1 as|  300|    270|          29|           0|      1|         0|            0 []
+    d=0 c=1 ss|  300|    281|          19|           0|      0|         0|            0 []
+    d=1 c=1 as|  300|    267|          28|           0|      5|         0|            0 []
+    d=1 c=1 ss|  300|    270|          28|           2|      0|         0|            0 []
+    d=2 c=1 as|  300|    272|          28|           0|      0|         0|            0 []
+    d=2 c=1 ss|  300|    267|          26|           2|      1|         0|            4 ['1667247396', '1666941103', '1667144360', '1666498776']
+    d=0 c=2 as|  300|    258|          40|           1|      2|         0|            0 []
+    d=0 c=2 ss|  300|    251|          47|           5|      1|         0|            0 []
+    7 uncategorized
+   ```
+
+## Repository Overview
+This repository is comprised of three crates:
+- `rust-ripple-p2p` contains the main implementation
+- `serialize` is a library that is capable of parsing Ripple's canonical binary format
+- `analyzer` contains functions that can be used to quickly inspect and aggregate a single run
+
+`This README.md file is an addition to the extensive guide this artifact contains. For detailed explanations, consult the artifact's README.md.`
