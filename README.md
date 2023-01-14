@@ -15,7 +15,7 @@ and {`p4`, `p5`, `p6`} trust `UNL2` = {`p2`, `p3`, `p4`, `p5`, `p6`}.
 
 Given the number of rounds with network faults (`d`), the number of rounds with process faults (`c`), and the number of rounds (`r`) to distribute the faults as test parameters, Byzzfuzz randomly generates a test execution that injects `d` random network and `c` random process faults into the execution. Alternatively, it can enforce the execution of a given fault configuration of which faults to inject in which rounds.
 
-## Building and running the system
+## Building and Running the System
 
 Build the container from the Dockerfile:
 
