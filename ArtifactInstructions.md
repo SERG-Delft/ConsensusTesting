@@ -11,6 +11,8 @@ This document provides the instructions to reproduce the experimental results in
    DOCKER_BUILDKIT=1 docker build -t byzzfuzz .
    ```
 
+   This step requires at least 12 GiB of RAM and is expected to take several hours.
+
 2. Run one Byzzfuzz test for each configuration of Table 5 which have different values for the parameter $c$, rounds with network partitions, and $d$, rounds with process faults, of the testing algorithm:
 
    ```
