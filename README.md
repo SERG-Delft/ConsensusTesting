@@ -5,6 +5,8 @@ based on an evolutionary algorithm, which are executed by running a test case.
 This test case consists of submitting transactions to the network, and waiting
 for these transactions to be included in a validated ledger.
 
+The thesis: "DiscoTest: Evolutionary Distributed Concurrency Testing of Blockchain Consensus Algorithms", can be found [here](https://repository.tudelft.nl/record/uuid:5ac105ac-f2d0-4891-8b20-f5caae141854)
+
 ## How to run the tool on Windows
 ### Requirements
 [Docker](https://docs.docker.com/get-started/) \
